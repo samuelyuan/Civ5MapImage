@@ -1,6 +1,8 @@
 # Civ5MapImage
 
-This program will convert a Civ 5 map in the form .Civ5Map to a PNG image.
+This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG image.
+
+### Command-Line Usage
 
 ```
 ./Civ5MapImage.exe -input=[input filename] -output=[output filename]
@@ -12,5 +14,11 @@ Example
 ```
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth.png" alt="earth" width="400" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth.png" alt="earth" width="550" height="300" />
+</div>
+
+### Examples
+
+<div style="display:inline-block;">
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="415" height="300" />
 </div>
