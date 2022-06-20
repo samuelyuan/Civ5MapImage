@@ -79,7 +79,7 @@ type Civ5CityData struct {
 type Civ5MapTileHeader struct {
 	CityId      uint16
 	Unknown     [2]byte // seems to be unused
-	Culture     uint8
+	Owner       uint8
 	Improvement uint8
 	RouteType   uint8
 	RouteOwner  uint8
@@ -88,7 +88,7 @@ type Civ5MapTileHeader struct {
 type Civ5MapTileImprovement struct {
 	CityId      int
 	CityName    string
-	Culture     int
+	Owner       int
 	Improvement int
 	RouteType   int
 	RouteOwner  int
@@ -115,7 +115,7 @@ func byteArrayToStringArray(byteArray []byte) []string {
 	return arr
 }
 
-func ParseCityData(cityData []byte, version int) ([]*Civ5CityData, error) {
+func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData, error) {
 	streamReader := io.NewSectionReader(bytes.NewReader(cityData), int64(0), int64(len(cityData)))
 
 	// This number is not always accurate because it sometimes underestimates the number of cities
@@ -124,6 +124,11 @@ func ParseCityData(cityData []byte, version int) ([]*Civ5CityData, error) {
 		return nil, err
 	}
 	fmt.Println("Number cities: ", numberCities)
+
+	if maxCityId+1 > int(numberCities) {
+		numberCities = uint32(maxCityId) + 1
+		fmt.Println("Number of cities should be", maxCityId+1)
+	}
 
 	allCities := make([]*Civ5CityData, int(numberCities))
 
@@ -200,7 +205,7 @@ func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5M
 
 			mapTiles[i][j] = &Civ5MapTileImprovement{
 				CityId:      newCityId,
-				Culture:     int(tileInfo.Culture),
+				Owner:       int(tileInfo.Owner),
 				Improvement: int(tileInfo.Improvement),
 				RouteType:   int(tileInfo.RouteType),
 				RouteOwner:  int(tileInfo.RouteOwner),
@@ -390,11 +395,6 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 
-	cityData, err := ParseCityData(cityDataBytes, int(version))
-	if err != nil {
-		return nil, err
-	}
-
 	if version >= 11 {
 		fmt.Println("Victory data size: ", victoryDataSize)
 		victoryDataBytes := make([]byte, victoryDataSize)
@@ -418,6 +418,23 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	}
 
 	mapTileImprovementData, err := ParseMapTileProperties(mapTileProperties, int(mapHeader.Height), int(mapHeader.Width))
+	if err != nil {
+		return nil, err
+	}
+
+	// Find max city id
+	maxCityId := 0
+	for i := 0; i < int(mapHeader.Height); i++ {
+		for j := 0; j < int(mapHeader.Width); j++ {
+			cityId := mapTileImprovementData[i][j].CityId
+			if cityId != -1 && cityId > maxCityId {
+				maxCityId = cityId
+			}
+		}
+	}
+	fmt.Println("Max city id is", maxCityId)
+
+	cityData, err := ParseCityData(cityDataBytes, int(version), maxCityId)
 	if err != nil {
 		return nil, err
 	}
