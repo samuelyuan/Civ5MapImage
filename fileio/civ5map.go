@@ -97,6 +97,7 @@ type Civ5MapTileImprovement struct {
 type Civ5MapData struct {
 	MapHeader           Civ5MapHeader
 	TerrainList         []string
+	FeatureTerrainList  []string
 	MapTiles            [][]*Civ5MapTile
 	MapTileImprovements [][]*Civ5MapTileImprovement
 }
@@ -259,7 +260,8 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	if err := binary.Read(streamReader, binary.LittleEndian, &featureTerrainDataBytes); err != nil {
 		return nil, err
 	}
-	fmt.Println("Feature terrain data: ", byteArrayToStringArray(featureTerrainDataBytes))
+	featureTerrainList := byteArrayToStringArray(featureTerrainDataBytes)
+	fmt.Println("Feature terrain data: ", featureTerrainList)
 
 	featureWonderDataBytes := make([]byte, mapHeader.FeatureWonderDataSize)
 	if err := binary.Read(streamReader, binary.LittleEndian, &featureWonderDataBytes); err != nil {
@@ -459,9 +461,20 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		}
 	}
 
+	cityOwnerMap := make(map[int][]string)
+	for i := 0; i < len(cityData); i++ {
+		owner := cityData[i].Owner
+		if _, ok := cityOwnerMap[owner]; !ok {
+			cityOwnerMap[owner] = make([]string, 0)
+		}
+		cityOwnerMap[owner] = append(cityOwnerMap[owner], cityData[i].Name)
+	}
+	fmt.Println("City owner map:", cityOwnerMap)
+
 	mapData := &Civ5MapData{
 		MapHeader:           mapHeader,
 		TerrainList:         terrainList,
+		FeatureTerrainList: featureTerrainList,
 		MapTiles:            mapTiles,
 		MapTileImprovements: mapTileImprovementData,
 	}

@@ -90,9 +90,59 @@ func drawTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 
 			// Draw cities
 			if mapData.MapTileImprovements[i][j].CityId != -1 {
-				dc.DrawRectangle(x-2.0, y-2.0, radius/2, radius/2)
+				dc.DrawRectangle(x-(radius/5), y-(radius/5), radius/2, radius/2)
 				dc.SetRGB255(255, 255, 255)
 				dc.Fill()
+			}
+		}
+	}
+}
+
+func drawRivers(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+	for i := 0; i < mapHeight; i++ {
+		for j := 0; j < mapWidth; j++ {
+			x, y := getImagePosition(i, j)
+			dc.SetRGB255(95, 150, 148)
+
+			riverData := mapData.MapTiles[i][j].RiverData
+			isRiverSouthwest := ((riverData >> 2) & 1) != 0
+			isRiverSoutheast := ((riverData >> 1) & 1) != 0
+			isRiverEast := (riverData & 1) != 0
+
+			// Southwest river
+			if isRiverSouthwest {
+				angleSW1 := (math.Pi / 6) + float64(3)*(math.Pi/3)
+				angleSW2 := (math.Pi / 6) + float64(4)*(math.Pi/3)
+				x1 := x + radius*math.Cos(angleSW1)
+				y1 := y + radius*math.Sin(angleSW1)
+				x2 := x + radius*math.Cos(angleSW2)
+				y2 := y + radius*math.Sin(angleSW2)
+				dc.DrawLine(x1, y1, x2, y2)
+				dc.Stroke()
+			}
+
+			// Southeast river
+			if isRiverSoutheast {
+				angleSE1 := (math.Pi / 6) + float64(4)*(math.Pi/3)
+				angleSE2 := (math.Pi / 6) + float64(5)*(math.Pi/3)
+				x1 := x + radius*math.Cos(angleSE1)
+				y1 := y + radius*math.Sin(angleSE1)
+				x2 := x + radius*math.Cos(angleSE2)
+				y2 := y + radius*math.Sin(angleSE2)
+				dc.DrawLine(x1, y1, x2, y2)
+				dc.Stroke()
+			}
+
+			// East river
+			if isRiverEast {
+				angleE1 := (math.Pi / 6) + float64(5)*(math.Pi/3)
+				angleE2 := (math.Pi / 6) + float64(6)*(math.Pi/3)
+				x1 := x + radius*math.Cos(angleE1)
+				y1 := y + radius*math.Sin(angleE1)
+				x2 := x + radius*math.Cos(angleE2)
+				y2 := y + radius*math.Sin(angleE2)
+				dc.DrawLine(x1, y1, x2, y2)
+				dc.Stroke()
 			}
 		}
 	}
@@ -130,10 +180,10 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 						}
 
 						// Draw only up to midpoint, which would be the tile border
-						midX := (x1 + x2) / 2.0
-						midY := (y1 + y2) / 2.0
+						borderX := (x1 + x2) / 2.0
+						borderY := (y1 + y2) / 2.0
 
-						dc.DrawLine(x1, y1, midX, midY)
+						dc.DrawLine(x1, y1, borderX, borderY)
 						dc.Stroke()
 					}
 				}
@@ -154,6 +204,7 @@ func drawMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	dc.InvertY()
 
 	drawTiles(dc, mapData, mapHeight, mapWidth)
+	drawRivers(dc, mapData, mapHeight, mapWidth)
 	drawRoads(dc, mapData, mapHeight, mapWidth)
 
 	// Draw city names on top of hexes
