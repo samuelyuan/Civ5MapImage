@@ -21,4 +21,6 @@ Example
 
 <div style="display:inline-block;">
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="415" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="550" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="300" height="300" />
 </div>
