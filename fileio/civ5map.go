@@ -8,6 +8,9 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type Civ5MapHeader struct {
@@ -450,7 +453,9 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 					localizedName := cityData[cityId].Name
 					localizedName = strings.Replace(localizedName, "TXT_KEY_CITY_NAME_", "", -1)
 					localizedName = strings.Replace(localizedName, "TXT_KEY_CITYSTATE_", "", -1)
-					localizedName = string(localizedName[0]) + strings.ToLower(localizedName[1:])
+					localizedName = strings.Replace(localizedName, "_", " ", -1)
+					// If city name has multiple words, set each word's first letter to uppercase
+					localizedName = cases.Title(language.Und).String(localizedName)
 					mapTileImprovementData[i][j].CityName = localizedName
 				} else {
 					mapTileImprovementData[i][j].CityName = cityData[cityId].Name
@@ -474,7 +479,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	mapData := &Civ5MapData{
 		MapHeader:           mapHeader,
 		TerrainList:         terrainList,
-		FeatureTerrainList: featureTerrainList,
+		FeatureTerrainList:  featureTerrainList,
 		MapTiles:            mapTiles,
 		MapTileImprovements: mapTileImprovementData,
 	}

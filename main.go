@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	radius = 10.0
+	radius = 16.0
 )
 
 var (
