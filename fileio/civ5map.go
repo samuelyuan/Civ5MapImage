@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -59,10 +60,46 @@ type Civ5GameDescriptionHeader struct {
 	CityDataSize          uint32
 }
 
+type Civ5UnitHeaderV11 struct {
+	Unknown1        [2]byte
+	NameIndex       uint16
+	Experience      uint32
+	Health          uint32
+	UnitType        uint8
+	Owner           uint8
+	FacingDirection uint8
+	Status          uint8
+	Promotion       [32]byte
+}
+
+type Civ5UnitHeaderV12 struct {
+	Unknown1        [2]byte
+	NameIndex       uint16
+	Experience      uint32
+	Health          uint32
+	UnitType        uint32
+	Owner           uint8
+	FacingDirection uint8
+	Status          uint8
+	Unknown2        byte
+	Promotion       [64]byte
+}
+
+type Civ5UnitData struct {
+	Name            string
+	Experience      int
+	Health          int
+	UnitType        int
+	Owner           int
+	FacingDirection int
+	Status          int
+	PromotionInfo   []byte
+}
+
 type Civ5CityHeader struct {
 	Name       [64]byte
-	Owner      byte
-	Flags      byte
+	Owner      uint8
+	Flags      uint8
 	Population uint16
 	Health     uint32
 }
@@ -88,6 +125,28 @@ type Civ5MapTileHeader struct {
 	RouteOwner  uint8
 }
 
+type Civ5PlayerHeader struct {
+	Policies       [32]byte
+	LeaderName     [64]byte
+	CivName        [64]byte
+	CivType        [64]byte
+	TeamColor      [64]byte
+	Era            [64]byte
+	Handicap       [64]byte
+	Culture        uint32
+	Gold           uint32
+	StartPositionX uint32
+	StartPositionY uint32
+	Team           uint8
+	Playable       uint8
+	Unknown1       [2]byte
+}
+
+type Civ5PlayerData struct {
+	CivType   string
+	TeamColor string
+}
+
 type Civ5MapTileImprovement struct {
 	CityId      int
 	CityName    string
@@ -103,6 +162,8 @@ type Civ5MapData struct {
 	FeatureTerrainList  []string
 	MapTiles            [][]*Civ5MapTile
 	MapTileImprovements [][]*Civ5MapTileImprovement
+	Civ5PlayerData      []*Civ5PlayerData
+	CityOwnerIndexMap   map[int]int
 }
 
 func byteArrayToStringArray(byteArray []byte) []string {
@@ -117,6 +178,68 @@ func byteArrayToStringArray(byteArray []byte) []string {
 		}
 	}
 	return arr
+}
+
+func ParseUnitData(unitData []byte, version int) ([]*Civ5UnitData, error) {
+	if len(unitData) == 0 {
+		return nil, nil
+	}
+	streamReader := io.NewSectionReader(bytes.NewReader(unitData), int64(0), int64(len(unitData)))
+
+	numberUnits := uint32(0)
+	if err := binary.Read(streamReader, binary.LittleEndian, &numberUnits); err != nil {
+		return nil, err
+	}
+	fmt.Println("Number units: ", numberUnits)
+
+	maximumPossibleUnits := 0
+	if version == 12 {
+		maximumPossibleUnits = len(unitData) / 84
+	} else {
+		maximumPossibleUnits = len(unitData) / 48
+	}
+	fmt.Println("Maximum possible units: ", maximumPossibleUnits)
+
+	if numberUnits > uint32(maximumPossibleUnits) {
+		numberUnits = uint32(maximumPossibleUnits)
+		fmt.Println("Something wrong with number of units, reduced to", numberUnits)
+	}
+
+	allUnits := make([]*Civ5UnitData, int(numberUnits))
+	for i := 0; i < int(numberUnits); i++ {
+		if version == 12 {
+			unitData := Civ5UnitHeaderV12{}
+			if err := binary.Read(streamReader, binary.LittleEndian, &unitData); err != nil {
+				return nil, err
+			}
+			allUnits[i] = &Civ5UnitData{
+				Name:            "",
+				Experience:      int(unitData.Experience),
+				Health:          int(unitData.Health),
+				UnitType:        int(unitData.UnitType),
+				Owner:           int(unitData.Owner),
+				FacingDirection: int(unitData.FacingDirection),
+				Status:          int(unitData.Status),
+			}
+		} else if version == 11 {
+			unitData := Civ5UnitHeaderV11{}
+			if err := binary.Read(streamReader, binary.LittleEndian, &unitData); err != nil {
+				return nil, err
+			}
+
+			allUnits[i] = &Civ5UnitData{
+				Name:            "",
+				Experience:      int(unitData.Experience),
+				Health:          int(unitData.Health),
+				UnitType:        int(unitData.UnitType),
+				Owner:           int(unitData.Owner),
+				FacingDirection: int(unitData.FacingDirection),
+				Status:          int(unitData.Status),
+			}
+		}
+	}
+
+	return allUnits, nil
 }
 
 func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData, error) {
@@ -188,6 +311,27 @@ func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData
 		}
 	}
 	return allCities, nil
+}
+
+func ParseCivData(inputData []byte) ([]*Civ5PlayerData, error) {
+	streamReader := io.NewSectionReader(bytes.NewReader(inputData), int64(0), int64(len(inputData)))
+	civDataSize := 436
+	allCivs := make([]Civ5PlayerHeader, len(inputData)/civDataSize)
+	if err := binary.Read(streamReader, binary.LittleEndian, &allCivs); err != nil {
+		return nil, err
+	}
+
+	allPlayerData := make([]*Civ5PlayerData, len(allCivs))
+	for i := 0; i < len(allCivs); i++ {
+		fmt.Println("Civ", i, ": Name:", string(allCivs[i].CivType[:]),
+			", Team color:", string(allCivs[i].TeamColor[:]), ", Team:", allCivs[i].Team)
+
+		allPlayerData[i] = &Civ5PlayerData{
+			CivType:   string(strings.Split(string(allCivs[i].CivType[:]), "\x00")[0]),
+			TeamColor: string(strings.Split(string(allCivs[i].TeamColor[:]), "\x00")[0]),
+		}
+	}
+	return allPlayerData, nil
 }
 
 func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5MapTileImprovement, error) {
@@ -320,6 +464,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 			}
 			mapTiles[i][j] = &tile
 		}
+
 	}
 
 	gameDescriptionHeader := Civ5GameDescriptionHeader{}
@@ -427,6 +572,17 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 
+	playerCivData := make([]byte, 436*(int(gameDescriptionHeader.PlayerCount)+int(gameDescriptionHeader.CityStateCount)))
+	_, err = inputFile.ReadAt(playerCivData, fileLength-int64(len(mapTileProperties))-int64(len(playerCivData)))
+	if err != nil {
+		return nil, err
+	}
+
+	allPlayerData, err := ParseCivData(playerCivData)
+	if err != nil {
+		return nil, err
+	}
+
 	// Find max city id
 	maxCityId := 0
 	for i := 0; i < int(mapHeader.Height); i++ {
@@ -440,6 +596,11 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	fmt.Println("Max city id is", maxCityId)
 
 	cityData, err := ParseCityData(cityDataBytes, int(version), maxCityId)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = ParseUnitData(unitDataBytes, int(version))
 	if err != nil {
 		return nil, err
 	}
@@ -476,12 +637,25 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	}
 	fmt.Println("City owner map:", cityOwnerMap)
 
+	cityOwnerKeys := make([]int, 0, len(cityOwnerMap))
+	for k := range cityOwnerMap {
+		cityOwnerKeys = append(cityOwnerKeys, k)
+	}
+	sort.Ints(cityOwnerKeys)
+
+	cityOwnerIndexMap := make(map[int]int)
+	for i := 0; i < len(cityOwnerKeys); i++ {
+		cityOwnerIndexMap[cityOwnerKeys[i]] = i
+	}
+
 	mapData := &Civ5MapData{
 		MapHeader:           mapHeader,
 		TerrainList:         terrainList,
 		FeatureTerrainList:  featureTerrainList,
 		MapTiles:            mapTiles,
 		MapTileImprovements: mapTileImprovementData,
+		Civ5PlayerData:      allPlayerData,
+		CityOwnerIndexMap:   cityOwnerIndexMap,
 	}
 	return mapData, err
 }
