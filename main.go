@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"strings"
 
 	"github.com/fogleman/gg"
 	"github.com/samuelyuan/Civ5MapImage/fileio"
@@ -18,13 +19,8 @@ const (
 var (
 	NeighborOdd  = [6][2]int{{-1, 0}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}}
 	NeighborEven = [6][2]int{{-1, 0}, {-1, -1}, {0, -1}, {1, 0}, {0, 1}, {-1, 1}}
-	teamColorMap = initTeamColorMap()
+	civColorMap  = initCivColorMap()
 )
-
-type TeamColor struct {
-	OuterColor color.RGBA
-	InnerColor color.RGBA
-}
 
 func getNeighbors(x int, y int) [6][2]int {
 	var offset [6][2]int
@@ -60,56 +56,71 @@ func getTerrainString(mapData *fileio.Civ5MapData, row int, column int) string {
 	return mapData.TerrainList[terrainType]
 }
 
+func getPhysicalMapTileColor(mapData *fileio.Civ5MapData, row int, column int) color.RGBA {
+	terrainString := getTerrainString(mapData, row, column)
+	switch terrainString {
+	case "TERRAIN_GRASS":
+		return color.RGBA{105, 125, 54, 255}
+	case "TERRAIN_PLAINS":
+		return color.RGBA{127, 121, 71, 255}
+	case "TERRAIN_DESERT":
+		return color.RGBA{200, 200, 164, 255}
+	case "TERRAIN_TUNDRA":
+		return color.RGBA{118, 123, 117, 255}
+	case "TERRAIN_SNOW":
+		return color.RGBA{238, 249, 255, 255}
+	case "TERRAIN_COAST":
+		return color.RGBA{95, 149, 149, 255}
+	case "TERRAIN_OCEAN":
+		return color.RGBA{47, 74, 93, 255}
+	}
+
+	// default
+	return color.RGBA{0, 0, 0, 255}
+}
+
+func drawMountain(dc *gg.Context, imageX float64, imageY float64) {
+	// draw base
+	dc.DrawRegularPolygon(3, imageX, imageY, radius, math.Pi)
+	dc.SetRGB255(89, 90, 86) // gray
+	dc.Fill()
+
+	// draw mountain peak
+	dc.DrawRegularPolygon(3, imageX, imageY+(radius/2), radius/2, math.Pi)
+	dc.SetRGB255(234, 244, 253) // white
+	dc.Fill()
+}
+
+func drawCityIcon(dc *gg.Context, imageX float64, imageY float64, cityColor color.RGBA) {
+	dc.DrawRectangle(imageX-(radius/5), imageY-(radius/5), radius/2, radius/2)
+	dc.SetRGB255(int(cityColor.R), int(cityColor.G), int(cityColor.B))
+	dc.Fill()
+}
+
 func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			x, y := getImagePosition(i, j)
+
 			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
-
-			terrainString := getTerrainString(mapData, i, j)
-			switch terrainString {
-			case "TERRAIN_GRASS":
-				dc.SetRGB255(105, 125, 54)
-			case "TERRAIN_PLAINS":
-				dc.SetRGB255(127, 121, 71)
-			case "TERRAIN_DESERT":
-				dc.SetRGB255(200, 200, 164)
-			case "TERRAIN_TUNDRA":
-				dc.SetRGB255(118, 123, 117)
-			case "TERRAIN_SNOW":
-				dc.SetRGB255(238, 249, 255)
-			case "TERRAIN_COAST":
-				dc.SetRGB255(95, 149, 149)
-			case "TERRAIN_OCEAN":
-				dc.SetRGB255(47, 74, 93)
-			default:
-				dc.SetRGB255(0, 0, 0)
-			}
-
+			tileColor := getPhysicalMapTileColor(mapData, i, j)
+			dc.SetRGB255(int(tileColor.R), int(tileColor.G), int(tileColor.B))
 			dc.Fill()
 
 			// Draw mountains
-			elevation := mapData.MapTiles[i][j].Elevation
-			if elevation == 2 {
-				dc.DrawRegularPolygon(3, x, y, radius, math.Pi)
-				dc.SetRGB255(89, 90, 86)
-				dc.Fill()
-				dc.DrawRegularPolygon(3, x, y+(radius/2), radius/2, math.Pi)
-				dc.SetRGB255(234, 244, 253)
-				dc.Fill()
+			if mapData.MapTiles[i][j].Elevation == 2 {
+				drawMountain(dc, x, y)
 			}
 
 			// Draw cities
 			if mapData.MapTileImprovements[i][j].CityId != -1 {
-				dc.DrawRectangle(x-(radius/5), y-(radius/5), radius/2, radius/2)
-				dc.SetRGB255(255, 255, 255)
-				dc.Fill()
+				drawCityIcon(dc, x, y, color.RGBA{255, 255, 255, 255})
 			}
 		}
 	}
 }
 
-func getTileColor(mapData *fileio.Civ5MapData, row int, column int) string {
+func getPoliticalMapTileColor(mapData *fileio.Civ5MapData, row int, column int) string {
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
 	if tileOwner == 0xFF {
 		return ""
@@ -126,49 +137,40 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			x, y := getImagePosition(i, j)
+
 			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
 
 			terrainString := getTerrainString(mapData, i, j)
 			cityColor := color.RGBA{255, 255, 255, 255}
-			if terrainString == "TERRAIN_COAST" {
-				dc.SetRGB255(95, 149, 149)
-			} else if terrainString == "TERRAIN_OCEAN" {
-				dc.SetRGB255(47, 74, 93)
+			if terrainString == "TERRAIN_COAST" || terrainString == "TERRAIN_OCEAN" {
+				terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
+				dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
 			} else {
-				tileColor := getTileColor(mapData, i, j)
-				renderColor, ok := teamColorMap[tileColor]
+				tileColor := getPoliticalMapTileColor(mapData, i, j)
+				renderColor, ok := civColorMap[tileColor]
 				if ok {
 					background := renderColor.OuterColor
 					cityColor = renderColor.InnerColor
 					dc.SetRGB255(int(background.R), int(background.G), int(background.B))
 				} else if tileColor != "" {
-					// No color
+					// No color, but tile is owned by civ or city state
 					dc.SetRGB255(0, 0, 0)
 				} else {
 					// Territory not owned by anyone
-					// Set to grass
-					dc.SetRGB255(105, 125, 54)
+					terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
+					dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
 				}
 			}
-
 			dc.Fill()
 
 			// Draw mountains
-			elevation := mapData.MapTiles[i][j].Elevation
-			if elevation == 2 {
-				dc.DrawRegularPolygon(3, x, y, radius, math.Pi)
-				dc.SetRGB255(89, 90, 86)
-				dc.Fill()
-				dc.DrawRegularPolygon(3, x, y+(radius/2), radius/2, math.Pi)
-				dc.SetRGB255(234, 244, 253)
-				dc.Fill()
+			if mapData.MapTiles[i][j].Elevation == 2 {
+				drawMountain(dc, x, y)
 			}
 
 			// Draw cities
 			if mapData.MapTileImprovements[i][j].CityId != -1 {
-				dc.DrawRectangle(x-(radius/5), y-(radius/5), radius/2, radius/2)
-				dc.SetRGB255(int(cityColor.R), int(cityColor.G), int(cityColor.B))
-				dc.Fill()
+				drawCityIcon(dc, x, y, cityColor)
 			}
 		}
 	}
@@ -292,81 +294,13 @@ func drawPhysicalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 
 			tile := mapData.MapTileImprovements[i][j]
 			dc.SetRGB255(255, 255, 255)
-			dc.DrawString(tile.CityName, x-(5.0*float64(len(tile.CityName))/2.0), y-radius*1.5)
+			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
+			dc.DrawString(cityName, x-(5.0*float64(len(cityName))/2.0), y-radius*1.5)
 		}
 	}
 
 	dc.SavePNG(outputFilename)
 	fmt.Println("Saved image to", outputFilename)
-}
-
-func initTeamColorMap() map[string]TeamColor {
-	teamColorMap := make(map[string]TeamColor)
-	teamColorMap["PLAYERCOLOR_AMERICA"] = TeamColor{
-		OuterColor: color.RGBA{31, 51, 120, 255},   // blue
-		InnerColor: color.RGBA{255, 255, 255, 255}, // white
-	}
-	teamColorMap["PLAYERCOLOR_ARABIA"] = TeamColor{
-		OuterColor: color.RGBA{43, 87, 45, 255},  // dark green
-		InnerColor: color.RGBA{146, 221, 9, 255}, // light green
-	}
-	teamColorMap["PLAYERCOLOR_CHINA"] = TeamColor{
-		OuterColor: color.RGBA{0, 148, 82, 255},    // green
-		InnerColor: color.RGBA{255, 255, 255, 255}, // white
-	}
-	teamColorMap["PLAYERCOLOR_ENGLAND"] = TeamColor{
-		OuterColor: color.RGBA{108, 2, 0, 255},     // dark red
-		InnerColor: color.RGBA{255, 255, 255, 255}, // white
-	}
-	teamColorMap["PLAYERCOLOR_FRANCE"] = TeamColor{
-		OuterColor: color.RGBA{65, 141, 253, 255},  // light blue
-		InnerColor: color.RGBA{235, 235, 138, 255}, // white
-	}
-	teamColorMap["PLAYERCOLOR_GERMANY"] = TeamColor{
-		OuterColor: color.RGBA{179, 177, 184, 255}, // gray
-		InnerColor: color.RGBA{36, 43, 32, 255},    // dark gray
-	}
-	teamColorMap["PLAYERCOLOR_GREECE"] = TeamColor{
-		OuterColor: color.RGBA{255, 255, 255, 255}, // white
-		InnerColor: color.RGBA{65, 141, 253, 255},  // light blue
-	}
-	teamColorMap["PLAYERCOLOR_INDIA"] = TeamColor{
-		OuterColor: color.RGBA{18, 135, 6, 255},   // green
-		InnerColor: color.RGBA{255, 153, 49, 255}, // orange
-	}
-	teamColorMap["PLAYERCOLOR_JAPAN"] = TeamColor{
-		OuterColor: color.RGBA{255, 255, 255, 255}, // white
-		InnerColor: color.RGBA{184, 0, 0, 255},     // red
-	}
-	teamColorMap["PLAYERCOLOR_MONGOL"] = TeamColor{
-		OuterColor: color.RGBA{81, 0, 8, 255},    // dark red
-		InnerColor: color.RGBA{255, 120, 0, 255}, // orange
-	}
-	teamColorMap["PLAYERCOLOR_OTTOMAN"] = TeamColor{
-		OuterColor: color.RGBA{247, 248, 199, 255}, // white
-		InnerColor: color.RGBA{18, 82, 30, 255},    // green
-	}
-	teamColorMap["PLAYERCOLOR_PERSIA"] = TeamColor{
-		OuterColor: color.RGBA{176, 7, 3, 255},    // red
-		InnerColor: color.RGBA{245, 230, 55, 255}, // yellow
-	}
-	teamColorMap["PLAYERCOLOR_ROME"] = TeamColor{
-		OuterColor: color.RGBA{70, 0, 118, 255},  // purple
-		InnerColor: color.RGBA{239, 198, 0, 255}, // yellow
-	}
-	teamColorMap["PLAYERCOLOR_RUSSIA"] = TeamColor{
-		OuterColor: color.RGBA{238, 180, 0, 255}, // yellow
-		InnerColor: color.RGBA{0, 0, 0, 255},     // black
-	}
-	teamColorMap["PLAYERCOLOR_SIAM"] = TeamColor{
-		OuterColor: color.RGBA{245, 230, 55, 255}, // yellow
-		InnerColor: color.RGBA{176, 7, 3, 255},    // red
-	}
-	teamColorMap["PLAYERCOLOR_WHITE"] = TeamColor{
-		OuterColor: color.RGBA{219, 5, 5, 255},     // light red
-		InnerColor: color.RGBA{229, 229, 229, 255}, // white
-	}
-	return teamColorMap
 }
 
 func drawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
@@ -392,15 +326,17 @@ func drawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 			x, y := getImagePosition(mapHeight-i, j)
 
 			tile := mapData.MapTileImprovements[i][j]
-			tileColor := getTileColor(mapData, i, j)
-			renderColor, ok := teamColorMap[tileColor]
+			tileColor := getPoliticalMapTileColor(mapData, i, j)
+			renderColor, ok := civColorMap[tileColor]
 			if ok {
 				cityColor := renderColor.InnerColor
 				dc.SetRGB255(int(cityColor.R), int(cityColor.G), int(cityColor.B))
 			} else {
 				dc.SetRGB255(255, 255, 255)
 			}
-			dc.DrawString(tile.CityName, x-(5.0*float64(len(tile.CityName))/2.0), y-radius*1.5)
+
+			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
+			dc.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-radius*1.5)
 		}
 	}
 

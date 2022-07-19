@@ -63,8 +63,8 @@ Following the header, is a list of strings whose size is determined in the heade
 | String | ModDataSize bytes | modData |
 | String | MapNameLength bytes | Map name |
 | String | MapDescriptionLength bytes | Map description |
-| uint32 | 4 bytes | unknownStringLength (Only if version >= 11) |
-| String list | unknownStringLength bytes | unknownStringBytes (Only if version >= 11) |
+| uint32 | 4 bytes | WorldSizeLength (Only if version >= 11) |
+| String | WorldSizeLength bytes | WorldSize (Only if version >= 11) |
 
 #### Map geography
 
@@ -141,7 +141,7 @@ In version 12, the sizeof this struct is 84 bytes.
 | uint16 | 2 bytes | Index to custom unit name data |
 | uint32 | 4 bytes | Experience |
 | uint32 | 4 bytes | Health (100% health is 100000) |
-| uint32 | 1 byte for version 11, 4 bytes for version 12 | Unit type |
+| uint8 (version 11) or uint32 (version 12) | 1 byte for version 11, 4 bytes for version 12 | Unit type |
 | uint8 | 1 byte | Owner |
 | uint8 | 1 byte | Facing direction |
 | uint8 | 1 byte | Status (The low 3 bits are used. 4 (>>2) is garrisoned, 2 (>>1) is embarked, 1 (>>0) is fortified) |
@@ -162,6 +162,18 @@ In version 12, the sizeof this struct is 136 bytes.
 | uint16 | 2 bytes | Population |
 | uint32 | 4 bytes | Health (100% health is 100000) |
 | byte[] | 32 bytes for version 11, 64 bytes for version 12 | Building data |
+
+### Unknown block
+
+There is a section between the city data and team data that doesn't seem to be used anywhere, except for padding. The sizeof this block is unknown, but this block size increases as the number of civs increases.
+
+### Team format
+
+The sizeof this struct is 64 bytes. The team name is usually the default value, e.g. Team 1.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| byte[64] | 64 bytes | Team name |
 
 #### Player format
 
