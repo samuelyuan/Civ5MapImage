@@ -22,6 +22,10 @@ Example
 <div style="display:inline-block;">
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="415" height="300" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="550" height="300" />
+</div>
+
+<div style="display:inline-block;">
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1900.png" alt="world" width="550" height="300" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="300" height="300" />
 </div>
 
@@ -182,9 +186,9 @@ The sizeof this struct is 436 bytes.
 | Type | Size | Description |
 | ---- | ---- | ----------- |
 | byte[32] | 32 bytes | Policies |
-| byte[64] | 64 bytes | Leader name |
-| byte[64] | 64 bytes | Civ name |
-| byte[64] | 64 bytes | Civ type |
+| byte[64] | 64 bytes | Leader name (override leader name) |
+| byte[64] | 64 bytes | Civ name (override civ name) |
+| byte[64] | 64 bytes | Civ type (default civ name) |
 | byte[64] | 64 bytes | Team color |
 | byte[64] | 64 bytes | Era |
 | byte[64] | 64 bytes | Handicap |

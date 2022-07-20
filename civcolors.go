@@ -11,6 +11,7 @@ type CivColor struct {
 
 func initCivColorMap() map[string]CivColor {
 	civColorMap := make(map[string]CivColor)
+	minorColor := color.RGBA{0, 0, 0, 255}
 	civColorMap["PLAYERCOLOR_AMERICA"] = CivColor{
 		OuterColor: color.RGBA{31, 51, 120, 255},   // blue
 		InnerColor: color.RGBA{255, 255, 255, 255}, // white
@@ -22,6 +23,10 @@ func initCivColorMap() map[string]CivColor {
 	civColorMap["PLAYERCOLOR_AUSTRIA"] = CivColor{
 		OuterColor: color.RGBA{234, 0, 0, 255},     // red
 		InnerColor: color.RGBA{255, 255, 255, 255}, // white
+	}
+	civColorMap["PLAYERCOLOR_AZTECS"] = CivColor{
+		OuterColor: color.RGBA{161, 57, 34, 255},   // red
+		InnerColor: color.RGBA{136, 238, 212, 255}, // light blue
 	}
 	civColorMap["PLAYERCOLOR_BRAZIL"] = CivColor{
 		OuterColor: color.RGBA{149, 221, 10, 255}, // light green
@@ -63,6 +68,10 @@ func initCivColorMap() map[string]CivColor {
 		OuterColor: color.RGBA{179, 177, 163, 255}, // gray
 		InnerColor: color.RGBA{69, 0, 3, 255},      // dark red
 	}
+	civColorMap["PLAYERCOLOR_INCA"] = CivColor{
+		OuterColor: color.RGBA{255, 184, 33, 255}, // yellow
+		InnerColor: color.RGBA{6, 159, 119, 255},  // green
+	}
 	civColorMap["PLAYERCOLOR_INDIA"] = CivColor{
 		OuterColor: color.RGBA{18, 135, 6, 255},   // green
 		InnerColor: color.RGBA{255, 153, 49, 255}, // orange
@@ -74,6 +83,62 @@ func initCivColorMap() map[string]CivColor {
 	civColorMap["PLAYERCOLOR_JAPAN"] = CivColor{
 		OuterColor: color.RGBA{255, 255, 255, 255}, // white
 		InnerColor: color.RGBA{184, 0, 0, 255},     // red
+	}
+	civColorMap["PLAYERCOLOR_MAYA"] = CivColor{
+		OuterColor: color.RGBA{197, 140, 98, 255}, // yellow
+		InnerColor: color.RGBA{23, 62, 65, 255},   // dark blue
+	}
+	civColorMap["PLAYERCOLOR_MINOR_BLUE"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{0, 0, 255, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_CYAN"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{0, 255, 255, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_GOLDENROD"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{222, 159, 0, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_GREEN"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{0, 255, 0, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_GRAY"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{178, 178, 178, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_LIGHT_BLUE"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{127, 178, 255, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_LIGHT_GREEN"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{127, 255, 127, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_LIGHT_ORANGE"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{229, 166, 82, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_LIGHT_PURPLE"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{178, 153, 255, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_LIGHT_YELLOW"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{255, 255, 127, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_PEACH"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{255, 217, 143, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_MIDDLE_CYAN"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{0, 163, 181, 255},
+	}
+	civColorMap["PLAYERCOLOR_MINOR_WHITE"] = CivColor{
+		OuterColor: minorColor,
+		InnerColor: color.RGBA{255, 255, 255, 255},
 	}
 	civColorMap["PLAYERCOLOR_MONGOL"] = CivColor{
 		OuterColor: color.RGBA{81, 0, 8, 255},    // dark red
@@ -110,6 +175,10 @@ func initCivColorMap() map[string]CivColor {
 	civColorMap["PLAYERCOLOR_SIAM"] = CivColor{
 		OuterColor: color.RGBA{245, 230, 55, 255}, // yellow
 		InnerColor: color.RGBA{176, 7, 3, 255},    // red
+	}
+	civColorMap["PLAYERCOLOR_SPAIN"] = CivColor{
+		OuterColor: color.RGBA{83, 26, 26, 255},    // dark red
+		InnerColor: color.RGBA{244, 168, 168, 255}, // pink
 	}
 	civColorMap["PLAYERCOLOR_SWEDEN"] = CivColor{
 		OuterColor: color.RGBA{7, 7, 165, 255},   // dark blue

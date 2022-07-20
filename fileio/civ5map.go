@@ -326,12 +326,13 @@ func ParseCivData(inputData []byte) ([]*Civ5PlayerData, error) {
 
 	allPlayerData := make([]*Civ5PlayerData, len(allCivs))
 	for i := 0; i < len(allCivs); i++ {
-		fmt.Println("Civ", i, ": Name:", string(allCivs[i].CivType[:]),
-			", Team color:", string(allCivs[i].TeamColor[:]), ", Team:", allCivs[i].Team)
+		originalCivName := string(strings.Split(string(allCivs[i].CivType[:]), "\x00")[0])
+		teamColor := string(strings.Split(string(allCivs[i].TeamColor[:]), "\x00")[0])
+		fmt.Println("Civ", i, ": Name:", originalCivName, ", Team color:", teamColor, ", Team:", allCivs[i].Team)
 
 		allPlayerData[i] = &Civ5PlayerData{
-			CivType:   string(strings.Split(string(allCivs[i].CivType[:]), "\x00")[0]),
-			TeamColor: string(strings.Split(string(allCivs[i].TeamColor[:]), "\x00")[0]),
+			CivType:   originalCivName,
+			TeamColor: teamColor,
 		}
 	}
 	return allPlayerData, nil
@@ -638,8 +639,12 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 			if cityId != -1 && cityId < len(cityData) {
 				if cityData[cityId].IsNameLocalized {
 					localizedName := cityData[cityId].Name
-					localizedName = strings.Replace(localizedName, "TXT_KEY_CITY_NAME_", "", -1)
-					localizedName = strings.Replace(localizedName, "TXT_KEY_CITYSTATE_", "", -1)
+					if strings.Contains(localizedName, "CITY_NAME_") {
+						localizedName = localizedName[strings.Index(localizedName, "CITY_NAME_")+len("CITY_NAME_"):]
+					}
+					if strings.Contains(localizedName, "CITYSTATE_") {
+						localizedName = localizedName[strings.Index(localizedName, "CITYSTATE_")+len("CITYSTATE_"):]
+					}
 					localizedName = strings.Replace(localizedName, "_", " ", -1)
 					// If city name has multiple words, set each word's first letter to uppercase
 					localizedName = cases.Title(language.Und).String(localizedName)

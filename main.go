@@ -17,8 +17,8 @@ const (
 )
 
 var (
-	NeighborOdd  = [6][2]int{{-1, 0}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}}
-	NeighborEven = [6][2]int{{-1, 0}, {-1, -1}, {0, -1}, {1, 0}, {0, 1}, {-1, 1}}
+	NeighborOdd  = [6][2]int{{1, 1}, {0, 1}, {-1, 0}, {0, -1}, {1, -1}, {1, 0}}
+	NeighborEven = [6][2]int{{0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, 0}}
 	civColorMap  = initCivColorMap()
 )
 
@@ -303,6 +303,46 @@ func drawPhysicalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	fmt.Println("Saved image to", outputFilename)
 }
 
+func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+	for i := 0; i < mapHeight; i++ {
+		for j := 0; j < mapWidth; j++ {
+			x1, y1 := getImagePosition(i, j)
+			neighbors := getNeighbors(j, i)
+			currentTileOwner := mapData.MapTileImprovements[i][j].Owner
+			if currentTileOwner == 0xFF {
+				continue
+			}
+
+			tileColor := getPoliticalMapTileColor(mapData, i, j)
+			renderColor, ok := civColorMap[tileColor]
+			borderColor := color.RGBA{255, 255, 255, 255}
+			if ok {
+				borderColor = renderColor.InnerColor
+			}
+
+			for n := 0; n < len(neighbors); n++ {
+				newX := neighbors[n][0]
+				newY := neighbors[n][1]
+				if newX >= 0 && newY >= 0 && newX < mapWidth && newY < mapHeight {
+					otherTileOwner := mapData.MapTileImprovements[newY][newX].Owner
+					if currentTileOwner != otherTileOwner {
+						angle1 := (math.Pi / 6) + float64(n)*(math.Pi/3)
+						angle2 := (math.Pi / 6) + float64(n+1)*(math.Pi/3)
+						edgeX1 := x1 + (radius-1)*math.Cos(angle1)
+						edgeY1 := y1 + (radius-1)*math.Sin(angle1)
+						edgeX2 := x1 + (radius-1)*math.Cos(angle2)
+						edgeY2 := y1 + (radius-1)*math.Sin(angle2)
+
+						dc.SetRGB255(int(borderColor.R), int(borderColor.G), int(borderColor.B))
+						dc.DrawLine(edgeX1, edgeY1, edgeX2, edgeY2)
+						dc.Stroke()
+					}
+				}
+			}
+		}
+	}
+}
+
 func drawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
@@ -315,6 +355,7 @@ func drawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	dc.InvertY()
 
 	drawTerritoryTiles(dc, mapData, mapHeight, mapWidth)
+	drawBorders(dc, mapData, mapHeight, mapWidth)
 	drawRivers(dc, mapData, mapHeight, mapWidth)
 	drawRoads(dc, mapData, mapHeight, mapWidth)
 
