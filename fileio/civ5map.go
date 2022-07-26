@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"sort"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -653,17 +652,20 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 					mapTileImprovementData[i][j].CityName = cityData[cityId].Name
 				}
 
-				fmt.Println("Set", j, ",", i, " city name: ", mapTileImprovementData[i][j].CityName)
+				fmt.Println(fmt.Sprintf("Set city %v at (%v, %v)", mapTileImprovementData[i][j].CityName, j, i))
 			}
 		}
 	}
 
 	cityOwnerMap := make(map[int][]string)
+	cityOwnerIndexMap := make(map[int]int)
 	for i := 0; i < int(gameDescriptionHeader.PlayerCount); i++ {
 		cityOwnerMap[i] = make([]string, 0)
+		cityOwnerIndexMap[i] = i
 	}
 	for i := 0; i < int(gameDescriptionHeader.CityStateCount); i++ {
 		cityOwnerMap[i+32] = make([]string, 0)
+		cityOwnerIndexMap[i+32] = int(gameDescriptionHeader.PlayerCount)+i
 	}
 
 	for i := 0; i < len(cityData); i++ {
@@ -674,17 +676,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		cityOwnerMap[owner] = append(cityOwnerMap[owner], cityData[i].Name)
 	}
 	fmt.Println("City owner map:", cityOwnerMap)
-
-	cityOwnerKeys := make([]int, 0, len(cityOwnerMap))
-	for k := range cityOwnerMap {
-		cityOwnerKeys = append(cityOwnerKeys, k)
-	}
-	sort.Ints(cityOwnerKeys)
-
-	cityOwnerIndexMap := make(map[int]int)
-	for i := 0; i < len(cityOwnerKeys); i++ {
-		cityOwnerIndexMap[cityOwnerKeys[i]] = i
-	}
+	fmt.Println("City owner index map:", cityOwnerIndexMap)
 
 	mapData := &Civ5MapData{
 		MapHeader:           mapHeader,

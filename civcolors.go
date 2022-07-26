@@ -687,6 +687,11 @@ func initCivColorMap() map[string]CivColor {
 		InnerColor: color.RGBA{136, 238, 212, 255}, // light blue,
 		TextColor:  color.RGBA{136, 238, 212, 255}, // light blue,
 	}
+	civColorMap["PLAYERCOLOR_BABYLON"] = CivColor{
+		OuterColor: color.RGBA{43,  81,  97, 255}, // dark blue
+		InnerColor: color.RGBA{200, 248, 255, 255},   // light blue
+		TextColor:  color.RGBA{200, 248, 255, 255},   // light blue
+	}
 	civColorMap["PLAYERCOLOR_BRAZIL"] = CivColor{
 		OuterColor: color.RGBA{149, 221, 10, 255}, // light green
 		InnerColor: color.RGBA{41, 83, 44, 255},   // dark green
@@ -747,6 +752,5 @@ func initCivColorMap() map[string]CivColor {
 		InnerColor: color.RGBA{106, 49, 24, 255},   // dark red
 		TextColor:  color.RGBA{106, 49, 24, 255},   // dark red
 	}
-
 	return civColorMap
 }

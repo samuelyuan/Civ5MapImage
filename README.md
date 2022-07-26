@@ -1,6 +1,6 @@
 # Civ5MapImage
 
-This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG image.
+This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG image. The generated map can easily display all the cities or terrain features in one single image.
 
 ### Command-Line Usage
 
@@ -171,7 +171,11 @@ In version 12, the sizeof this struct is 136 bytes.
 
 ### Unknown block
 
-There is a section between the city data and team data that doesn't seem to be used anywhere, except for padding. The sizeof this block is unknown, but this block size increases as the number of civs increases.
+There is a section between the city data and team data that doesn't seem to be used anywhere, except for padding. The sizeof this block is unknown, but this block size increases as the number of civs increases. 
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| byte[] | Unknown bytes | This block doesn't seem to correspond to anything in the game |
 
 ### Team format
 
@@ -204,7 +208,7 @@ The sizeof this struct is 436 bytes.
 
 #### Map tile improvement properties
 
-This data is stored at the end of the file and contains the map improvements. It is separate from the map terrain array mentioned earlier. In between the game description data and map tile properties, there is a block of unknown data followed by the team and civilization information, but this part still hasn't been decoded. In order to access this block, the program reads the map tile data starting from the end of the file instead of sequentially reading data like before.
+This block is always placed at the end of a file.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
