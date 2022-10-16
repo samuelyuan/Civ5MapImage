@@ -88,9 +88,14 @@ func drawMountain(dc *gg.Context, imageX float64, imageY float64) {
 	dc.Fill()
 }
 
+func getNewCityColor(cityColor color.RGBA) color.RGBA {
+	return interpolateColor(cityColor, color.RGBA{255, 255, 255, 255}, 0.2)
+}
+
 func drawCityIcon(dc *gg.Context, imageX float64, imageY float64, cityColor color.RGBA) {
+	iconColor := getNewCityColor(cityColor)
 	dc.DrawRectangle(imageX-(radius/5), imageY-(radius/5), radius/2, radius/2)
-	dc.SetRGB255(int(cityColor.R), int(cityColor.G), int(cityColor.B))
+	dc.SetRGB255(int(iconColor.R), int(iconColor.G), int(iconColor.B))
 	dc.Fill()
 }
 
@@ -142,6 +147,16 @@ func getTileCivName(mapData *fileio.Civ5MapData, row int, column int) string {
 	return ""
 }
 
+func interpolateColor(color1 color.RGBA, color2 color.RGBA, t float64) color.RGBA {
+	// t should be between 0.0 and 1.0
+	return color.RGBA{
+		uint8(float64(color1.R) + (float64(color2.R)-float64(color1.R))*t),
+		uint8(float64(color1.G) + (float64(color2.G)-float64(color1.G))*t),
+		uint8(float64(color1.B) + (float64(color2.B)-float64(color1.B))*t),
+		255,
+	}
+}
+
 func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
@@ -154,30 +169,37 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 			if terrainString == "TERRAIN_COAST" || terrainString == "TERRAIN_OCEAN" {
 				terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
 				dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
+				dc.Fill()
 			} else {
 				tileColor := getPoliticalMapTileColor(mapData, i, j)
 				renderColor, ok := civColorMap[tileColor]
+
 				if ok {
+					white := color.RGBA{255, 255, 255, 255}
 					if strings.Contains(getTileCivName(mapData, i, j), "MINOR") {
 						// Invert city state colors
 						background := renderColor.InnerColor
 						cityColor = renderColor.OuterColor
-						dc.SetRGB255(int(background.R), int(background.G), int(background.B))
+						newBackground := interpolateColor(background, white, 0.35)
+						dc.SetRGB255(int(newBackground.R), int(newBackground.G), int(newBackground.B))
 					} else {
 						background := renderColor.OuterColor
 						cityColor = renderColor.InnerColor
-						dc.SetRGB255(int(background.R), int(background.G), int(background.B))
+						newBackground := interpolateColor(background, white, 0.2)
+						dc.SetRGB255(int(newBackground.R), int(newBackground.G), int(newBackground.B))
 					}
+					dc.Fill()
 				} else if tileColor != "" {
 					// No color, but tile is owned by civ or city state
 					dc.SetRGB255(0, 0, 0)
+					dc.Fill()
 				} else {
 					// Territory not owned by anyone
 					terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
 					dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
+					dc.Fill()
 				}
 			}
-			dc.Fill()
 
 			// Draw mountains
 			if mapData.MapTiles[i][j].Elevation == 2 {
@@ -264,12 +286,15 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 
 						if routeType == 1 {
 							// Railroad
+							dc.SetLineWidth(2.0)
 							dc.SetRGB255(76, 51, 0)
 						} else if routeType == 0 {
 							// Road
+							dc.SetLineWidth(1.0)
 							dc.SetRGB255(51, 51, 51)
 						} else {
 							// Unknown
+							dc.SetLineWidth(1.0)
 							dc.SetRGB255(0, 0, 0)
 						}
 
@@ -355,11 +380,41 @@ func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, map
 						edgeY2 := y1 + (radius-1)*math.Sin(angle2)
 
 						dc.SetRGB255(int(borderColor.R), int(borderColor.G), int(borderColor.B))
+						dc.SetLineWidth(1.5)
 						dc.DrawLine(edgeX1, edgeY1, edgeX2, edgeY2)
 						dc.Stroke()
 					}
 				}
 			}
+		}
+	}
+	dc.SetLineWidth(1.0)
+}
+
+func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+	for i := 0; i < mapHeight; i++ {
+		for j := 0; j < mapWidth; j++ {
+			// Invert depth because the map is inverted
+			x, y := getImagePosition(mapHeight-i, j)
+
+			tile := mapData.MapTileImprovements[i][j]
+			tileColor := getPoliticalMapTileColor(mapData, i, j)
+			renderColor, ok := civColorMap[tileColor]
+			if ok {
+				var cityColor color.RGBA
+				if strings.Contains(getTileCivName(mapData, i, j), "MINOR") {
+					cityColor = renderColor.OuterColor
+				} else {
+					cityColor = renderColor.InnerColor
+				}
+				textColor := getNewCityColor(cityColor)
+				dc.SetRGB255(int(textColor.R), int(textColor.G), int(textColor.B))
+			} else {
+				dc.SetRGB255(255, 255, 255)
+			}
+
+			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
+			dc.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-radius*1.5)
 		}
 	}
 }
@@ -380,32 +435,9 @@ func drawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	drawRivers(dc, mapData, mapHeight, mapWidth)
 	drawRoads(dc, mapData, mapHeight, mapWidth)
 
-	// Draw city names on top of hexes
 	dc.InvertY()
-	for i := 0; i < mapHeight; i++ {
-		for j := 0; j < mapWidth; j++ {
-			// Invert depth because the map is inverted
-			x, y := getImagePosition(mapHeight-i, j)
-
-			tile := mapData.MapTileImprovements[i][j]
-			tileColor := getPoliticalMapTileColor(mapData, i, j)
-			renderColor, ok := civColorMap[tileColor]
-			if ok {
-				var cityColor color.RGBA
-				if strings.Contains(getTileCivName(mapData, i, j), "MINOR") {
-					cityColor = renderColor.OuterColor
-				} else {
-					cityColor = renderColor.InnerColor
-				}
-				dc.SetRGB255(int(cityColor.R), int(cityColor.G), int(cityColor.B))
-			} else {
-				dc.SetRGB255(255, 255, 255)
-			}
-
-			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
-			dc.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-radius*1.5)
-		}
-	}
+	// Draw city names on top of hexes
+	drawCityNames(dc, mapData, mapHeight, mapWidth)
 
 	dc.SavePNG(outputFilename)
 	fmt.Println("Saved image to", outputFilename)
