@@ -28,6 +28,7 @@ Example
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="550" height="300" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1900.png" alt="world 1900" width="550" height="300" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1942.png" alt="world 1942" width="660" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world2022.png" alt="world 2022" width="660" height="300" />
 </div>
 
 <div style="display:inline-block;">
@@ -171,7 +172,7 @@ In version 12, the sizeof this struct is 136 bytes.
 
 ### Unknown block
 
-There is a section between the city data and team data that doesn't seem to be used anywhere, except for padding. The sizeof this block is unknown, but this block size increases as the number of civs increases. 
+There is a section between the city data and team data that doesn't seem to be used anywhere, except for padding. The sizeof this block is unknown, but this block size increases as the number of civs increases.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
