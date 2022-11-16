@@ -172,6 +172,7 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 				dc.Fill()
 			} else {
 				tileColor := getPoliticalMapTileColor(mapData, i, j)
+
 				renderColor, ok := civColorMap[tileColor]
 
 				if ok {
@@ -180,7 +181,7 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 						// Invert city state colors
 						background := renderColor.InnerColor
 						cityColor = renderColor.OuterColor
-						newBackground := interpolateColor(background, white, 0.35)
+						newBackground := interpolateColor(background, white, 0.2)
 						dc.SetRGB255(int(newBackground.R), int(newBackground.G), int(newBackground.B))
 					} else {
 						background := renderColor.OuterColor
@@ -408,7 +409,7 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 					cityColor = renderColor.InnerColor
 				}
 				textColor := getNewCityColor(cityColor)
-				dc.SetRGB255(int(textColor.R), int(textColor.G), int(textColor.B))
+				dc.SetRGB255(int(textColor.R), int(textColor.G), int(cityColor.B))
 			} else {
 				dc.SetRGB255(255, 255, 255)
 			}

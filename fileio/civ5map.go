@@ -142,17 +142,34 @@ type Civ5PlayerHeader struct {
 }
 
 type Civ5PlayerData struct {
+	Index     int
 	CivType   string
 	TeamColor string
 }
 
 type Civ5MapTileImprovement struct {
+	X           int
+	Y           int
 	CityId      int
 	CityName    string
 	Owner       int
 	Improvement int
 	RouteType   int
 	RouteOwner  int
+}
+
+type CivColorOverride struct {
+	CivKey     string
+	OuterColor CivColorInfo
+	InnerColor CivColorInfo
+}
+
+type CivColorInfo struct {
+	Model         string
+	ColorConstant string
+	Red           float64
+	Green         float64
+	Blue          float64
 }
 
 type Civ5MapData struct {
@@ -163,6 +180,7 @@ type Civ5MapData struct {
 	MapTileImprovements [][]*Civ5MapTileImprovement
 	Civ5PlayerData      []*Civ5PlayerData
 	CityOwnerIndexMap   map[int]int
+	CivColorOverrides   []CivColorOverride
 }
 
 func byteArrayToStringArray(byteArray []byte) []string {
@@ -330,6 +348,7 @@ func ParseCivData(inputData []byte) ([]*Civ5PlayerData, error) {
 		fmt.Println("Civ", i, ": Name:", originalCivName, ", Team color:", teamColor, ", Team:", allCivs[i].Team)
 
 		allPlayerData[i] = &Civ5PlayerData{
+			Index:     i,
 			CivType:   originalCivName,
 			TeamColor: teamColor,
 		}
@@ -355,6 +374,8 @@ func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5M
 			}
 
 			mapTiles[i][j] = &Civ5MapTileImprovement{
+				X:           j,
+				Y:           i,
 				CityId:      newCityId,
 				Owner:       int(tileInfo.Owner),
 				Improvement: int(tileInfo.Improvement),
@@ -665,7 +686,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	}
 	for i := 0; i < int(gameDescriptionHeader.CityStateCount); i++ {
 		cityOwnerMap[i+32] = make([]string, 0)
-		cityOwnerIndexMap[i+32] = int(gameDescriptionHeader.PlayerCount)+i
+		cityOwnerIndexMap[i+32] = int(gameDescriptionHeader.PlayerCount) + i
 	}
 
 	for i := 0; i < len(cityData); i++ {
@@ -678,6 +699,9 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	fmt.Println("City owner map:", cityOwnerMap)
 	fmt.Println("City owner index map:", cityOwnerIndexMap)
 
+	// No overrides by default
+	civColorOverrides := []CivColorOverride{}
+
 	mapData := &Civ5MapData{
 		MapHeader:           mapHeader,
 		TerrainList:         terrainList,
@@ -686,6 +710,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		MapTileImprovements: mapTileImprovementData,
 		Civ5PlayerData:      allPlayerData,
 		CityOwnerIndexMap:   cityOwnerIndexMap,
+		CivColorOverrides:   civColorOverrides,
 	}
 	return mapData, err
 }

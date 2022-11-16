@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+
+	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
 
 type CivColor struct {
@@ -763,4 +765,39 @@ func initCivColorMap() map[string]CivColor {
 		TextColor:  color.RGBA{106, 49, 24, 255},   // dark red
 	}
 	return civColorMap
+}
+
+func overrideColorMap(civColorOverrides []fileio.CivColorOverride) {
+	for _, override := range civColorOverrides {
+		civKey := override.CivKey
+		outerColor := convertCivColorInfoToRGBA(override.OuterColor)
+		innerColor := convertCivColorInfoToRGBA(override.InnerColor)
+
+		civColorMap[civKey] = CivColor{
+			OuterColor: outerColor,
+			InnerColor: innerColor,
+			TextColor:  innerColor,
+		}
+	}
+}
+
+func convertFractionToRGBA(fractionRed float64, fractionGreen float64, fractionBlue float64) color.RGBA {
+	return color.RGBA{
+		uint8(math.Round(fractionRed * 255)),
+		uint8(math.Round(fractionGreen * 255)),
+		uint8(math.Round(fractionBlue * 255)),
+		255,
+	}
+}
+
+func convertCivColorInfoToRGBA(civColorInfo fileio.CivColorInfo) color.RGBA {
+	if civColorInfo.Model == "constant" {
+		return colorMap[civColorInfo.ColorConstant]
+	} else if civColorInfo.Model == "fraction" {
+		return convertFractionToRGBA(civColorInfo.Red, civColorInfo.Green, civColorInfo.Blue)
+	} else if civColorInfo.Model == "rgb255" {
+		return color.RGBA{uint8(civColorInfo.Red), uint8(civColorInfo.Green), uint8(civColorInfo.Blue), 255}
+	} else {
+		return color.RGBA{0, 0, 0, 255}
+	}
 }
