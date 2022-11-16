@@ -4,6 +4,8 @@ This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG 
 
 ### Command-Line Usage
 
+You can read a .civ5map file and generate an output image. If you want to modify the map, you can export the map as a json by providing an output filename with the file extension .json and reuse the exported json as the input filename.
+
 ```
 ./Civ5MapImage.exe -input=[input filename] -mode=[drawing mode (optional)] -output=[output filename (default is output.png)]
 ```
@@ -20,20 +22,20 @@ Example
 ### Examples
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="415" height="300" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe1939.png" alt="europe" width="415" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe1939.png" alt="europe" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="550" height="300" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1900.png" alt="world 1900" width="550" height="300" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1942.png" alt="world 1942" width="660" height="300" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world2022.png" alt="world 2022" width="660" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1900.png" alt="world 1900" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1942.png" alt="world 1942" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world2022.png" alt="world 2022" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="300" height="300" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="435" height="300" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
 
 ### File format
