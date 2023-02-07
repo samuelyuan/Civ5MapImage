@@ -1,8 +1,32 @@
 # Civ5MapImage
 
-This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG image. The generated map can easily display all the cities or terrain features in one single image.
+## Table of Contents
 
-### Command-Line Usage
+* [Introduction](#introduction)
+* [Command-Line Usage](#command-line-usage)
+* [Examples](#examples)
+* [File format](#file-format)
+  + [Header](#header)
+  + [Geography list data](#geography-list-data)
+  + [Map geography](#map-geography)
+  + [Map tile data](#map-tile-data)
+  + [Game description header](#game-description-header)
+  + [Game description data](#game-description-data)
+  + [Unit data format](#unit-data-format)
+  + [City format](#city-format)
+  + [Unknown block](#unknown-block)
+  + [Team format](#team-format)
+  + [Player format](#player-format)
+  + [Map tile improvement properties](#map-tile-improvement-properties)
+  + [Map tile improvement data](#map-tile-improvement-data)
+
+## Introduction
+
+Most custom maps designed for Civ 5 will usually provide screenshots of the map, but they will either only show a portion of the map in the game or a zoomed out image which shows all of the cities but not the terrain. This program is designed to provide you a detailed view of the entire map in one single image.
+
+You have the option of generating a physical map or a political map. The physical map focuses on generating the terrain, while the political map shows the civilization boundaries and major cities. This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG image.
+
+## Command-Line Usage
 
 You can read a .civ5map file and generate an output image. If you want to modify the map, you can export the map as a json by providing an output filename with the file extension .json and reuse the exported json as the input filename.
 
@@ -19,7 +43,7 @@ Example
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth.png" alt="earth" width="550" height="300" />
 </div>
 
-### Examples
+## Examples
 
 <div style="display:inline-block;">
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="200" height="150" />
@@ -38,11 +62,11 @@ Example
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
 
-### File format
+## File format
 
 This file format covers .civ5map files, which stores the map data. All data is stored in little endian.
 
-#### Header
+### Header
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -61,7 +85,7 @@ This file format covers .civ5map files, which stores the map data. All data is s
 
 Following the header, is a list of strings whose size is determined in the header. Each string list will have a zero byte to split items.
 
-#### Geography list data
+### Geography list data
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -75,7 +99,7 @@ Following the header, is a list of strings whose size is determined in the heade
 | uint32 | 4 bytes | WorldSizeLength (Only if version >= 11) |
 | String | WorldSizeLength bytes | WorldSize (Only if version >= 11) |
 
-#### Map geography
+### Map geography
 
 The map data is inverted, which means that the bottommost row rendered on the screen is stored on the top row of the array and the topmost row rendered on the screen is stored on the last row of the array.
 
@@ -83,7 +107,7 @@ The map data is inverted, which means that the bottommost row rendered on the sc
 | ---- | ---- | ----------- |
 | MapTile[Height][Width] | (Height * Width * 8) bytes | Map geography |
 
-#### Map tile data
+### Map tile data
 
 The size of this struct is 8 bytes.
 
@@ -98,7 +122,7 @@ The size of this struct is 8 bytes.
 | uint8 | 1 byte | FeatureWonderType (index in feature wonder list, 0xFF if none) |
 | uint8 | 1 byte | ResourceAmount |
 
-#### Game description header
+### Game description header
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -122,7 +146,7 @@ The size of this struct is 8 bytes.
 | uint32 | 4 bytes | VictoryDataSize (Only if version >= 11) |
 | uint32 | 4 bytes | GameOptionDataSize (Only if version >= 11) |
 
-#### Game description data
+### Game description data
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -138,7 +162,7 @@ The size of this struct is 8 bytes.
 | String list | VictoryDataSize bytes | Victory types (e.g. VICTORY_CULTURAL) |
 | String list | GameOptionDataSize bytes | Game options (e.g. GAMEOPTION_NO_CITY_RAZING) |
 
-#### Unit data format
+### Unit data format
 
 In version 11, the sizeof this struct is 48 bytes.
 
@@ -157,7 +181,7 @@ In version 12, the sizeof this struct is 84 bytes.
 | byte | 1 byte | Unknown (Only for version 12)|
 | byte[] | 32 bytes for version 11, 64 bytes for version 12 | Promotion data |
 
-#### City format
+### City format
 
 In version 11, the sizeof this struct is 104 bytes.
 
@@ -188,7 +212,7 @@ The sizeof this struct is 64 bytes. The team name is usually the default value, 
 | ---- | ---- | ----------- |
 | byte[64] | 64 bytes | Team name |
 
-#### Player format
+### Player format
 
 The sizeof this struct is 436 bytes.
 
@@ -209,7 +233,7 @@ The sizeof this struct is 436 bytes.
 | uint8 | 1 byte | Playable |
 | byte[2] | 2 bytes | Unknown |
 
-#### Map tile improvement properties
+### Map tile improvement properties
 
 This block is always placed at the end of a file.
 
@@ -217,7 +241,7 @@ This block is always placed at the end of a file.
 | ---- | ---- | ----------- |
 | MapTileImprovement[Height][Width] | (Height * Width * 8) bytes | 2D array of map tile improvements |
 
-#### Map tile improvement data
+### Map tile improvement data
 
 The size of this struct is 8 bytes.
 

@@ -345,7 +345,8 @@ func ParseCivData(inputData []byte) ([]*Civ5PlayerData, error) {
 	for i := 0; i < len(allCivs); i++ {
 		originalCivName := string(strings.Split(string(allCivs[i].CivType[:]), "\x00")[0])
 		teamColor := string(strings.Split(string(allCivs[i].TeamColor[:]), "\x00")[0])
-		fmt.Println("Civ", i, ": Name:", originalCivName, ", Team color:", teamColor, ", Team:", allCivs[i].Team)
+		fmt.Println("Civ", i, ": Name:", originalCivName, ", Team color:", teamColor,
+			", Team:", allCivs[i].Team, ", Playable:", allCivs[i].Playable)
 
 		allPlayerData[i] = &Civ5PlayerData{
 			Index:     i,
@@ -494,7 +495,9 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		fmt.Println("World size: ", string(worldSize))
 	}
 
-	fmt.Println("Reading map tiles")
+	fmt.Println("Reading map tiles...")
+	fmt.Println("Map height: ", mapHeader.Height)
+	fmt.Println("Map width: ", mapHeader.Width)
 
 	mapTiles := make([][]*Civ5MapTile, mapHeader.Height)
 	for i := 0; i < int(mapHeader.Height); i++ {
@@ -508,10 +511,12 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		}
 	}
 
+	fmt.Println("Reading game description header...")
 	gameDescriptionHeader := Civ5GameDescriptionHeader{}
 	if err := binary.Read(streamReader, binary.LittleEndian, &gameDescriptionHeader); err != nil {
 		return nil, err
 	}
+	fmt.Println("gameDescriptionHeader: ", gameDescriptionHeader)
 
 	// New fields for game description
 	victoryDataSize := uint32(0)
@@ -525,7 +530,6 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		}
 	}
 
-	fmt.Println("gameDescriptionHeader: ", gameDescriptionHeader)
 	fmt.Println("Max turns: ", gameDescriptionHeader.MaxTurns)
 	fmt.Println("Start year: ", gameDescriptionHeader.StartYear)
 	fmt.Println("Player count: ", gameDescriptionHeader.PlayerCount)
