@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
+	"github.com/samuelyuan/Civ5MapImage/graphics"
 )
 
 func main() {
@@ -28,16 +30,18 @@ func main() {
 
 	var mapData *fileio.Civ5MapData
 	var err error
-	if inputFileExtension == ".json" {
+	if strings.ToLower(inputFileExtension) == ".json" {
 		fmt.Println("Importing map file from json")
 		mapData = fileio.ImportCiv5MapFileFromJson(inputFilename)
-		overrideColorMap(mapData.CivColorOverrides)
-	} else {
+		graphics.OverrideColorMap(mapData.CivColorOverrides)
+	} else if strings.ToLower(inputFileExtension) == ".civ5map" {
 		fmt.Println("Reading civ5map file")
 		mapData, err = fileio.ReadCiv5MapFile(inputFilename)
 		if err != nil {
 			log.Fatal("Failed to read input file: ", err)
 		}
+	} else {
+		log.Fatal("Input file has invalid file extension")
 	}
 
 	if outputFileExtension == ".json" {
@@ -47,9 +51,9 @@ func main() {
 	}
 
 	if mode == "physical" {
-		drawPhysicalMap(mapData, outputFilename)
+		graphics.DrawPhysicalMap(mapData, outputFilename)
 	} else if mode == "political" {
-		drawPoliticalMap(mapData, outputFilename)
+		graphics.DrawPoliticalMap(mapData, outputFilename)
 	} else {
 		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [phyiscal, political].")
 	}

@@ -1,4 +1,4 @@
-package main
+package graphics
 
 import (
 	"encoding/xml"
@@ -777,7 +777,7 @@ func initCivColorMap() map[string]CivColor {
 	return civColorMap
 }
 
-func overrideColorMap(civColorOverrides []fileio.CivColorOverride) {
+func OverrideColorMap(civColorOverrides []fileio.CivColorOverride) {
 	for _, override := range civColorOverrides {
 		civKey := override.CivKey
 		outerColor := convertCivColorInfoToRGBA(override.OuterColor)

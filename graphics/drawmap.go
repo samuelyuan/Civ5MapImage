@@ -1,4 +1,4 @@
-package main
+package graphics
 
 import (
 	"fmt"
@@ -181,7 +181,7 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 						// Invert city state colors
 						background := renderColor.InnerColor
 						cityColor = renderColor.OuterColor
-						newBackground := interpolateColor(background, white, 0.2)
+						newBackground := interpolateColor(background, white, 0.1)
 						dc.SetRGB255(int(newBackground.R), int(newBackground.G), int(newBackground.B))
 					} else {
 						background := renderColor.OuterColor
@@ -312,7 +312,7 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 	}
 }
 
-func drawPhysicalMap(mapData *fileio.Civ5MapData, outputFilename string) {
+func DrawPhysicalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
@@ -420,7 +420,7 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 	}
 }
 
-func drawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
+func DrawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 

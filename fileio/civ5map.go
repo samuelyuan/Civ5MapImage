@@ -176,6 +176,8 @@ type Civ5MapData struct {
 	MapHeader           Civ5MapHeader
 	TerrainList         []string
 	FeatureTerrainList  []string
+	ResourceList        []string
+	TileImprovementList []string
 	MapTiles            [][]*Civ5MapTile
 	MapTileImprovements [][]*Civ5MapTileImprovement
 	Civ5PlayerData      []*Civ5PlayerData
@@ -461,7 +463,8 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 	fmt.Println("Resource data:")
-	printList(byteArrayToStringArray(resourceDataBytes))
+	resourceList := byteArrayToStringArray(resourceDataBytes)
+	printList(resourceList)
 
 	modDataBytes := make([]byte, mapHeader.ModDataSize)
 	if err := binary.Read(streamReader, binary.LittleEndian, &modDataBytes); err != nil {
@@ -541,7 +544,8 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 	fmt.Println("Improvement data:")
-	printList(byteArrayToStringArray(improvementDataBytes))
+	tileImprovementList := byteArrayToStringArray(improvementDataBytes)
+	printList(tileImprovementList)
 
 	unitTypeDataBytes := make([]byte, gameDescriptionHeader.UnitTypeDataSize)
 	if err := binary.Read(streamReader, binary.LittleEndian, &unitTypeDataBytes); err != nil {
@@ -710,6 +714,8 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		MapHeader:           mapHeader,
 		TerrainList:         terrainList,
 		FeatureTerrainList:  featureTerrainList,
+		ResourceList:        resourceList,
+		TileImprovementList: tileImprovementList,
 		MapTiles:            mapTiles,
 		MapTileImprovements: mapTileImprovementData,
 		Civ5PlayerData:      allPlayerData,
