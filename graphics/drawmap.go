@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -312,7 +313,7 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 	}
 }
 
-func DrawPhysicalMap(mapData *fileio.Civ5MapData, outputFilename string) {
+func DrawPhysicalMap(mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
@@ -341,8 +342,7 @@ func DrawPhysicalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 		}
 	}
 
-	dc.SavePNG(outputFilename)
-	fmt.Println("Saved image to", outputFilename)
+	return dc.Image()
 }
 
 func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
@@ -420,7 +420,7 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 	}
 }
 
-func DrawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
+func DrawPoliticalMap(mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
@@ -440,6 +440,10 @@ func DrawPoliticalMap(mapData *fileio.Civ5MapData, outputFilename string) {
 	// Draw city names on top of hexes
 	drawCityNames(dc, mapData, mapHeight, mapWidth)
 
-	dc.SavePNG(outputFilename)
+	return dc.Image()
+}
+
+func SaveImage(outputFilename string, im image.Image) {
+	gg.SavePNG(outputFilename, im)
 	fmt.Println("Saved image to", outputFilename)
 }

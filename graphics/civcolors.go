@@ -242,12 +242,14 @@ func initColorMap() map[string]color.RGBA {
 	colorMap["COLOR_PLAYER_INDIA_ICON"] = color.RGBA{255, 153, 50, 255}
 	colorMap["COLOR_PLAYER_IROQUOIS_ICON"] = color.RGBA{252, 202, 129, 255}
 	colorMap["COLOR_PLAYER_JAPAN_ICON"] = color.RGBA{184, 0, 0, 255}
+	colorMap["COLOR_PLAYER_KOREA_ICON"] = color.RGBA{255, 0, 0, 255}
 	colorMap["COLOR_PLAYER_OTTOMAN_ICON"] = color.RGBA{18, 82, 30, 255}
 	colorMap["COLOR_PLAYER_PERSIA_ICON"] = color.RGBA{245, 230, 55, 255}
 	colorMap["COLOR_PLAYER_ROME_ICON"] = color.RGBA{240, 199, 0, 255}
 	colorMap["COLOR_PLAYER_RUSSIA_ICON"] = color.RGBA{0, 0, 0, 255}
 	colorMap["COLOR_PLAYER_SIAM_ICON"] = color.RGBA{177, 8, 3, 255}
 	colorMap["COLOR_PLAYER_SONGHAI_ICON"] = color.RGBA{90, 0, 10, 255}
+	colorMap["COLOR_PLAYER_VENICE_ICON"] = color.RGBA{255, 254, 215, 255}
 	colorMap["COLOR_PLAYER_BARBARIAN_BACKGROUND"] = color.RGBA{0, 0, 0, 255}
 	colorMap["COLOR_PLAYER_AMERICA_BACKGROUND"] = color.RGBA{31, 51, 120, 255}
 	colorMap["COLOR_PLAYER_ARABIA_BACKGROUND"] = color.RGBA{43, 88, 46, 255}
@@ -261,12 +263,14 @@ func initColorMap() map[string]color.RGBA {
 	colorMap["COLOR_PLAYER_INDIA_BACKGROUND"] = color.RGBA{18, 136, 7, 255}
 	colorMap["COLOR_PLAYER_IROQUOIS_BACKGROUND"] = color.RGBA{65, 87, 87, 255}
 	colorMap["COLOR_PLAYER_JAPAN_BACKGROUND"] = color.RGBA{255, 255, 255, 255}
+	colorMap["COLOR_PLAYER_KOREA_BACKGROUND"] = color.RGBA{26, 32, 96, 255}
 	colorMap["COLOR_PLAYER_OTTOMAN_BACKGROUND"] = color.RGBA{247, 249, 200, 255}
 	colorMap["COLOR_PLAYER_PERSIA_BACKGROUND"] = color.RGBA{177, 8, 3, 255}
 	colorMap["COLOR_PLAYER_ROME_BACKGROUND"] = color.RGBA{70, 0, 118, 255}
 	colorMap["COLOR_PLAYER_RUSSIA_BACKGROUND"] = color.RGBA{239, 180, 0, 255}
 	colorMap["COLOR_PLAYER_SIAM_BACKGROUND"] = color.RGBA{245, 230, 55, 255}
 	colorMap["COLOR_PLAYER_SONGHAI_BACKGROUND"] = color.RGBA{214, 145, 19, 255}
+	colorMap["COLOR_PLAYER_VENICE_BACKGROUND"] = color.RGBA{102, 33, 161, 255}
 
 	return colorMap
 }
@@ -648,6 +652,11 @@ func initCivColorMap() map[string]CivColor {
 		InnerColor: colorMap["COLOR_PLAYER_JAPAN_ICON"],
 		TextColor:  colorMap["COLOR_PLAYER_WHITE_TEXT"],
 	}
+	civColorMap["PLAYERCOLOR_KOREA"] = CivColor{
+		OuterColor: colorMap["COLOR_PLAYER_KOREA_BACKGROUND"],
+		InnerColor: colorMap["COLOR_PLAYER_KOREA_ICON"],
+		TextColor:  colorMap["COLOR_PLAYER_WHITE_TEXT"],
+	}
 	civColorMap["PLAYERCOLOR_OTTOMAN"] = CivColor{
 		OuterColor: colorMap["COLOR_PLAYER_OTTOMAN_BACKGROUND"],
 		InnerColor: colorMap["COLOR_PLAYER_OTTOMAN_ICON"],
@@ -678,6 +687,12 @@ func initCivColorMap() map[string]CivColor {
 		InnerColor: colorMap["COLOR_PLAYER_SONGHAI_ICON"],
 		TextColor:  colorMap["COLOR_PLAYER_WHITE_TEXT"],
 	}
+	civColorMap["PLAYERCOLOR_VENICE"] = CivColor{
+		OuterColor: colorMap["COLOR_PLAYER_VENICE_BACKGROUND"],
+		InnerColor: colorMap["COLOR_PLAYER_VENICE_ICON"],
+		TextColor:  colorMap["COLOR_PLAYER_WHITE_TEXT"],
+	}
+	civColorMap["PLAYERCOLOR_THEOTTOMANS"] = civColorMap["PLAYERCOLOR_OTTOMAN"]
 
 	civColorMap["PLAYERCOLOR_ASSYRIA"] = CivColor{
 		OuterColor: color.RGBA{255, 243, 173, 255}, // light yellow

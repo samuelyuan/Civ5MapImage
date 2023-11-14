@@ -14,6 +14,7 @@ import (
 func main() {
 	inputPtr := flag.String("input", "", "Input filename")
 	outputPtr := flag.String("output", "output.png", "Output filename")
+	replayFilePtr := flag.String("replay", "", "Replay filename for replay mode")
 	modePtr := flag.String("mode", "physical", "Drawing mode")
 
 	flag.Parse()
@@ -51,10 +52,17 @@ func main() {
 	}
 
 	if mode == "physical" {
-		graphics.DrawPhysicalMap(mapData, outputFilename)
+		graphics.SaveImage(outputFilename, graphics.DrawPhysicalMap(mapData))
 	} else if mode == "political" {
-		graphics.DrawPoliticalMap(mapData, outputFilename)
+		graphics.SaveImage(outputFilename, graphics.DrawPoliticalMap(mapData))
+	} else if mode == "replay" {
+		replayData, err := fileio.ReadCiv5ReplayFile(*replayFilePtr)
+		if err != nil {
+			log.Fatal("Failed to read replay data: ", err)
+		}
+
+		graphics.DrawReplay(mapData, replayData, outputFilename)
 	} else {
-		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [phyiscal, political].")
+		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [phyiscal, political, replay].")
 	}
 }
