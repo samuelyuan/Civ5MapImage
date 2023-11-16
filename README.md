@@ -58,6 +58,13 @@ To generate a political map with the civilization and city state borders, you mu
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe1939.png" alt="europe" width="400" height="300" />
 </div>
 
+### Generate Replay
+
+To generate a replay, you will need to provide the base map and the replay file of a game.
+```
+./Civ5MapImage.exe -mode=replay -input=[map filename] -replay=[replay filename]  -output=[gif filename]
+```
+
 ### Convert .civ5map to .json
 
 Set output to have a filename ending in .json and the program will just convert the .civ5map file to a .json file. No image will be generated.
