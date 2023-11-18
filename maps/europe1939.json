@@ -166394,7 +166394,7 @@
      "X": 74,
      "Y": 62,
      "CityId": 170,
-     "CityName": "Yaroslavi",
+     "CityName": "Yaroslavl",
      "Owner": 5,
      "Improvement": 255,
      "RouteType": 255,
@@ -197312,7 +197312,7 @@
       }
     },
     {
-      "CivKey": "PLAYERCOLOR_GREECE",
+      "CivKey": "PLAYERCOLOR_SWISS",
       "OuterColor": {
         "Model": "rgb255",
         "Red": 43,

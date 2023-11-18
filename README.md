@@ -83,16 +83,18 @@ Set output to have a filename ending in .json and the program will just convert 
 <div style="display:inline-block;">
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe2014.png" alt="europe" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1900.png" alt="world 1900" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1900.png" alt="earth 1900" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world1942.png" alt="world 1942" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world2022.png" alt="world 2022" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1936.png" alt="earth 1936" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1939.png" alt="earth 1939" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1942.png" alt="earth 1942" width="200" height="150" />
+</div>
+
+<div style="display:inline-block;">
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2022.png" alt="earth 2022" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="200" height="150" />
-</div>
-
-<div style="display:inline-block;">
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
 
