@@ -81,8 +81,8 @@ Set output to have a filename ending in .json and the program will just convert 
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe2014.png" alt="europe" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1900.png" alt="earth 1900" width="200" height="150" />
 </div>
 
@@ -93,7 +93,12 @@ Set output to have a filename ending in .json and the program will just convert 
 </div>
 
 <div style="display:inline-block;">
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2014a.png" alt="earth 2014 huge 1" width="200" height="150" />
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2014b.png" alt="earth 2014 huge 2" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2022.png" alt="earth 2022" width="200" height="150" />
+</div>
+
+<div style="display:inline-block;">
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
