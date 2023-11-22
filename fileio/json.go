@@ -13,6 +13,12 @@ type Civ5MapJson struct {
 	MapData    *Civ5MapData
 }
 
+type Civ5ReplayJson struct {
+	GameName   string
+	FileFormat string
+	ReplayData *Civ5ReplayData
+}
+
 func ImportCiv5MapFileFromJson(inputFilename string) *Civ5MapData {
 	jsonFile, err := os.Open(inputFilename)
 	if err != nil {
@@ -45,6 +51,46 @@ func ExportCiv5MapFile(mapData *Civ5MapData, outputFilename string) {
 	file, err := json.MarshalIndent(civ5MapJson, "", " ")
 	if err != nil {
 		log.Fatal("Failed to marshal map data: ", err)
+	}
+
+	err = ioutil.WriteFile(outputFilename, file, 0644)
+	if err != nil {
+		log.Fatal("Error writing to ", outputFilename)
+	}
+}
+
+func ImportCiv5ReplayFileFromJson(inputFilename string) *Civ5ReplayData {
+	jsonFile, err := os.Open(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to open json file", err)
+	}
+	defer jsonFile.Close()
+
+	jsonContents, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var civ5ReplayJson *Civ5ReplayJson
+	json.Unmarshal(jsonContents, &civ5ReplayJson)
+
+	if civ5ReplayJson == nil {
+		log.Fatal("The json data in " + inputFilename + " is missing or incorrect")
+	}
+
+	return civ5ReplayJson.ReplayData
+}
+
+func ExportCiv5ReplayFile(replayData *Civ5ReplayData, outputFilename string) {
+	civ5ReplayJson := &Civ5ReplayJson{
+		GameName:   "Civilization 5",
+		FileFormat: ".Civ5Replay",
+		ReplayData: replayData,
+	}
+
+	file, err := json.MarshalIndent(civ5ReplayJson, "", " ")
+	if err != nil {
+		log.Fatal("Failed to marshal replay data: ", err)
 	}
 
 	err = ioutil.WriteFile(outputFilename, file, 0644)

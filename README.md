@@ -67,9 +67,9 @@ To generate a replay, you will need to provide the base map and the replay file 
 
 ### Convert .civ5map to .json
 
-Set output to have a filename ending in .json and the program will just convert the .civ5map file to a .json file. No image will be generated.
+Set -mode=exportjson and output to have a filename ending in .json. No image will be generated.
 ```
-./Civ5MapImage.exe -input=earth.Civ5Map -output=earth.json
+./Civ5MapImage.exe -mode=exportjson -input=earth.Civ5Map -output=earth.json
 ```
 
 ## Examples
