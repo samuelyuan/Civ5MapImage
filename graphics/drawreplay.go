@@ -3,6 +3,7 @@ package graphics
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/gif"
 	"os"
 	"sort"
@@ -66,6 +67,10 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 	}
 
 	maxCityId := 0
+
+	var mapPalette color.Palette
+	mapPalette = nil
+
 	for _, turn := range turnNumbers {
 		fmt.Println(fmt.Sprintf("Drawing frame for turn %d...", turn))
 
@@ -94,12 +99,19 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 			}
 		}
 
+		fmt.Println("Drawing map for turn", turn)
 		mapImage := DrawPoliticalMap(mapData)
 		bounds := mapImage.Bounds()
 
 		palettedImage := image.NewPaletted(bounds, nil)
 		quantizer := quantize.MedianCutQuantizer{NumColor: 256}
-		quantizer.Quantize(palettedImage, bounds, mapImage, image.ZP)
+
+		if mapPalette == nil {
+			quantizer.Quantize(palettedImage, bounds, mapImage, image.ZP)
+			mapPalette = palettedImage.Palette
+		} else {
+			quantizer.UseExistingPalette(palettedImage, bounds, mapImage, image.ZP, mapPalette)
+		}
 
 		outGif.Image = append(outGif.Image, palettedImage)
 		outGif.Delay = append(outGif.Delay, GIF_DELAY)

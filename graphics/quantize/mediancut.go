@@ -252,3 +252,14 @@ func (q *MedianCutQuantizer) Quantize(dst *image.Paletted, r image.Rectangle, sr
 		}
 	}
 }
+
+func (q *MedianCutQuantizer) UseExistingPalette(dst *image.Paletted, r image.Rectangle, src image.Image, sp image.Point, palette color.Palette) {
+	dst.Palette = palette
+
+	for y := 0; y < r.Dy(); y++ {
+		for x := 0; x < r.Dx(); x++ {
+			// TODO: this should be done more efficiently.
+			dst.Set(sp.X+x, sp.Y+y, src.At(r.Min.X+x, r.Min.Y+y))
+		}
+	}
+}
