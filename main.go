@@ -52,7 +52,7 @@ func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 		}
 		return mapData
 	} else {
-		log.Fatal("Input file has invalid file extension")
+		log.Fatal(fmt.Sprintf("Input map file has invalid file extension. Filename: %s, extension: %s", filename, mapFileExtension))
 	}
 	return nil
 }

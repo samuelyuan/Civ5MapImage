@@ -313,32 +313,26 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	})
 
 	// This block doesn't seem to have a pattern
-	unknownBlockRead := 0
-	for {
-		unknownBlock := [4]byte{}
-		if err := binary.Read(streamReader, binary.LittleEndian, &unknownBlock); err != nil {
-			log.Fatal("Failed to read block: ", err)
+	unknownVersion := unsafeReadUint32(streamReader)
+	if unknownVersion == 2 {
+		for i := 0; i < 7; i++ {
+			_ = unsafeReadUint32(streamReader)
 		}
+	} else {
+		for i := 0; i < 9; i++ {
+			_ = unsafeReadUint32(streamReader)
+		}
+	}
+	
+	unknownCount := unsafeReadUint32(streamReader)
+	for i := 0; i < int(unknownCount) + 1; i++ {
+		_ = unsafeReadUint32(streamReader)
+	}
 
-		unknownBlockRead += 4
-		if unknownBlock[0] == 255 && unknownBlock[1] == 255 && unknownBlock[2] == 255 && unknownBlock[3] == 255 {
-			// Read one byte of padding
-			unknownBlock2 := [1]byte{}
-			if err := binary.Read(streamReader, binary.LittleEndian, &unknownBlock2); err != nil {
-				log.Fatal("Failed to read block: ", err)
-			}
-			break
-		}
-
-		// Should not be longer than 64 bytes
-		if unknownBlockRead >= 64 {
-			// Read one byte of padding
-			unknownBlock2 := [1]byte{}
-			if err := binary.Read(streamReader, binary.LittleEndian, &unknownBlock2); err != nil {
-				log.Fatal("Failed to read block: ", err)
-			}
-			break
-		}
+	// Read one byte of padding
+	unknownBlock2 := [1]byte{}
+	if err := binary.Read(streamReader, binary.LittleEndian, &unknownBlock2); err != nil {
+		log.Fatal("Failed to read block: ", err)
 	}
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
