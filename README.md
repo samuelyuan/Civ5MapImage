@@ -99,6 +99,7 @@ Set -mode=exportjson and output to have a filename ending in .json. No image wil
 </div>
 
 <div style="display:inline-block;">
+<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/mongol.png" alt="mongol" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>

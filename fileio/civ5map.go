@@ -39,6 +39,19 @@ type Civ5MapTile struct {
 	ResourceAmount     uint8
 }
 
+type Civ5MapTilePhysical struct {
+	X                  int
+	Y                  int
+	TerrainType        int
+	ResourceType       int
+	FeatureTerrainType int
+	RiverData          int
+	Elevation          int
+	Continent          int
+	FeatureWonderType  int
+	ResourceAmount     int
+}
+
 type Civ5GameDescriptionHeader struct {
 	Unknown1              [68]byte
 	MaxTurns              uint32
@@ -178,7 +191,7 @@ type Civ5MapData struct {
 	FeatureTerrainList  []string
 	ResourceList        []string
 	TileImprovementList []string
-	MapTiles            [][]*Civ5MapTile
+	MapTiles            [][]*Civ5MapTilePhysical
 	MapTileImprovements [][]*Civ5MapTileImprovement
 	Civ5PlayerData      []*Civ5PlayerData
 	CityOwnerIndexMap   map[int]int
@@ -502,15 +515,26 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	fmt.Println("Map height: ", mapHeader.Height)
 	fmt.Println("Map width: ", mapHeader.Width)
 
-	mapTiles := make([][]*Civ5MapTile, mapHeader.Height)
+	mapTiles := make([][]*Civ5MapTilePhysical, mapHeader.Height)
 	for i := 0; i < int(mapHeader.Height); i++ {
-		mapTiles[i] = make([]*Civ5MapTile, mapHeader.Width)
+		mapTiles[i] = make([]*Civ5MapTilePhysical, mapHeader.Width)
 		for j := 0; j < int(mapHeader.Width); j++ {
 			tile := Civ5MapTile{}
 			if err := binary.Read(streamReader, binary.LittleEndian, &tile); err != nil {
 				return nil, err
 			}
-			mapTiles[i][j] = &tile
+			mapTiles[i][j] = &Civ5MapTilePhysical{
+				X:                  j,
+				Y:                  i,
+				TerrainType:        int(tile.TerrainType),
+				ResourceType:       int(tile.ResourceType),
+				FeatureTerrainType: int(tile.FeatureTerrainType),
+				RiverData:          int(tile.RiverData),
+				Elevation:          int(tile.Elevation),
+				Continent:          int(tile.Continent),
+				FeatureWonderType:  int(tile.FeatureWonderType),
+				ResourceAmount:     int(tile.ResourceAmount),
+			}
 		}
 	}
 
