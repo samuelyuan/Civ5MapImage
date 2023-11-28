@@ -225,7 +225,11 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 			VariableName: "gameBuild",
 		},
 		{
-			VariableType: "bytearray:5",
+			VariableType: "uint32",
+			VariableName: "currentTurnNumber",
+		},
+		{
+			VariableType: "bytearray:1",
 			VariableName: "unknownBlock2",
 		},
 	})
@@ -255,37 +259,37 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 		{
 			VariableType: "varstring",
-			VariableName: "mapScript",
+			VariableName: "mapFilename",
 		},
 	})
 
 	readArray(streamReader, "dlc", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "bytearray:16",
-			VariableName: "id",
+			VariableName: "dlcId",
 		},
 		{
 			VariableType: "bytearray:4",
-			VariableName: "enabled",
+			VariableName: "dlcEnabled",
 		},
 		{
 			VariableType: "varstring",
-			VariableName: "name",
+			VariableName: "dlcName",
 		},
 	})
 
 	readArray(streamReader, "mods", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
-			VariableName: "id",
+			VariableName: "modId",
 		},
 		{
 			VariableType: "bytearray:4",
-			VariableName: "version",
+			VariableName: "modVersion",
 		},
 		{
 			VariableType: "varstring",
-			VariableName: "name",
+			VariableName: "modName",
 		},
 	})
 
@@ -308,7 +312,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 		{
 			VariableType: "varstring",
-			VariableName: "mapScript2",
+			VariableName: "mapFilename2",
 		},
 	})
 
