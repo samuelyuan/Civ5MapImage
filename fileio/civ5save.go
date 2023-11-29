@@ -14,6 +14,251 @@ type Civ5SaveData struct {
 	AllReplayEvents []Civ5ReplayEvent
 }
 
+func readTurnSpeedData(streamReader *io.SectionReader) {
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerId1",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerUnknown1",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "turnTimeName1",
+		},
+		{
+			VariableType: "bytearray:12",
+			VariableName: "paddingAfterTurnTime1",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "turnTimeNameType",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "turnTimeNameDescription",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "turnTimeName2",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerBase",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerCity",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerUnit",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerFirstTurnMultiplayer",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "turnTimerId2",
+		},
+		{
+			VariableType: "uint8",
+			VariableName: "turnTimerUnknown2",
+		},
+	})
+
+	readArray(streamReader, "turnTimerVictoryFlags", []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "uint8", // length is usually 5
+			VariableName: "victoryFlag",
+		},
+	})
+}
+
+func readWorldSizeData(streamReader *io.SectionReader) {
+	numberBeforeWorldSize := unsafeReadUint32(streamReader)
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "uint32",
+			VariableName: "portraitIndex1",
+		},
+	})
+
+	// Should be related to map version
+	if numberBeforeWorldSize == 2 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "uint32",
+				VariableName: "numBeforeWorldSize",
+			},
+		})
+	}
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "varstring",
+			VariableName: "worldSize1",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "worldSizeHelp",
+		},
+		{
+			VariableType: "bytearray:8",
+			VariableName: "paddingAfterWorldSize1",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "worldSizeType",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "worldSizeDescription",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "worldSize2",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "uint32",
+			VariableName: "defaultPlayers",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "defaultMinorCivs",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "fogTilesPerBarbarianCamp",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "numNaturalWonders",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "unitNameModifier",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "targetNumCities",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "numFreeBuildingResources",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "buildingClassPrereqModifier",
+		},
+		{
+			VariableType: "int32",
+			VariableName: "maxConscriptModifier",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "gridWidth",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "gridHeight",
+		},
+	})
+
+	if numberBeforeWorldSize == 2 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "uint32",
+				VariableName: "maxActiveReligions",
+			},
+		})
+	}
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "int32",
+			VariableName: "terrainGrainChange",
+		},
+		{
+			VariableType: "int32",
+			VariableName: "featureGrainChange",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "researchPercent",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "advancedStartPointsMod",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "numCitiesUnhappinessPercent",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "numCitiesPolicyCostMod",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "numCitiesTechCostMod",
+		},
+	})
+
+	if numberBeforeWorldSize == 2 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "uint32",
+				VariableName: "portraitIndex2",
+			},
+		})
+	}
+}
+
+func readGameOptions(streamReader *io.SectionReader) {
+	readArray(streamReader, "gameOptionArr", []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "varstring",
+			VariableName: "gameOption",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "gameOptionEnabled",
+		},
+	})
+}
+
+func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, outputFilename string) (*bytes.Reader, int) {
+	decompressedFileReader, err := zlib.NewReader(compressedStreamReader)
+	if err != nil {
+		log.Fatal("Failed to create zlib new reader:", err)
+	}
+	defer decompressedFileReader.Close()
+
+	decompressedContents, err := io.ReadAll(decompressedFileReader)
+	if err != nil {
+		if err == io.ErrUnexpectedEOF {
+			fmt.Println("Read file into memory and still succeeded, err:", err)
+		} else if err != nil {
+			log.Fatal("Failed to decompress zlib:", err)
+		}
+
+		fmt.Println("Decompressed contents size:", len(decompressedContents))
+		err = ioutil.WriteFile(outputFilename, decompressedContents, 0644)
+		if err != nil {
+			log.Fatal("Error writing to "+outputFilename, err)
+		}
+	}
+
+	return bytes.NewReader(decompressedContents), len(decompressedContents)
+}
+
 func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, error) {
 	inputFile, err := os.Open(filename)
 	defer inputFile.Close()
@@ -180,7 +425,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
-	readArray(streamReader, "leaderNames", []Civ5ReplayFileConfigEntry{
+	readArray(streamReader, "leaderArray1", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
 			VariableName: "arrLeaderName",
@@ -324,7 +569,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		})
 	}
 
-	readArray(streamReader, "leaderArray", []Civ5ReplayFileConfigEntry{
+	readArray(streamReader, "leaderArray2", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
 			VariableName: "leaderArrName",
@@ -490,164 +735,31 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "bytearray:9",
+			VariableType: "bytearray:1",
 			VariableName: "unknownBlock18",
 		},
 	})
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimeName1",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:12",
-			VariableName: "paddingAfterTurnTime1",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimeName2",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimeName3",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimeName4",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerBase",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerCity",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerUnit",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerFirstTurnMultiplayer",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerUnknown1",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "turnTimerUnknown2",
-		},
-		{
-			VariableType: "varstring", // length is usually 5
-			VariableName: "turnTimerUnknown3",
-		},
-	})
-
+	readTurnSpeedData(streamReader)
 	readArray(streamReader, "unknownArray11", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "uint8",
 			VariableName: "unknownArray11Var",
 		},
 	})
-
-	numberBeforeWorldSize := unsafeReadUint32(streamReader)
-	// Should be related to map version
-	if numberBeforeWorldSize == 2 {
-		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "uint32",
-				VariableName: "numBeforeWorldSize1",
-			},
-			{
-				VariableType: "uint32",
-				VariableName: "numBeforeWorldSize2",
-			},
-		})
-	} else {
-		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "uint32",
-				VariableName: "numBeforeWorldSize1",
-			},
-		})
-	}
+	readWorldSizeData(streamReader)
+	readGameOptions(streamReader)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize1",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize2",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:8",
-			VariableName: "paddingAfterWorldSize1",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize3",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize4",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize5",
-		},
-	})
-
-	if numberBeforeWorldSize == 2 {
-		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "bytearray:80",
-				VariableName: "paddingAfterWorldSize2",
-			},
-		})
-	} else {
-		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "bytearray:72",
-				VariableName: "paddingAfterWorldSize2",
-			},
-		})
-	}
-
-	readArray(streamReader, "gameOptionArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "gameOption",
-		},
 		{
 			VariableType: "uint32",
-			VariableName: "gameOptionEnabled",
+			VariableName: "valueAfterGameOptions",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "gameVersion2",
 		},
 	})
-
-	_ = unsafeReadUint32(streamReader)
-
-	gameVersion := readVarString(streamReader, "gameVersion")
-	fmt.Println("Game version:", gameVersion)
 
 	readArray(streamReader, "unknownArray12", []Civ5ReplayFileConfigEntry{
 		{
@@ -672,42 +784,21 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "bytearray:8",
+			VariableType: "bytearray:8", // value is always [2 0 0 0 0 0 1 0]
 			VariableName: "paddingBeforeCompressedBlock",
 		},
 	})
 
+	// Header of compressed block should begin with 0x789C
 	offsetToCompressedBlock, err := streamReader.Seek(0, io.SeekCurrent)
 	if err != nil {
 		log.Fatal("Failed to call fseek", err)
 	}
 	fmt.Println("Offset to compressed data:", offsetToCompressedBlock)
-
 	compressedStreamReader := io.NewSectionReader(inputFile, int64(offsetToCompressedBlock), fileLength-int64(offsetToCompressedBlock))
 
-	decompressedFileReader, err := zlib.NewReader(compressedStreamReader)
-	if err != nil {
-		log.Fatal("Failed to create zlib new reader:", err)
-	}
-	defer decompressedFileReader.Close()
-
-	decompressedContents, err := io.ReadAll(decompressedFileReader)
-	if err != nil {
-		if err == io.ErrUnexpectedEOF {
-			fmt.Println("Read file into memory and still succeeded, err:", err)
-		} else if err != nil {
-			log.Fatal("Failed to decompress zlib:", err)
-		}
-
-		fmt.Println("Decompressed contents size:", len(decompressedContents))
-		err = ioutil.WriteFile(outputFilename, decompressedContents, 0644)
-		if err != nil {
-			log.Fatal("Error writing to "+outputFilename, err)
-		}
-	}
-
-	decompressedStreamReader := bytes.NewReader(decompressedContents)
-	allReplayEvents := readDecompressed(decompressedStreamReader, len(decompressedContents))
+	decompressedStreamReader, decompressedContentsSize := buildReaderForDecompressedFile(compressedStreamReader, outputFilename)
+	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize)
 
 	civ5SaveData := &Civ5SaveData{
 		AllReplayEvents: allReplayEvents,
@@ -739,7 +830,7 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 			VariableName: "unknown4",
 		},
 		{
-			VariableType: "uint32",
+			VariableType: "int32",
 			VariableName: "startYear",
 		},
 	})
@@ -747,7 +838,7 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 	for i := 0; i < 24; i++ {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{
-				VariableType: "uint32",
+				VariableType: "int32",
 				VariableName: fmt.Sprintf("unknownSection1-%d", i),
 			},
 		})
@@ -792,7 +883,7 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "bytearray:150",
-			VariableName: "unknownSection8",
+			VariableName: "unknownSectionAfterGreatPerson",
 		},
 	})
 
