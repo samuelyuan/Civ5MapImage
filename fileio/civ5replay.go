@@ -36,31 +36,56 @@ type Civ5ReplayEvent struct {
 	Text   string
 }
 
+type Civ5ReplayCivDataset struct {
+	CivIndex      int
+	DatasetValues map[string][]Civ5ReplayDataEntry
+}
+
+type Civ5ReplayDataEntry struct {
+	Turn  int
+	Value int
+}
+
 type Civ5ReplayData struct {
 	PlayerCiv       string
 	AllCivs         []Civ5ReplayCiv
 	AllReplayEvents []Civ5ReplayEvent
+	DatasetNames    []string
+	DatasetValues   []Civ5ReplayCivDataset
 }
 
-func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFileConfigEntry) {
+func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFileConfigEntry) []string {
+	fieldValues := make([]string, 0)
+
 	for i := 0; i < len(fileConfigEntries); i++ {
 		fileConfigEntry := fileConfigEntries[i]
 		if fileConfigEntry.VariableType == "varstring" {
-			_ = readVarString(reader, "varstring_"+fileConfigEntry.VariableName)
+			value := readVarString(reader, "varstring_"+fileConfigEntry.VariableName)
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(str):%v", fileConfigEntry.VariableName, value))
+		} else if fileConfigEntry.VariableType == "float32" {
+			value := float32(0)
+			if err := binary.Read(reader, binary.LittleEndian, &value); err != nil {
+				log.Fatal("Failed to load float32: ", err)
+			}
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(f32):%f", fileConfigEntry.VariableName, value))
 		} else if fileConfigEntry.VariableType == "uint32" {
-			_ = unsafeReadUint32(reader)
+			value := unsafeReadUint32(reader)
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(u32):%d", fileConfigEntry.VariableName, value))
 		} else if fileConfigEntry.VariableType == "int32" {
 			signedIntValue := int32(0)
 			if err := binary.Read(reader, binary.LittleEndian, &signedIntValue); err != nil {
 				log.Fatal("Failed to load int32: ", err)
 			}
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(i32):%d", fileConfigEntry.VariableName, signedIntValue))
 		} else if fileConfigEntry.VariableType == "uint16" {
-			_ = unsafeReadUint16(reader)
+			value := unsafeReadUint16(reader)
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(u16):%d", fileConfigEntry.VariableName, value))
 		} else if fileConfigEntry.VariableType == "uint8" {
 			unsignedIntValue := uint8(0)
 			if err := binary.Read(reader, binary.LittleEndian, &unsignedIntValue); err != nil {
 				log.Fatal("Failed to load uint8: ", err)
 			}
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(u8):%d", fileConfigEntry.VariableName, unsignedIntValue))
 		} else if strings.Contains(fileConfigEntry.VariableType, "bytearray") {
 			byteArrayLength, err := strconv.Atoi(fileConfigEntry.VariableType[len("bytearray:"):])
 			if err != nil {
@@ -71,10 +96,14 @@ func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFile
 			if err := binary.Read(reader, binary.LittleEndian, &byteBlock); err != nil {
 				log.Fatal("Invalid byte array data", err)
 			}
+
+			fieldValues = append(fieldValues, fmt.Sprintf("%v(bytearray):%v", fileConfigEntry.VariableName, byteBlock))
 		} else {
 			fmt.Println("Unknown variable type:", fileConfigEntry.VariableType)
 		}
 	}
+
+	return fieldValues
 }
 
 func readVarString(reader *io.SectionReader, varName string) string {
@@ -93,6 +122,9 @@ func readVarString(reader *io.SectionReader, varName string) string {
 
 func readArray(reader *io.SectionReader, arrayName string, fileConfigEntries []Civ5ReplayFileConfigEntry) {
 	arrayLength := unsafeReadUint32(reader)
+	if arrayLength > 100000 {
+		log.Fatal("Array length may be too long:", arrayLength)
+	}
 	for i := 0; i < int(arrayLength); i++ {
 		readFileConfig(reader, fileConfigEntries)
 	}
@@ -188,6 +220,62 @@ func GroupEventsByTurn(replayEvents []Civ5ReplayEvent) map[int][]Civ5ReplayEvent
 		replayTurns[turn] = append(replayTurns[turn], replayEvents[i])
 	}
 	return replayTurns
+}
+
+func readDatasetNames(streamReader *io.SectionReader) []string {
+	datasetLength := unsafeReadUint32(streamReader)
+	datasetNames := make([]string, int(datasetLength))
+	for i := 0; i < int(datasetLength); i++ {
+		datasetNames[i] = readVarString(streamReader, "datasetNames")
+	}
+	return datasetNames
+}
+
+func readDatasetValues(streamReader *io.SectionReader) [][][]Civ5ReplayDataEntry {
+	datasetValuesArray1Length := unsafeReadUint32(streamReader)
+	datasetByCiv := make([][][]Civ5ReplayDataEntry, int(datasetValuesArray1Length))
+
+	for i := 0; i < int(datasetValuesArray1Length); i++ {
+		datasetValuesArray2Length := unsafeReadUint32(streamReader)
+		datasetByCategory := make([][]Civ5ReplayDataEntry, int(datasetValuesArray2Length))
+
+		for j := 0; j < int(datasetValuesArray2Length); j++ {
+			numDatasetValues := unsafeReadUint32(streamReader)
+
+			datasetArray := make([]Civ5ReplayDataEntry, numDatasetValues)
+			for k := 0; k < int(numDatasetValues); k++ {
+				turn := unsafeReadUint32(streamReader)
+				value := unsafeReadUint32(streamReader)
+				datasetArray[k] = Civ5ReplayDataEntry{
+					Turn:  int(turn),
+					Value: int(value),
+				}
+			}
+
+			datasetByCategory[j] = datasetArray
+		}
+		datasetByCiv[i] = datasetByCategory
+	}
+	return datasetByCiv
+}
+
+func buildCivDatasetValues(streamReader *io.SectionReader, datasetNames []string) []Civ5ReplayCivDataset {
+	datasetValues := readDatasetValues(streamReader)
+
+	allCivDatasetValues := make([]Civ5ReplayCivDataset, len(datasetValues))
+	for civIndex := 0; civIndex < len(datasetValues); civIndex++ {
+		dataMap := make(map[string][]Civ5ReplayDataEntry, 0)
+		for datasetNameIndex := 0; datasetNameIndex < len(datasetNames); datasetNameIndex++ {
+			datasetName := datasetNames[datasetNameIndex]
+			dataMap[datasetName] = datasetValues[civIndex][datasetNameIndex]
+		}
+
+		allCivDatasetValues[civIndex] = Civ5ReplayCivDataset{
+			CivIndex:      civIndex,
+			DatasetValues: dataMap,
+		}
+	}
+	return allCivDatasetValues
 }
 
 func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
@@ -296,11 +384,11 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
-			VariableName: "unknownBlock3",
+			VariableName: "civName",
 		},
 		{
 			VariableType: "varstring",
-			VariableName: "unknownBlock4",
+			VariableName: "leaderName",
 		},
 		{
 			VariableType: "varstring",
@@ -368,29 +456,8 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 
 	allCivs := readCivs(streamReader)
 
-	readArray(streamReader, "datasets", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "name",
-		},
-	})
-
-	datasetValuesArray1Length := unsafeReadUint32(streamReader)
-	for i := 0; i < int(datasetValuesArray1Length); i++ {
-		datasetValuesArray2Length := unsafeReadUint32(streamReader)
-		for j := 0; j < int(datasetValuesArray2Length); j++ {
-			readArray(streamReader, "datasetValues", []Civ5ReplayFileConfigEntry{
-				{
-					VariableType: "uint32",
-					VariableName: "turn",
-				},
-				{
-					VariableType: "uint32",
-					VariableName: "value",
-				},
-			})
-		}
-	}
+	datasetNames := readDatasetNames(streamReader)
+	datasetValues := buildCivDatasetValues(streamReader, datasetNames)
 
 	// Read unknown value
 	_ = unsafeReadUint32(streamReader)
@@ -439,6 +506,8 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		PlayerCiv:       playerCiv,
 		AllCivs:         allCivs,
 		AllReplayEvents: allReplayEvents,
+		DatasetNames:    datasetNames,
+		DatasetValues:   datasetValues,
 	}
 
 	return &replayData, nil

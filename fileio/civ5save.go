@@ -14,6 +14,122 @@ type Civ5SaveData struct {
 	AllReplayEvents []Civ5ReplayEvent
 }
 
+func readClimateName(streamReader *io.SectionReader) {
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "varstring",
+			VariableName: "climateName1",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "bytearray:12",
+			VariableName: "paddingAfterClimateName1",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "varstring",
+			VariableName: "climateNameType",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "climateNameDescription",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "climateName2",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "int32",
+			VariableName: "desertPercentChange",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "jungleLatitude",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "hillRange",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "mountainPercent",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "snowLatitudeChange",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "tundraLatitudeChange",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "grassLatitudeChange",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "desertBottomLatitudeChange",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "desertTopLatitudeChange",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "iceLatitude",
+		},
+		{
+			VariableType: "float32",
+			VariableName: "randIceLatitude",
+		},
+	})
+}
+
+func readSeaLevel(streamReader *io.SectionReader) {
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "varstring",
+			VariableName: "seaLevelName1",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "bytearray:12",
+			VariableName: "paddingAfterSeaLevel1",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "varstring",
+			VariableName: "seaLevelNameType",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "seaLevelNameDescription",
+		},
+		{
+			VariableType: "varstring",
+			VariableName: "seaLevelName2",
+		},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "bytearray:5",
+			VariableName: "paddingAfterSeaLevel2",
+		},
+	})
+}
+
 func readTurnSpeedData(streamReader *io.SectionReader) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
@@ -385,8 +501,20 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 			VariableName: "unknownId2",
 		},
 		{
-			VariableType: "bytearray:16",
-			VariableName: "unknownId3",
+			VariableType: "uint32",
+			VariableName: "unknownId3-1",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "unknownId3-2",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "unknownId3-3",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "unknownId3-4",
 		},
 		{
 			VariableType: "varstring",
@@ -410,10 +538,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 	// 4 arrays, but value is unknown
 	for i := 0; i < 4; i++ {
-		readArray(streamReader, fmt.Sprintf("unknownArrayBlock%d", i), []Civ5ReplayFileConfigEntry{
+		readArray(streamReader, fmt.Sprintf("unknownArrayBlock1-%d", i), []Civ5ReplayFileConfigEntry{
 			{
 				VariableType: "uint32",
-				VariableName: fmt.Sprintf("unknownArrayBlock%d", i),
+				VariableName: fmt.Sprintf("unknownArrayBlock1-%d", i),
 			},
 		})
 	}
@@ -482,39 +610,40 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
+	readClimateName(streamReader)
+
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "varstring",
-			VariableName: "climateName1",
+			VariableType: "uint32",
+			VariableName: "unknownUint32",
+		},
+	})
+
+	readArray(streamReader, "unknownBlock8-1", []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "uint32",
+			VariableName: "unknownBlock8-1",
 		},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "bytearray:12",
-			VariableName: "unknownBlock8",
+			VariableType: "uint32",
+			VariableName: "unknownUint32",
+		},
+	})
+
+	readArray(streamReader, "unknownBlock8-2", []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "uint32",
+			VariableName: "unknownBlock8-2",
 		},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "varstring",
-			VariableName: "climateName2",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "climateName3",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "climateName4",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:587",
-			VariableName: "unknownBlock9",
+			VariableType: "bytearray:15",
+			VariableName: "unknownBlock8-3",
 		},
 	})
 
@@ -536,7 +665,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 		{
 			VariableType: "bytearray:5",
-			VariableName: "unknownBlock10",
+			VariableName: "unknownBlock9",
 		},
 		{
 			VariableType: "uint32",
@@ -564,7 +693,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{
 				VariableType: "bytearray:2",
-				VariableName: "unknownBlock11",
+				VariableName: "unknownBlock10",
 			},
 		})
 	}
@@ -579,7 +708,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "bytearray:4",
-			VariableName: "unknownBlock12",
+			VariableName: "unknownBlock11",
 		},
 		{
 			VariableType: "varstring",
@@ -594,8 +723,16 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 			VariableName: "mapFilename3",
 		},
 		{
-			VariableType: "bytearray:12",
-			VariableName: "unknownBlock13",
+			VariableType: "uint32",
+			VariableName: "unknownBlock12-1",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "maxTurns",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "unknownBlock12-3",
 		},
 	})
 
@@ -609,7 +746,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "bytearray:77",
-			VariableName: "unknownBlock14",
+			VariableName: "unknownBlock13",
 		},
 	})
 
@@ -630,7 +767,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "bytearray:8",
-			VariableName: "unknownBlock15",
+			VariableName: "unknownBlock14",
 		},
 	})
 
@@ -669,41 +806,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelName1",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:12",
-			VariableName: "paddingAfterSeaLevel1",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelName2",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelName3",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelName4",
-		},
-	})
-
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:5",
-			VariableName: "paddingAfterSeaLevel2",
-		},
-	})
+	readSeaLevel(streamReader)
 
 	readArray(streamReader, "unknownArray8", []Civ5ReplayFileConfigEntry{
 		{
@@ -741,10 +844,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	})
 
 	readTurnSpeedData(streamReader)
-	readArray(streamReader, "unknownArray11", []Civ5ReplayFileConfigEntry{
+	readArray(streamReader, "unknownArrayAfterTurnSpeed", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "uint8",
-			VariableName: "unknownArray11Var",
+			VariableName: "unknownArrayAfterTurnSpeedVar",
 		},
 	})
 	readWorldSizeData(streamReader)
