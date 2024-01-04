@@ -911,13 +911,11 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 	streamReader := io.NewSectionReader(reader, int64(0), int64(fileLength))
+
+	saveFileVersion := unsafeReadUint32(streamReader)
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "uint32",
-			VariableName: "unknown1",
-		},
-		{
-			VariableType: "uint32",
+			VariableType: "uint32", // value is usually 0
 			VariableName: "unknown2",
 		},
 		{
@@ -969,12 +967,89 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 		},
 	})
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:3968", // TODO: replace with calculation, different for each file
-			VariableName: "unknownSection4",
-		},
-	})
+	if saveFileVersion == 0x0B {
+		readArray(streamReader, "unitNameArr", []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "varstring",
+				VariableName: "unitName",
+			},
+			{
+				VariableType: "uint32",
+				VariableName: "unknownValue",
+			},
+		})
+		readArray(streamReader, "unitClassArr", []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "varstring",
+				VariableName: "unitClass",
+			},
+			{
+				VariableType: "uint32",
+				VariableName: "unknownValue",
+			},
+		})
+		readArray(streamReader, "buildingClassArr", []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "varstring",
+				VariableName: "buildingClass",
+			},
+			{
+				VariableType: "uint32",
+				VariableName: "unknownValue",
+			},
+		})
+
+		// TODO: find padding
+	} else {
+		arrayLength := unsafeReadUint32(streamReader)
+		// can be one less for some save files
+		for i := 0; i < int(arrayLength); i++ {
+			readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+				{
+					VariableType: "bytearray:8",
+					VariableName: "unknownSection4-1",
+				},
+			})
+		}
+
+		readArray(streamReader, "unknownSection4-2", []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:8",
+				VariableName: "unknownSection4-2",
+			},
+		})
+
+		arrayLength3 := unsafeReadUint32(streamReader)
+		for i := 0; i < int(arrayLength3) - 1; i++ {
+			readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+				{
+					VariableType: "bytearray:8",
+					VariableName: "unknownSection4-3",
+				},
+			})
+		}
+
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:128",
+				VariableName: "unknownSection5-1",
+			},
+		})
+
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:756",
+				VariableName: "unknownSection5-2",
+			},
+		})
+
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:128",
+				VariableName: "unknownSection5-3",
+			},
+		})
+	}
 
 	readArray(streamReader, "greatPersonArr", []Civ5ReplayFileConfigEntry{
 		{
@@ -983,9 +1058,23 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 		},
 	})
 
+	for i := 0; i < 2; i++ {
+		// Constant block
+		// [8 0 0 0 255 255 255 255 255 255 255 255 0 0 0 0
+		// 0 32 0 0 255 255 255 255 255 255 255 255 255 255 255 255
+		// 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255
+		// 255 255 255 255 0 0 0 0]]
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:56",
+				VariableName: "constantBlock",
+			},
+		})
+	}
+
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "bytearray:150",
+			VariableType: "bytearray:38",
 			VariableName: "unknownSectionAfterGreatPerson",
 		},
 	})
