@@ -34,17 +34,26 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 		mapData.CityOwnerIndexMap[i] = i
 	}
 
-	if len(mapData.Civ5PlayerData) == 0 {
+	if len(mapData.Civ5PlayerData) == 0 || replayData.IsReplayFile == false {
+		fmt.Println("Rebuilding civ player data from replay file...")
+		mapData.Civ5PlayerData = make([]*fileio.Civ5PlayerData, 0)
 		for i := 0; i < len(replayData.AllCivs); i++ {
 			civName := replayData.AllCivs[i].Name
-			civName = strings.ReplaceAll(civName, " ", "")
 
-			mapData.Civ5PlayerData = append(mapData.Civ5PlayerData, &fileio.Civ5PlayerData{
-				Index:     i,
-				CivType:   fmt.Sprintf("CIVILIZATION_%s", strings.ToUpper(civName)),
-				TeamColor: fmt.Sprintf("PLAYERCOLOR_%s", strings.ToUpper(civName)),
-			},
-			)
+			if strings.Contains(civName, "CIVILIZATION") || strings.Contains(civName, "MINOR_CIV") {
+				mapData.Civ5PlayerData = append(mapData.Civ5PlayerData, &fileio.Civ5PlayerData{
+					Index:     i,
+					CivType:   civName,
+					TeamColor: replayData.AllCivs[i].LongName,
+				})
+			} else {
+				civName = strings.ReplaceAll(civName, " ", "")
+				mapData.Civ5PlayerData = append(mapData.Civ5PlayerData, &fileio.Civ5PlayerData{
+					Index:     i,
+					CivType:   fmt.Sprintf("CIVILIZATION_%s", strings.ToUpper(civName)),
+					TeamColor: fmt.Sprintf("PLAYERCOLOR_%s", strings.ToUpper(civName)),
+				})
+			}
 		}
 	} else {
 		indexPlayerCivilization := -1

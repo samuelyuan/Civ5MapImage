@@ -48,6 +48,7 @@ type Civ5ReplayDataEntry struct {
 
 type Civ5ReplayData struct {
 	PlayerCiv       string
+	IsReplayFile    bool
 	AllCivs         []Civ5ReplayCiv
 	AllReplayEvents []Civ5ReplayEvent
 	DatasetNames    []string
@@ -301,7 +302,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 			VariableName: "gameName",
 		},
 		{
-			VariableType: "bytearray:4",
+			VariableType: "uint32",
 			VariableName: "unknownBlock1",
 		},
 		{
@@ -504,6 +505,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 
 	replayData := Civ5ReplayData{
 		PlayerCiv:       playerCiv,
+		IsReplayFile:    true,
 		AllCivs:         allCivs,
 		AllReplayEvents: allReplayEvents,
 		DatasetNames:    datasetNames,

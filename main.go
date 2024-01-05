@@ -34,7 +34,14 @@ func exportFileToJson(inputFilename string, outputFilename string) {
 		fileio.ExportCiv5ReplayFile(replayData, outputFilename)
 	} else if strings.ToLower(inputFileExtension) == ".civ5save" {
 		fmt.Println("Reading civ5save file")
-		fileio.ReadCiv5SaveFile(inputFilename, outputFilename)
+		saveData, err := fileio.ReadCiv5SaveFile(inputFilename, outputFilename+".decomp")
+		if err != nil {
+			log.Fatal("Failed to read replay data: ", err)
+		}
+
+		fmt.Println("Exporting save to", outputFilename)
+		fileio.ExportCiv5SaveFile(saveData, outputFilename)
+
 	} else {
 		log.Fatal("Unable to export file", inputFilename, "to json")
 	}

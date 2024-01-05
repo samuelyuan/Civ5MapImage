@@ -19,6 +19,12 @@ type Civ5ReplayJson struct {
 	ReplayData *Civ5ReplayData
 }
 
+type Civ5SaveJson struct {
+	GameName   string
+	FileFormat string
+	ReplayData *Civ5SaveData
+}
+
 func ImportCiv5MapFileFromJson(inputFilename string) *Civ5MapData {
 	jsonFile, err := os.Open(inputFilename)
 	if err != nil {
@@ -91,6 +97,24 @@ func ExportCiv5ReplayFile(replayData *Civ5ReplayData, outputFilename string) {
 	file, err := json.MarshalIndent(civ5ReplayJson, "", " ")
 	if err != nil {
 		log.Fatal("Failed to marshal replay data: ", err)
+	}
+
+	err = ioutil.WriteFile(outputFilename, file, 0644)
+	if err != nil {
+		log.Fatal("Error writing to ", outputFilename)
+	}
+}
+
+func ExportCiv5SaveFile(saveData *Civ5SaveData, outputFilename string) {
+	civ5SaveJson := &Civ5SaveJson{
+		GameName:   "Civilization 5",
+		FileFormat: ".Civ5Save",
+		ReplayData: saveData,
+	}
+
+	file, err := json.MarshalIndent(civ5SaveJson, "", " ")
+	if err != nil {
+		log.Fatal("Failed to marshal save data: ", err)
 	}
 
 	err = ioutil.WriteFile(outputFilename, file, 0644)
