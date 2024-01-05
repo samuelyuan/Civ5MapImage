@@ -8,9 +8,13 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 )
 
 type Civ5SaveData struct {
+	PlayerCiv       string
+	IsReplayFile    bool
+	AllCivs         []Civ5ReplayCiv
 	AllReplayEvents []Civ5ReplayEvent
 }
 
@@ -362,7 +366,7 @@ func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, ou
 		if err == io.ErrUnexpectedEOF {
 			fmt.Println("Read file into memory and still succeeded, err:", err)
 		} else if err != nil {
-			log.Fatal("Failed to decompress zlib:", err)
+			fmt.Println("Error when decompressing zlib, still attempt to continue:", err)
 		}
 
 		fmt.Println("Decompressed contents size:", len(decompressedContents))
@@ -384,8 +388,8 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		log.Fatal(err)
 		return nil, err
 	}
-	fileLength := fi.Size()
-	streamReader := io.NewSectionReader(inputFile, int64(0), fileLength)
+	saveFileLength := fi.Size()
+	streamReader := io.NewSectionReader(inputFile, int64(0), saveFileLength)
 	fmt.Println("Loading Civ5Save...")
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
@@ -524,7 +528,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 	readArray(streamReader, "unknownBlock3", []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "uint32",
+			VariableType: "int32",
 			VariableName: "unknownBlock3Var",
 		},
 	})
@@ -546,12 +550,25 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		})
 	}
 
-	readArray(streamReader, "civNames", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "arrCivName",
-		},
-	})
+	civNamesLength := unsafeReadUint32(streamReader)
+	civNameArr := make([]string, civNamesLength)
+	for i := 0; i < int(civNamesLength); i++ {
+		civName := readVarString(streamReader, "civName")
+		civNameArr[i] = civName
+	}
+	fmt.Println("CivNames:", civNameArr)
+
+	allCivs := make([]Civ5ReplayCiv, 0)
+	for i := 0; i < len(civNameArr); i++ {
+		civData := Civ5ReplayCiv{
+			UnknownVariables: [4]int{0, 0, 0, 0},
+			Leader:           "",
+			LongName:         "",
+			Name:             civNameArr[i],
+			Demonym:          "",
+		}
+		allCivs = append(allCivs, civData)
+	}
 
 	readArray(streamReader, "leaderArray1", []Civ5ReplayFileConfigEntry{
 		{
@@ -686,7 +703,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		streamReader.Seek(-2, io.SeekCurrent)
 		readArray(streamReader, "unknownArray4", []Civ5ReplayFileConfigEntry{
 			{
-				VariableType: "uint32",
+				VariableType: "int32", // a lot of negative values
 				VariableName: "unknownArray4Var",
 			},
 		})
@@ -736,12 +753,17 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
-	readArray(streamReader, "minorCivArray", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "minorCivArrName",
-		},
-	})
+	minorCivNamesLength := unsafeReadUint32(streamReader)
+	minorCivNameArr := make([]string, minorCivNamesLength)
+	for i := 0; i < int(minorCivNamesLength); i++ {
+		minorCivName := readVarString(streamReader, "minorCivName")
+		minorCivNameArr[i] = minorCivName
+
+		if strings.Contains(minorCivNameArr[i], "MINOR_CIV") {
+			allCivs[i].Name = minorCivNameArr[i]
+		}
+	}
+	fmt.Println("minorCivArray:", minorCivNameArr)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
@@ -752,7 +774,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 	readArray(streamReader, "unknownArray5", []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "uint32",
+			VariableType: "int32", // a lot of negative values
 			VariableName: "unknownArray5Var",
 		},
 	})
@@ -778,12 +800,15 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
-	readArray(streamReader, "playerColorArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "playerColorArrName",
-		},
-	})
+	playerColorLength := unsafeReadUint32(streamReader)
+	playerColorArr := make([]string, playerColorLength)
+	for i := 0; i < int(playerColorLength); i++ {
+		playerColorName := readVarString(streamReader, "playerColorName")
+		playerColorArr[i] = playerColorName
+
+		allCivs[i].LongName = playerColorName
+	}
+	fmt.Println("playerColorArr:", playerColorArr)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
@@ -853,11 +878,13 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	readWorldSizeData(streamReader)
 	readGameOptions(streamReader)
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+	readArray(streamReader, "unknownArrayAfterGameOptions", []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "uint32",
+			VariableType: "bytearray:9",
 			VariableName: "valueAfterGameOptions",
 		},
+	})
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
 			VariableName: "gameVersion2",
@@ -898,19 +925,22 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		log.Fatal("Failed to call fseek", err)
 	}
 	fmt.Println("Offset to compressed data:", offsetToCompressedBlock)
-	compressedStreamReader := io.NewSectionReader(inputFile, int64(offsetToCompressedBlock), fileLength-int64(offsetToCompressedBlock))
+	compressedStreamReader := io.NewSectionReader(inputFile, int64(offsetToCompressedBlock), saveFileLength-int64(offsetToCompressedBlock))
 
 	decompressedStreamReader, decompressedContentsSize := buildReaderForDecompressedFile(compressedStreamReader, outputFilename)
 	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize)
 
 	civ5SaveData := &Civ5SaveData{
+		PlayerCiv:       playerCiv,
+		IsReplayFile:    false,
+		AllCivs:         allCivs,
 		AllReplayEvents: allReplayEvents,
 	}
 	return civ5SaveData, nil
 }
 
-func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
-	streamReader := io.NewSectionReader(reader, int64(0), int64(fileLength))
+func readDecompressed(reader *bytes.Reader, decompressedFileLength int) []Civ5ReplayEvent {
+	streamReader := io.NewSectionReader(reader, int64(0), int64(decompressedFileLength))
 
 	saveFileVersion := unsafeReadUint32(streamReader)
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
@@ -1000,9 +1030,24 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 		})
 
 		// TODO: find padding
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:2366", // for RED WW2 save files, but different for other mods
+				VariableName: "unknownPadding",
+			},
+		})
 	} else {
+		// Three unknown arrays
+		// The size of the first and the third arrays are the same unless first array size is greater than 150, which means the first array
+		// length is one more than the third array length. The second array is much smaller.
+		// Each array element is 8 bytes. The first 4 bytes are usually consistent between different save files. The last 4 bytes can vary.
+
+		// Array 1 length: Usually 128 or 132, but some files have other values like [127, 154, 157]
 		arrayLength := unsafeReadUint32(streamReader)
-		// can be one less for some save files
+		// Can be one less for some save files
+		if arrayLength >= 150 {
+			arrayLength = arrayLength - 1
+		}
 		for i := 0; i < int(arrayLength); i++ {
 			readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 				{
@@ -1012,6 +1057,7 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 			})
 		}
 
+		// Array 2 length: Usually 83, but can be 85 in a save file when array 1 length is greater than 150
 		readArray(streamReader, "unknownSection4-2", []Civ5ReplayFileConfigEntry{
 			{
 				VariableType: "bytearray:8",
@@ -1019,8 +1065,9 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 			},
 		})
 
+		// Array 3 length: Usually 128 or 132, but some files have other values like [127, 153, 156]
 		arrayLength3 := unsafeReadUint32(streamReader)
-		for i := 0; i < int(arrayLength3) - 1; i++ {
+		for i := 0; i < int(arrayLength3)-1; i++ {
 			readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 				{
 					VariableType: "bytearray:8",
@@ -1063,7 +1110,7 @@ func readDecompressed(reader *bytes.Reader, fileLength int) []Civ5ReplayEvent {
 		// [8 0 0 0 255 255 255 255 255 255 255 255 0 0 0 0
 		// 0 32 0 0 255 255 255 255 255 255 255 255 255 255 255 255
 		// 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255
-		// 255 255 255 255 0 0 0 0]]
+		// 255 255 255 255 0 0 0 0]
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{
 				VariableType: "bytearray:56",
