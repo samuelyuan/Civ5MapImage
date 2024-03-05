@@ -5,7 +5,7 @@
 * [Introduction](#introduction)
 * [Command-Line Usage](#command-line-usage)
 * [Examples](#examples)
-* [File format](#file-format)
+* [Map File Format](#map-file-format)
   + [Header](#header)
   + [Geography list data](#geography-list-data)
   + [Map geography](#map-geography)
@@ -19,6 +19,8 @@
   + [Player format](#player-format)
   + [Map tile improvement properties](#map-tile-improvement-properties)
   + [Map tile improvement data](#map-tile-improvement-data)
+* [Replay File Format](#replay-file-format)
+* [Save File Format](#save-file-format)
 
 ## Introduction
 
@@ -104,7 +106,7 @@ Set -mode=exportjson and output to have a filename ending in .json. No image wil
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
 
-## File format
+## Map File Format
 
 This file format covers .civ5map files, which stores the map data. All data is stored in little endian.
 
@@ -295,3 +297,110 @@ The size of this struct is 8 bytes.
 | uint8 | 1 byte | Improvement |
 | uint8 | 1 byte | RouteType (0 = road, 1 = railroad, 0xFF = none) |
 | uint8 | 1 byte | RouteOwner |
+
+## Replay File Format
+
+The replay files store a list of civilizations, events, and datasets for different statistics like gold per turn.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| byte[4] | 4 bytes | Game name |
+| uint32 | 4 bytes | unknownBlock1 |
+| varstring | var bytes | Game version |
+| varstring | var bytes | Game build |
+| uint32 | 4 bytes | Current turn number |
+| byte[1] | 1 bytes | unknownBlock2 |
+| varstring | var bytes | Player civ |
+| varstring | var bytes | Difficulty |
+| varstring | var bytes | Era start |
+| varstring | var bytes | Era end |
+| varstring | var bytes | Game speed |
+| varstring | var bytes | World size |
+| varstring | var bytes | Map filename |
+
+DLC Array Element
+
+Array size is uint32 followed by list of elements.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| byte[16] | 16 bytes | dlcId |
+| byte[4] | 4 bytes | dlcEnabled |
+| varstring | var bytes | dlcName |
+
+Mods Array Element
+
+Array size is uint32 followed by list of elements.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| varstring | var bytes | modId |
+| byte[4] | 4 bytes | modVersion |
+| varstring | var bytes | modName |
+
+Header Continued
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| varstring | var bytes | Civ name |
+| varstring | var bytes | Leader name |
+| varstring | var bytes | Player color |
+| byte[8] | 8 bytes | unknownBlock5 |
+| varstring | var bytes | mapFilename2 |
+
+Unknown Block
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | unknownVersion |
+| byte[] | 7 bytes if unknownVersion is 2, 9 bytes for all other values | Unknown array |
+| uint32 | 4 bytes | unknownCount |
+| uint32[] | (unknownCount + 1) bytes | Unknown array |
+| uint8 | 1 byte | Unknown |
+
+Header Continued
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Start turn |
+| int32 | 4 bytes | Start year |
+| uint32 | 4 bytes | End turn |
+| varstring | var bytes | End year |
+| uint32 | 4 bytes | zeroStartYear |
+| uint32 | 4 bytes | zeroEndYear |
+
+### Civ Names
+
+The civ names are stored in an array.
+
+Array size is uint32.
+
+Array element format
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32[4] | 4*4 bytes | Unknown |
+| varstring | var bytes | Leader name |
+| varstring | var bytes | Civ long name |
+| varstring | var bytes | Civ name |
+| varstring | var bytes | Civ demonym |
+
+### Civ Dataset Names
+
+Array size is uint32.
+
+Array element format
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| varstring | var bytes | Dataset name |
+
+### Civ Dataset Values
+
+### Replay Events
+
+### Tiles
+
+## Save File Format
+
+Most of the save file is compressed and the header begins with 0x789C, which is a ZLIB header.
