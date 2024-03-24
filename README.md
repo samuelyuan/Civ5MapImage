@@ -397,9 +397,35 @@ Array element format
 
 ### Civ Dataset Values
 
+This is a 3D array. The first level is divided by civilization and the second level is divided by category. To get a list of dataset values, you have to call datasetValues[civIndex][datasetNameIndex]. Each dataset value is represented by a Turn and Value pair.
+
 ### Replay Events
 
+The number of events is a uint32.
+
+Replay Event format
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Turn |
+| uint32 | 4 bytes | Type id |
+| uint32 | 4 bytes | Number tiles |
+| tile array | numTIles * 4 bytes | Tile array, which contains uint16 for x and uint16 for y |
+| uint32 | 4 bytes | Civilization Id |
+| varstring | varstring bytes | Event text |
+
 ### Tiles
+
+Tile data contains information about the physical map.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | unknownVariable1 |
+| uint32 | 4 bytes | unknownVariable2 |
+| uint8 | 1 byte | Elevation id |
+| uint8 | 1 byte | Type id |
+| uint8 | 1 byte | Feature id |
+| uint8 | 1 byte | unknownVariable3 |
 
 ## Save File Format
 

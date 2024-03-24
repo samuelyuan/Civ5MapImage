@@ -121,6 +121,6 @@ func main() {
 		graphics.DrawReplay(mapData, replayData, outputFilename)
 		return
 	} else {
-		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [phyiscal, political, replay].")
+		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [physical, political, replay, exportjson].")
 	}
 }
