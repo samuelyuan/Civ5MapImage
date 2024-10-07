@@ -49,13 +49,8 @@ func getImagePosition(i int, j int) (float64, float64) {
 	return x, y
 }
 
-func getTerrainString(mapData *fileio.Civ5MapData, row int, column int) string {
-	terrainType := mapData.MapTiles[row][column].TerrainType
-	return mapData.TerrainList[terrainType]
-}
-
 func getPhysicalMapTileColor(mapData *fileio.Civ5MapData, row int, column int) color.RGBA {
-	terrainString := getTerrainString(mapData, row, column)
+	terrainString := fileio.GetTerrainString(mapData, row, column)
 	switch terrainString {
 	case "TERRAIN_GRASS":
 		return color.RGBA{105, 125, 54, 255}
@@ -111,29 +106,16 @@ func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int
 			dc.Fill()
 
 			// Draw mountains
-			if mapData.MapTiles[i][j].Elevation == 2 {
+			if fileio.TileHasMountain(mapData, i, j) {
 				drawMountain(dc, x, y)
 			}
 
 			// Draw cities
-			if mapData.MapTileImprovements[i][j].CityId != -1 {
+			if fileio.TileHasCity(mapData, i, j) {
 				drawCityIcon(dc, x, y, color.RGBA{255, 255, 255, 255})
 			}
 		}
 	}
-}
-
-func getPoliticalMapTileColor(mapData *fileio.Civ5MapData, row int, column int) string {
-	tileOwner := mapData.MapTileImprovements[row][column].Owner
-	if tileOwner == 0xFF {
-		return ""
-	}
-	civIndex := mapData.CityOwnerIndexMap[tileOwner]
-	tileColor := ""
-	if civIndex < len(mapData.Civ5PlayerData) {
-		tileColor = mapData.Civ5PlayerData[civIndex].TeamColor
-	}
-	return tileColor
 }
 
 func getTileCivName(mapData *fileio.Civ5MapData, row int, column int) string {
@@ -165,14 +147,13 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 
 			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
 
-			terrainString := getTerrainString(mapData, i, j)
 			cityColor := color.RGBA{255, 255, 255, 255}
-			if terrainString == "TERRAIN_COAST" || terrainString == "TERRAIN_OCEAN" {
+			if fileio.IsWaterTile(mapData, i, j) {
 				terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
 				dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
 				dc.Fill()
 			} else {
-				tileColor := getPoliticalMapTileColor(mapData, i, j)
+				tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
 
 				renderColor, ok := civColorMap[tileColor]
 
@@ -209,7 +190,7 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 			}
 
 			// Draw cities
-			if mapData.MapTileImprovements[i][j].CityId != -1 {
+			if fileio.TileHasCity(mapData, i, j) {
 				drawCityIcon(dc, x, y, cityColor)
 			}
 		}
@@ -355,7 +336,7 @@ func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, map
 				continue
 			}
 
-			tileColor := getPoliticalMapTileColor(mapData, i, j)
+			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
 			renderColor, ok := civColorMap[tileColor]
 			borderColor := color.RGBA{255, 255, 255, 255}
 			if ok {
@@ -399,7 +380,7 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 			x, y := getImagePosition(mapHeight-i, j)
 
 			tile := mapData.MapTileImprovements[i][j]
-			tileColor := getPoliticalMapTileColor(mapData, i, j)
+			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
 			renderColor, ok := civColorMap[tileColor]
 			if ok {
 				var cityColor color.RGBA

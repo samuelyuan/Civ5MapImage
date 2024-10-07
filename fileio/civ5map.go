@@ -125,7 +125,7 @@ type Civ5CityData struct {
 	IsOccupied      bool
 	Population      int
 	Health          int
-	BuildingInfo    []byte
+	BuildingInfo    []uint8
 }
 
 type Civ5MapTileHeader struct {
@@ -193,6 +193,7 @@ type Civ5MapData struct {
 	TileImprovementList []string
 	MapTiles            [][]*Civ5MapTilePhysical
 	MapTileImprovements [][]*Civ5MapTileImprovement
+	CityData            []*Civ5CityData
 	Civ5PlayerData      []*Civ5PlayerData
 	CityOwnerIndexMap   map[int]int
 	CivColorOverrides   []CivColorOverride
@@ -742,6 +743,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		TileImprovementList: tileImprovementList,
 		MapTiles:            mapTiles,
 		MapTileImprovements: mapTileImprovementData,
+		CityData:            cityData,
 		Civ5PlayerData:      allPlayerData,
 		CityOwnerIndexMap:   cityOwnerIndexMap,
 		CivColorOverrides:   civColorOverrides,
