@@ -111,8 +111,10 @@ func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int
 			}
 
 			// Draw cities
-			if fileio.TileHasCity(mapData, i, j) {
-				drawCityIcon(dc, x, y, color.RGBA{255, 255, 255, 255})
+			if len(mapData.MapTileImprovements) > 0 {
+				if fileio.TileHasCity(mapData, i, j) {
+					drawCityIcon(dc, x, y, color.RGBA{255, 255, 255, 255})
+				}
 			}
 		}
 	}
@@ -307,19 +309,24 @@ func DrawPhysicalMap(mapData *fileio.Civ5MapData) image.Image {
 
 	drawTerrainTiles(dc, mapData, mapHeight, mapWidth)
 	drawRivers(dc, mapData, mapHeight, mapWidth)
-	drawRoads(dc, mapData, mapHeight, mapWidth)
+	if len(mapData.MapTileImprovements) > 0 {
+		drawRoads(dc, mapData, mapHeight, mapWidth)
+	}
 
 	// Draw city names on top of hexes
 	dc.InvertY()
-	for i := 0; i < mapHeight; i++ {
-		for j := 0; j < mapWidth; j++ {
-			// Invert depth because the map is inverted
-			x, y := getImagePosition(mapHeight-i, j)
 
-			tile := mapData.MapTileImprovements[i][j]
-			dc.SetRGB255(255, 255, 255)
-			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
-			dc.DrawString(cityName, x-(5.0*float64(len(cityName))/2.0), y-radius*1.5)
+	if len(mapData.MapTileImprovements) > 0 {
+		for i := 0; i < mapHeight; i++ {
+			for j := 0; j < mapWidth; j++ {
+				// Invert depth because the map is inverted
+				x, y := getImagePosition(mapHeight-i, j)
+
+				tile := mapData.MapTileImprovements[i][j]
+				dc.SetRGB255(255, 255, 255)
+				cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
+				dc.DrawString(cityName, x-(5.0*float64(len(cityName))/2.0), y-radius*1.5)
+			}
 		}
 	}
 

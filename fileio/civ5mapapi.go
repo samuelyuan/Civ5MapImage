@@ -6,19 +6,19 @@ func GetTerrainString(mapData *Civ5MapData, row int, column int) string {
 }
 
 func IsWaterTile(mapData *Civ5MapData, row int, column int) bool {
-  terrainString := GetTerrainString(mapData, row, column)
-  return terrainString == "TERRAIN_COAST" || terrainString == "TERRAIN_OCEAN"
+	terrainString := GetTerrainString(mapData, row, column)
+	return terrainString == "TERRAIN_COAST" || terrainString == "TERRAIN_OCEAN"
 }
 
 func TileHasCity(mapData *Civ5MapData, row int, column int) bool {
-  return mapData.MapTileImprovements[row][column].CityId != -1
+	return mapData.MapTileImprovements[row][column].CityId != -1
 }
 
 func TileHasMountain(mapData *Civ5MapData, row int, column int) bool {
-  return mapData.MapTiles[row][column].Elevation == 2
+	return mapData.MapTiles[row][column].Elevation == 2
 }
 
-func GetPoliticalMapTileColor(mapData *fileio.Civ5MapData, row int, column int) string {
+func GetPoliticalMapTileColor(mapData *Civ5MapData, row int, column int) string {
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
 	if tileOwner == 0xFF {
 		return ""

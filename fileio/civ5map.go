@@ -539,6 +539,29 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		}
 	}
 
+	currentPosition, err := streamReader.Seek(0, io.SeekCurrent)
+	if err != nil {
+		panic(err)
+	}
+
+	if fileLength == currentPosition {
+		fmt.Println("Reached end of file. Skip reading game description header.")
+		mapData := &Civ5MapData{
+			MapHeader:           mapHeader,
+			TerrainList:         terrainList,
+			FeatureTerrainList:  featureTerrainList,
+			ResourceList:        resourceList,
+			TileImprovementList: []string{},
+			MapTiles:            mapTiles,
+			MapTileImprovements: [][]*Civ5MapTileImprovement{},
+			CityData:            []*Civ5CityData{},
+			Civ5PlayerData:      []*Civ5PlayerData{},
+			CityOwnerIndexMap:   map[int]int{},
+			CivColorOverrides:   []CivColorOverride{},
+		}
+		return mapData, nil
+	}
+
 	fmt.Println("Reading game description header...")
 	gameDescriptionHeader := Civ5GameDescriptionHeader{}
 	if err := binary.Read(streamReader, binary.LittleEndian, &gameDescriptionHeader); err != nil {
