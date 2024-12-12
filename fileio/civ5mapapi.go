@@ -18,9 +18,13 @@ func TileHasMountain(mapData *Civ5MapData, row int, column int) bool {
 	return mapData.MapTiles[row][column].Elevation == 2
 }
 
+func IsInvalidTileOwner(value int) bool {
+	return value == 0xFF || value == 0xFFFF || value == 0xFFFFFFFF || value == -1
+}
+
 func GetPoliticalMapTileColor(mapData *Civ5MapData, row int, column int) string {
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
-	if tileOwner == 0xFF {
+	if IsInvalidTileOwner(tileOwner) {
 		return ""
 	}
 	civIndex := mapData.CityOwnerIndexMap[tileOwner]

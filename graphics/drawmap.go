@@ -122,7 +122,7 @@ func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int
 
 func getTileCivName(mapData *fileio.Civ5MapData, row int, column int) string {
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
-	if tileOwner == 0xFF {
+	if fileio.IsInvalidTileOwner(tileOwner) {
 		return ""
 	}
 	civIndex := mapData.CityOwnerIndexMap[tileOwner]
@@ -339,7 +339,7 @@ func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, map
 			x1, y1 := getImagePosition(i, j)
 			neighbors := getNeighbors(j, i)
 			currentTileOwner := mapData.MapTileImprovements[i][j].Owner
-			if currentTileOwner == 0xFF {
+			if fileio.IsInvalidTileOwner(currentTileOwner) {
 				continue
 			}
 
