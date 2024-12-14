@@ -108,9 +108,11 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 			} else if event.TypeId == 4 {
 				// Tiles razed
 				for _, tile := range event.Tiles {
+					// Remove city from map
 					mapData.MapTileImprovements[tile.Y][tile.X].Owner = -1
 					mapData.MapTileImprovements[tile.Y][tile.X].CityId = -1
 					mapData.MapTileImprovements[tile.Y][tile.X].CityName = ""
+					// Set razed city tile to road
 					mapData.MapTileImprovements[tile.Y][tile.X].RouteType = 2
 				}
 			}

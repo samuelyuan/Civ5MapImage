@@ -56,6 +56,11 @@ type Civ5ReplayData struct {
 }
 
 func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFileConfigEntry) []string {
+	pos, err := reader.Seek(0, io.SeekCurrent)
+	if err != nil {
+		panic(err)
+	}
+
 	fieldValues := make([]string, 0)
 
 	for i := 0; i < len(fileConfigEntries); i++ {
@@ -104,6 +109,8 @@ func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFile
 		}
 	}
 
+	fmt.Print(fmt.Sprintf("File Pos: 0x%X, ", pos))
+	fmt.Println("Field values:", fieldValues)
 	return fieldValues
 }
 
@@ -194,7 +201,7 @@ func readEvents(reader *io.SectionReader) []Civ5ReplayEvent {
 			}
 		}
 
-		civId := unsafeReadUint32(reader)
+		civId := int32(unsafeReadUint32(reader))
 		eventText := readVarString(reader, "eventText")
 
 		allReplayEvents[i] = Civ5ReplayEvent{
@@ -407,20 +414,30 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 
 	// This block doesn't seem to have a pattern
 	unknownVersion := unsafeReadUint32(streamReader)
-	if unknownVersion == 2 {
-		for i := 0; i < 7; i++ {
-			_ = unsafeReadUint32(streamReader)
-		}
-	} else {
-		for i := 0; i < 9; i++ {
-			_ = unsafeReadUint32(streamReader)
-		}
+	unknownArr := make([]int, 0)
+	fmt.Println("Unknown version:", unknownVersion)
+	unknownArr = append(unknownArr, int(unknownVersion))
+	for i := 0; i < 4; i++ {
+		value := unsafeReadUint32(streamReader)
+		unknownArr = append(unknownArr, int(value))
 	}
 
 	unknownCount := unsafeReadUint32(streamReader)
-	for i := 0; i < int(unknownCount)+1; i++ {
-		_ = unsafeReadUint32(streamReader)
+	unknownArr = append(unknownArr, int(unknownCount))
+
+	for i := 0; i < int(unknownCount); i++ {
+		value := unsafeReadUint32(streamReader)
+		unknownArr = append(unknownArr, int(value))
 	}
+
+	unknownCount2 := unsafeReadUint32(streamReader)
+	unknownArr = append(unknownArr, int(unknownCount2))
+
+	for i := 0; i < int(unknownCount2) + 1; i++ {
+		value := unsafeReadUint32(streamReader)
+		unknownArr = append(unknownArr, int(value))
+	}
+	fmt.Println("Unknown array:", unknownArr)
 
 	// Read one byte of padding
 	unknownBlock2 := [1]byte{}

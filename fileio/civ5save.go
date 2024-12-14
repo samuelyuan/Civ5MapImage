@@ -551,6 +551,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	}
 
 	civNamesLength := unsafeReadUint32(streamReader)
+	fmt.Println("CivNamesLength:", civNamesLength)
 	civNameArr := make([]string, civNamesLength)
 	for i := 0; i < int(civNamesLength); i++ {
 		civName := readVarString(streamReader, "civName")
@@ -577,18 +578,33 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
+	unknownBlock5Number := unsafeReadUint32(streamReader)
+	if unknownBlock5Number != 0 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: "bytearray:12",
+				VariableName: "unknownBlock5",
+			},
+		})
+	}
+
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:16",
-			VariableName: "unknownBlock5",
-		},
 		{
 			VariableType: "varstring",
 			VariableName: "computerUsername1",
 		},
+	})
+
+	readArray(streamReader, "unknownBlock6-1", []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "bytearray:313",
-			VariableName: "unknownBlock6",
+			VariableType: "int32",
+			VariableName: "unknownBlock6-1",
+		},
+	})
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{
+			VariableType: "bytearray:53",
+			VariableName: "unknownBlock6-2",
 		},
 	})
 
@@ -620,13 +636,21 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
+	unknownBlock7Number := unsafeReadUint32(streamReader)
+	if unknownBlock7Number != 0 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: fmt.Sprintf("bytearray:%d", (unknownBlock7Number + 1) * 4),
+				VariableName: "unknownBlock7-1",
+			},
+		})
+	}
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
-			VariableType: "bytearray:12",
-			VariableName: "unknownBlock7",
+			VariableType: "bytearray:8",
+			VariableName: "unknownBlock7-2",
 		},
 	})
-
 	readClimateName(streamReader)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
@@ -722,11 +746,17 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
+	unknownBlock11Number := unsafeReadUint32(streamReader)
+	if unknownBlock11Number != 0 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{
+				VariableType: fmt.Sprintf("bytearray:%d", (unknownBlock11Number + 1) * 4),
+				VariableName: "unknownBlock11",
+			},
+		})
+	}
+
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:4",
-			VariableName: "unknownBlock11",
-		},
 		{
 			VariableType: "varstring",
 			VariableName: "computerUsername2",
