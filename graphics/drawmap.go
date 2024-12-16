@@ -120,18 +120,6 @@ func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int
 	}
 }
 
-func getTileCivName(mapData *fileio.Civ5MapData, row int, column int) string {
-	tileOwner := mapData.MapTileImprovements[row][column].Owner
-	if fileio.IsInvalidTileOwner(tileOwner) {
-		return ""
-	}
-	civIndex := mapData.CityOwnerIndexMap[tileOwner]
-	if civIndex < len(mapData.Civ5PlayerData) {
-		return mapData.Civ5PlayerData[civIndex].CivType
-	}
-	return ""
-}
-
 func interpolateColor(color1 color.RGBA, color2 color.RGBA, t float64) color.RGBA {
 	// t should be between 0.0 and 1.0
 	return color.RGBA{
@@ -161,7 +149,7 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 
 				if ok {
 					white := color.RGBA{255, 255, 255, 255}
-					if strings.Contains(getTileCivName(mapData, i, j), "MINOR") {
+					if strings.Contains(fileio.GetTileCivName(mapData, i, j), "MINOR") {
 						// Invert city state colors
 						background := renderColor.InnerColor
 						cityColor = renderColor.OuterColor
@@ -347,7 +335,7 @@ func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, map
 			renderColor, ok := civColorMap[tileColor]
 			borderColor := color.RGBA{255, 255, 255, 255}
 			if ok {
-				if strings.Contains(getTileCivName(mapData, i, j), "MINOR") {
+				if strings.Contains(fileio.GetTileCivName(mapData, i, j), "MINOR") {
 					// invert city state colors
 					borderColor = renderColor.OuterColor
 				} else {
@@ -391,7 +379,7 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 			renderColor, ok := civColorMap[tileColor]
 			if ok {
 				var cityColor color.RGBA
-				if strings.Contains(getTileCivName(mapData, i, j), "MINOR") {
+				if strings.Contains(fileio.GetTileCivName(mapData, i, j), "MINOR") {
 					cityColor = renderColor.OuterColor
 				} else {
 					cityColor = renderColor.InnerColor

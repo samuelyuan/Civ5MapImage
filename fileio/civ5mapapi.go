@@ -22,6 +22,18 @@ func IsInvalidTileOwner(value int) bool {
 	return value == 0xFF || value == 0xFFFF || value == 0xFFFFFFFF || value == -1
 }
 
+func GetTileCivName(mapData *Civ5MapData, row int, column int) string {
+	tileOwner := mapData.MapTileImprovements[row][column].Owner
+	if IsInvalidTileOwner(tileOwner) {
+		return ""
+	}
+	civIndex := mapData.CityOwnerIndexMap[tileOwner]
+	if civIndex < len(mapData.Civ5PlayerData) {
+		return mapData.Civ5PlayerData[civIndex].CivType
+	}
+	return ""
+}
+
 func GetPoliticalMapTileColor(mapData *Civ5MapData, row int, column int) string {
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
 	if IsInvalidTileOwner(tileOwner) {
