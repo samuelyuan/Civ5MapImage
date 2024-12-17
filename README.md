@@ -64,7 +64,15 @@ To generate a political map with the civilization and city state borders, you mu
 
 To generate a replay, you will need to provide the base map and the replay file of a game.
 ```
-./Civ5MapImage.exe -mode=replay -input=[map filename] -replay=[replay filename]  -output=[gif filename]
+./Civ5MapImage.exe -mode=replay -input=[map filename] -replay=[replay filename] -output=[gif filename]
+```
+
+### Extract Replay From Save File
+
+To extract a replay from a save file, you will need to convert the save file into a json and use the new json as a replay file.
+
+```
+./Civ5MapImage.exe -mode=exportjson -input=[save filename] -output=[json filename]
 ```
 
 ### Convert .civ5map to .json
@@ -353,9 +361,11 @@ Unknown Block
 | Type | Size | Description |
 | ---- | ---- | ----------- |
 | uint32 | 4 bytes | unknownVersion |
-| byte[] | 7 bytes if unknownVersion is 2, 9 bytes for all other values | Unknown array |
-| uint32 | 4 bytes | unknownCount |
-| uint32[] | (unknownCount + 1) bytes | Unknown array |
+| uint32[4] | 16 bytes | Unknown array |
+| uint32 | 4 bytes | unknownCount1 |
+| uint32[] | (unknownCount1 * 4) bytes | Unknown array |
+| uint32 | 4 bytes | unknownCount2 |
+| uint32[] | (unknownCount2 + 1) bytes | Unknown array |
 | uint8 | 1 byte | Unknown |
 
 Header Continued
