@@ -640,7 +640,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	if unknownBlock7Number != 0 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{
-				VariableType: fmt.Sprintf("bytearray:%d", (unknownBlock7Number + 1) * 4),
+				VariableType: fmt.Sprintf("bytearray:%d", (unknownBlock7Number+1)*4),
 				VariableName: "unknownBlock7-1",
 			},
 		})
@@ -750,7 +750,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	if unknownBlock11Number != 0 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{
-				VariableType: fmt.Sprintf("bytearray:%d", (unknownBlock11Number + 1) * 4),
+				VariableType: fmt.Sprintf("bytearray:%d", (unknownBlock11Number+1)*4),
 				VariableName: "unknownBlock11",
 			},
 		})

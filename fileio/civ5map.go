@@ -200,14 +200,14 @@ type Civ5MapData struct {
 }
 
 func byteArrayToStringArray(byteArray []byte) []string {
-	str := ""
+	var builder strings.Builder
 	arr := make([]string, 0)
 	for i := 0; i < len(byteArray); i++ {
 		if byteArray[i] == 0 {
-			arr = append(arr, str)
-			str = ""
+			arr = append(arr, builder.String())
+			builder.Reset()
 		} else {
-			str += string(byteArray[i])
+			builder.WriteByte(byteArray[i])
 		}
 	}
 	return arr
@@ -377,6 +377,11 @@ func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5M
 	streamReader := io.NewSectionReader(bytes.NewReader(inputData), int64(0), int64(len(inputData)))
 
 	mapTiles := make([][]*Civ5MapTileImprovement, height)
+	expectedTileSize := height * width * binary.Size(Civ5MapTileHeader{})
+	if len(inputData) < expectedTileSize {
+		return nil, fmt.Errorf("input data length is not sufficient for the expected tile size")
+	}
+
 	for i := 0; i < height; i++ {
 		mapTiles[i] = make([]*Civ5MapTileImprovement, width)
 		for j := 0; j < width; j++ {
@@ -406,24 +411,15 @@ func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5M
 }
 
 func printList(list []string) {
-	outputStr := "["
-	for i := 0; i < len(list); i++ {
-		outputStr += "\"" + list[i] + "\""
-		if i != len(list)-1 {
-			outputStr += ", "
-		}
-	}
-	outputStr += "]"
-	fmt.Println(outputStr)
+	fmt.Printf("[%s]\n", strings.Join(list, ", "))
 }
 
 func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	inputFile, err := os.Open(filename)
-	defer inputFile.Close()
 	if err != nil {
-		log.Fatal("Failed to load map: ", err)
-		return nil, err
+		return nil, fmt.Errorf("Failed to load map: %w", err)
 	}
+	defer inputFile.Close()
 	fi, err := inputFile.Stat()
 	if err != nil {
 		log.Fatal(err)
@@ -442,9 +438,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	fmt.Println("Scenario: ", scenario)
 	fmt.Println("Version: ", version)
 
-	hasWorldWrap := (mapHeader.Settings[0] & 1) != 0
-	hasRandomResources := (mapHeader.Settings[0] >> 1 & 1) != 0
-	hasRandomGoodies := (mapHeader.Settings[0] >> 2 & 1) != 0
+	hasWorldWrap, hasRandomResources, hasRandomGoodies := (mapHeader.Settings[0]&1) != 0, (mapHeader.Settings[0]>>1&1) != 0, (mapHeader.Settings[0]>>2&1) != 0
 	fmt.Println("Has world wrap: ", hasWorldWrap)
 	fmt.Println("Has random resources: ", hasRandomResources)
 	fmt.Println("Has random goodies: ", hasRandomGoodies)
@@ -544,7 +538,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		panic(err)
 	}
 
-	if fileLength == currentPosition {
+	if streamReader.Size() == currentPosition {
 		fmt.Println("Reached end of file. Skip reading game description header.")
 		mapData := &Civ5MapData{
 			MapHeader:           mapHeader,

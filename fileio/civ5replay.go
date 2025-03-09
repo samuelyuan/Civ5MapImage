@@ -433,7 +433,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	unknownCount2 := unsafeReadUint32(streamReader)
 	unknownArr = append(unknownArr, int(unknownCount2))
 
-	for i := 0; i < int(unknownCount2) + 1; i++ {
+	for i := 0; i < int(unknownCount2)+1; i++ {
 		value := unsafeReadUint32(streamReader)
 		unknownArr = append(unknownArr, int(value))
 	}
