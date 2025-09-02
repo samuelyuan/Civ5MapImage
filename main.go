@@ -11,10 +11,31 @@ import (
 	"github.com/samuelyuan/Civ5MapImage/graphics"
 )
 
+// FileType represents the type of Civilization 5 file
+type FileType string
+
+const (
+	FileTypeCiv5Map    FileType = ".civ5map"
+	FileTypeCiv5Replay FileType = ".civ5replay"
+	FileTypeCiv5Save   FileType = ".civ5save"
+	FileTypeJSON       FileType = ".json"
+)
+
+// DrawingMode represents the available drawing modes
+type DrawingMode string
+
+const (
+	ModePhysical   DrawingMode = "physical"
+	ModePolitical  DrawingMode = "political"
+	ModeReplay     DrawingMode = "replay"
+	ModeExportJSON DrawingMode = "exportjson"
+)
+
 func exportFileToJson(inputFilename string, outputFilename string) {
 	inputFileExtension := filepath.Ext(inputFilename)
 
-	if strings.ToLower(inputFileExtension) == ".civ5map" {
+	switch strings.ToLower(inputFileExtension) {
+	case string(FileTypeCiv5Map):
 		fmt.Println("Reading civ5map file")
 		mapData, err := fileio.ReadCiv5MapFile(inputFilename)
 		if err != nil {
@@ -23,7 +44,7 @@ func exportFileToJson(inputFilename string, outputFilename string) {
 
 		fmt.Println("Exporting map to", outputFilename)
 		fileio.ExportCiv5MapFile(mapData, outputFilename)
-	} else if strings.ToLower(inputFileExtension) == ".civ5replay" {
+	case string(FileTypeCiv5Replay):
 		fmt.Println("Importing civ5replay data")
 		replayData, err := fileio.ReadCiv5ReplayFile(inputFilename)
 		if err != nil {
@@ -32,56 +53,58 @@ func exportFileToJson(inputFilename string, outputFilename string) {
 
 		fmt.Println("Exporting replay to", outputFilename)
 		fileio.ExportCiv5ReplayFile(replayData, outputFilename)
-	} else if strings.ToLower(inputFileExtension) == ".civ5save" {
+	case string(FileTypeCiv5Save):
 		fmt.Println("Reading civ5save file")
 		saveData, err := fileio.ReadCiv5SaveFile(inputFilename, outputFilename+".decomp")
 		if err != nil {
-			log.Fatal("Failed to read replay data: ", err)
+			log.Fatal("Failed to read save data: ", err)
 		}
 
 		fmt.Println("Exporting save to", outputFilename)
 		fileio.ExportCiv5SaveFile(saveData, outputFilename)
-
-	} else {
+	default:
 		log.Fatal("Unable to export file", inputFilename, "to json")
 	}
 }
 
 func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 	mapFileExtension := filepath.Ext(filename)
-	if strings.ToLower(mapFileExtension) == ".json" {
+
+	switch strings.ToLower(mapFileExtension) {
+	case string(FileTypeJSON):
 		fmt.Println("Importing map file from json")
 		mapData := fileio.ImportCiv5MapFileFromJson(filename)
 		graphics.OverrideColorMap(mapData.CivColorOverrides)
 		return mapData
-	} else if strings.ToLower(mapFileExtension) == ".civ5map" {
+	case string(FileTypeCiv5Map):
 		fmt.Println("Reading map from .civ5map file")
 		mapData, err := fileio.ReadCiv5MapFile(filename)
 		if err != nil {
 			log.Fatal("Failed to read input file: ", err)
 		}
 		return mapData
-	} else {
-		log.Fatal(fmt.Sprintf("Input map file has invalid file extension. Filename: %s, extension: %s", filename, mapFileExtension))
+	default:
+		log.Fatalf("Input map file has invalid file extension. Filename: %s, extension: %s", filename, mapFileExtension)
 	}
 	return nil
 }
 
 func loadReplayDataFromFile(replayFilename string) *fileio.Civ5ReplayData {
 	replayFileExtension := filepath.Ext(replayFilename)
-	if strings.ToLower(replayFileExtension) == ".civ5replay" {
+
+	switch strings.ToLower(replayFileExtension) {
+	case string(FileTypeCiv5Replay):
 		fmt.Println("Reading replay from .civ5replay file")
 		replayData, err := fileio.ReadCiv5ReplayFile(replayFilename)
 		if err != nil {
 			log.Fatal("Failed to read replay data: ", err)
 		}
-
 		return replayData
-	} else if strings.ToLower(replayFileExtension) == ".json" {
+	case string(FileTypeJSON):
 		fmt.Println("Importing replay data from json")
 		replayData := fileio.ImportCiv5ReplayFileFromJson(replayFilename)
 		return replayData
-	} else {
+	default:
 		log.Fatal("Replay file has invalid file extension")
 	}
 	return nil
@@ -102,25 +125,26 @@ func main() {
 	fmt.Println("Output filename: ", outputFilename)
 	fmt.Println("Mode: ", mode)
 
-	if mode == "exportjson" {
+	if mode == string(ModeExportJSON) {
 		exportFileToJson(inputFilename, outputFilename)
 		return
 	}
 
 	mapData := loadMapDataFromFile(inputFilename)
 
-	if mode == "physical" {
+	switch mode {
+	case string(ModePhysical):
 		graphics.SaveImage(outputFilename, graphics.DrawPhysicalMap(mapData))
 		return
-	} else if mode == "political" {
+	case string(ModePolitical):
 		graphics.SaveImage(outputFilename, graphics.DrawPoliticalMap(mapData))
 		return
-	} else if mode == "replay" {
+	case string(ModeReplay):
 		replayFilename := *replayFilePtr
 		replayData := loadReplayDataFromFile(replayFilename)
 		graphics.DrawReplay(mapData, replayData, outputFilename)
 		return
-	} else {
+	default:
 		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [physical, political, replay, exportjson].")
 	}
 }
