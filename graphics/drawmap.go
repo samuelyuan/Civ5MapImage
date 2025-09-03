@@ -11,60 +11,86 @@ import (
 	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
 
-const (
-	radius = 16.0
-)
-
-func drawMountain(dc *gg.Context, imageX float64, imageY float64) {
-	// draw base
-	dc.DrawRegularPolygon(3, imageX, imageY, radius, math.Pi)
-	dc.SetRGB255(89, 90, 86) // gray
-	dc.Fill()
-
-	// draw mountain peak
-	dc.DrawRegularPolygon(3, imageX, imageY+(radius/2), radius/2, math.Pi)
-	dc.SetRGB255(234, 244, 253) // white
-	dc.Fill()
+// DrawingConfig holds configuration for map drawing
+type DrawingConfig struct {
+	Radius float64
 }
 
-func getNewCityColor(cityColor color.RGBA) color.RGBA {
-	return interpolateColor(cityColor, color.RGBA{255, 255, 255, 255}, 0.2)
+// DefaultDrawingConfig returns the default drawing configuration
+func DefaultDrawingConfig() *DrawingConfig {
+	return &DrawingConfig{
+		Radius: 16.0,
+	}
 }
 
-func drawCityIcon(dc *gg.Context, imageX float64, imageY float64, cityColor color.RGBA) {
-	iconColor := getNewCityColor(cityColor)
-	dc.DrawRectangle(imageX-(radius/5), imageY-(radius/5), radius/2, radius/2)
-	dc.SetRGB255(int(iconColor.R), int(iconColor.G), int(iconColor.B))
-	dc.Fill()
+// MapRenderer handles the rendering of Civ5 maps using the abstracted canvas
+type MapRenderer struct {
+	config *DrawingConfig
 }
 
-func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+// NewMapRenderer creates a new map renderer with the given configuration
+func NewMapRenderer(config *DrawingConfig) *MapRenderer {
+	return &MapRenderer{
+		config: config,
+	}
+}
+
+// DrawMountain draws a mountain icon at the specified position
+func (mr *MapRenderer) DrawMountain(canvas Canvas, imageX, imageY float64) {
+	// Draw base
+	canvas.DrawRegularPolygon(3, imageX, imageY, mr.config.Radius, math.Pi)
+	canvas.SetColor(89, 90, 86) // gray
+	canvas.Fill()
+
+	// Draw mountain peak
+	canvas.DrawRegularPolygon(3, imageX, imageY+(mr.config.Radius/2), mr.config.Radius/2, math.Pi)
+	canvas.SetColor(234, 244, 253) // white
+	canvas.Fill()
+}
+
+// GetNewCityColor returns a modified city color for better visibility
+func (mr *MapRenderer) GetNewCityColor(cityColor color.RGBA) color.RGBA {
+	return mr.InterpolateColor(cityColor, color.RGBA{255, 255, 255, 255}, 0.2)
+}
+
+// DrawCityIcon draws a city icon at the specified position
+func (mr *MapRenderer) DrawCityIcon(canvas Canvas, imageX, imageY float64, cityColor color.RGBA) {
+	iconColor := mr.GetNewCityColor(cityColor)
+	canvas.DrawRectangle(imageX-(mr.config.Radius/5), imageY-(mr.config.Radius/5),
+		mr.config.Radius/2, mr.config.Radius/2)
+	canvas.SetColor(iconColor.R, iconColor.G, iconColor.B)
+	canvas.Fill()
+}
+
+// DrawTerrainTiles draws all terrain tiles for the physical map
+func (mr *MapRenderer) DrawTerrainTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(i, j, radius)
+			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
 
-			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
+			canvas.DrawRegularPolygon(6, x, y, mr.config.Radius, math.Pi/2)
 			terrainString := fileio.GetTerrainString(mapData, i, j)
 			tileColor := fileio.GetPhysicalMapTileColor(terrainString)
-			dc.SetRGB255(int(tileColor.R), int(tileColor.G), int(tileColor.B))
-			dc.Fill()
+			canvas.SetColor(tileColor.R, tileColor.G, tileColor.B)
+			canvas.Fill()
 
 			// Draw mountains
 			if fileio.TileHasMountain(mapData, i, j) {
-				drawMountain(dc, x, y)
+				mr.DrawMountain(canvas, x, y)
 			}
 
 			// Draw cities
 			if len(mapData.MapTileImprovements) > 0 {
 				if fileio.TileHasCity(mapData, i, j) {
-					drawCityIcon(dc, x, y, color.RGBA{255, 255, 255, 255})
+					mr.DrawCityIcon(canvas, x, y, color.RGBA{255, 255, 255, 255})
 				}
 			}
 		}
 	}
 }
 
-func interpolateColor(color1 color.RGBA, color2 color.RGBA, t float64) color.RGBA {
+// InterpolateColor blends two colors by the given factor
+func (mr *MapRenderer) InterpolateColor(color1, color2 color.RGBA, t float64) color.RGBA {
 	// t should be between 0.0 and 1.0
 	return color.RGBA{
 		uint8(float64(color1.R) + (float64(color2.R)-float64(color1.R))*t),
@@ -74,19 +100,20 @@ func interpolateColor(color1 color.RGBA, color2 color.RGBA, t float64) color.RGB
 	}
 }
 
-func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+// DrawTerritoryTiles draws territory tiles for the political map
+func (mr *MapRenderer) DrawTerritoryTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(i, j, radius)
+			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
 
-			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
+			canvas.DrawRegularPolygon(6, x, y, mr.config.Radius, math.Pi/2)
 
 			cityColor := color.RGBA{255, 255, 255, 255}
 			if fileio.IsWaterTile(mapData, i, j) {
 				terrainString := fileio.GetTerrainString(mapData, i, j)
 				terrainTileColor := fileio.GetPhysicalMapTileColor(terrainString)
-				dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
-				dc.Fill()
+				canvas.SetColor(terrainTileColor.R, terrainTileColor.G, terrainTileColor.B)
+				canvas.Fill()
 			} else {
 				tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
 
@@ -98,46 +125,47 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 						// Invert city state colors
 						background := renderColor.InnerColor
 						cityColor = renderColor.OuterColor
-						newBackground := interpolateColor(background, white, 0.1)
-						dc.SetRGB255(int(newBackground.R), int(newBackground.G), int(newBackground.B))
+						newBackground := mr.InterpolateColor(background, white, 0.1)
+						canvas.SetColor(newBackground.R, newBackground.G, newBackground.B)
 					} else {
 						background := renderColor.OuterColor
 						cityColor = renderColor.InnerColor
-						newBackground := interpolateColor(background, white, 0.2)
-						dc.SetRGB255(int(newBackground.R), int(newBackground.G), int(newBackground.B))
+						newBackground := mr.InterpolateColor(background, white, 0.2)
+						canvas.SetColor(newBackground.R, newBackground.G, newBackground.B)
 					}
-					dc.Fill()
+					canvas.Fill()
 				} else if tileColor != "" {
 					// No color, but tile is owned by civ or city state
-					dc.SetRGB255(0, 0, 0)
-					dc.Fill()
+					canvas.SetColor(0, 0, 0)
+					canvas.Fill()
 				} else {
 					// Territory not owned by anyone
 					terrainString := fileio.GetTerrainString(mapData, i, j)
 					terrainTileColor := fileio.GetPhysicalMapTileColor(terrainString)
-					dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
-					dc.Fill()
+					canvas.SetColor(terrainTileColor.R, terrainTileColor.G, terrainTileColor.B)
+					canvas.Fill()
 				}
 			}
 
 			// Draw mountains
 			if mapData.MapTiles[i][j].Elevation == 2 {
-				drawMountain(dc, x, y)
+				mr.DrawMountain(canvas, x, y)
 			}
 
 			// Draw cities
 			if fileio.TileHasCity(mapData, i, j) {
-				drawCityIcon(dc, x, y, cityColor)
+				mr.DrawCityIcon(canvas, x, y, cityColor)
 			}
 		}
 	}
 }
 
-func drawRivers(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+// DrawRivers draws rivers on the map
+func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(i, j, radius)
-			dc.SetRGB255(95, 150, 148)
+			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
+			canvas.SetColor(95, 150, 148)
 
 			riverData := mapData.MapTiles[i][j].RiverData
 			isRiverSouthwest := ((riverData >> 2) & 1) != 0
@@ -148,46 +176,47 @@ func drawRivers(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapW
 			if isRiverSouthwest {
 				angleSW1 := (math.Pi / 6) + float64(3)*(math.Pi/3)
 				angleSW2 := (math.Pi / 6) + float64(4)*(math.Pi/3)
-				x1 := x + radius*math.Cos(angleSW1)
-				y1 := y + radius*math.Sin(angleSW1)
-				x2 := x + radius*math.Cos(angleSW2)
-				y2 := y + radius*math.Sin(angleSW2)
-				dc.DrawLine(x1, y1, x2, y2)
-				dc.Stroke()
+				x1 := x + mr.config.Radius*math.Cos(angleSW1)
+				y1 := y + mr.config.Radius*math.Sin(angleSW1)
+				x2 := x + mr.config.Radius*math.Cos(angleSW2)
+				y2 := y + mr.config.Radius*math.Sin(angleSW2)
+				canvas.DrawLine(x1, y1, x2, y2)
+				canvas.Stroke()
 			}
 
 			// Southeast river
 			if isRiverSoutheast {
 				angleSE1 := (math.Pi / 6) + float64(4)*(math.Pi/3)
 				angleSE2 := (math.Pi / 6) + float64(5)*(math.Pi/3)
-				x1 := x + radius*math.Cos(angleSE1)
-				y1 := y + radius*math.Sin(angleSE1)
-				x2 := x + radius*math.Cos(angleSE2)
-				y2 := y + radius*math.Sin(angleSE2)
-				dc.DrawLine(x1, y1, x2, y2)
-				dc.Stroke()
+				x1 := x + mr.config.Radius*math.Cos(angleSE1)
+				y1 := y + mr.config.Radius*math.Sin(angleSE1)
+				x2 := x + mr.config.Radius*math.Cos(angleSE2)
+				y2 := y + mr.config.Radius*math.Sin(angleSE2)
+				canvas.DrawLine(x1, y1, x2, y2)
+				canvas.Stroke()
 			}
 
 			// East river
 			if isRiverEast {
 				angleE1 := (math.Pi / 6) + float64(5)*(math.Pi/3)
 				angleE2 := (math.Pi / 6) + float64(6)*(math.Pi/3)
-				x1 := x + radius*math.Cos(angleE1)
-				y1 := y + radius*math.Sin(angleE1)
-				x2 := x + radius*math.Cos(angleE2)
-				y2 := y + radius*math.Sin(angleE2)
-				dc.DrawLine(x1, y1, x2, y2)
-				dc.Stroke()
+				x1 := x + mr.config.Radius*math.Cos(angleE1)
+				y1 := y + mr.config.Radius*math.Sin(angleE1)
+				x2 := x + mr.config.Radius*math.Cos(angleE2)
+				y2 := y + mr.config.Radius*math.Sin(angleE2)
+				canvas.DrawLine(x1, y1, x2, y2)
+				canvas.Stroke()
 			}
 		}
 	}
 }
 
-func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+// DrawRoads draws roads between tiles
+func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	// Draw roads between tiles
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x1, y1 := fileio.GetImagePosition(i, j, radius)
+			x1, y1 := fileio.GetImagePosition(i, j, mr.config.Radius)
 
 			routeType := mapData.MapTileImprovements[i][j].RouteType
 			if routeType == 255 {
@@ -201,28 +230,28 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 				if newX >= 0 && newY >= 0 && newX < mapWidth && newY < mapHeight {
 					if mapData.MapTileImprovements[newY][newX].RouteType != 255 ||
 						mapData.MapTileImprovements[newY][newX].CityName != "" {
-						x2, y2 := fileio.GetImagePosition(newY, newX, radius)
+						x2, y2 := fileio.GetImagePosition(newY, newX, mr.config.Radius)
 
 						if routeType == 1 {
 							// Railroad
-							dc.SetLineWidth(2.0)
-							dc.SetRGB255(76, 51, 0)
+							canvas.SetLineWidth(2.0)
+							canvas.SetColor(76, 51, 0)
 						} else if routeType == 0 {
 							// Road
-							dc.SetLineWidth(1.0)
-							dc.SetRGB255(51, 51, 51)
+							canvas.SetLineWidth(1.0)
+							canvas.SetColor(51, 51, 51)
 						} else {
 							// Unknown
-							dc.SetLineWidth(1.0)
-							dc.SetRGB255(0, 0, 0)
+							canvas.SetLineWidth(1.0)
+							canvas.SetColor(0, 0, 0)
 						}
 
 						// Draw only up to midpoint, which would be the tile border
 						borderX := (x1 + x2) / 2.0
 						borderY := (y1 + y2) / 2.0
 
-						dc.DrawLine(x1, y1, borderX, borderY)
-						dc.Stroke()
+						canvas.DrawLine(x1, y1, borderX, borderY)
+						canvas.Stroke()
 					}
 				}
 			}
@@ -230,47 +259,44 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 	}
 }
 
-func DrawPhysicalMap(mapData *fileio.Civ5MapData) image.Image {
+// DrawPhysicalMap creates a physical map image using the abstracted canvas
+func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
-	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, radius)
-	dc := gg.NewContext(int(maxImageWidth), int(maxImageHeight))
+	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
+
+	// Set canvas size if it's a DrawingContext
+	if dc, ok := canvas.(*DrawingContext); ok {
+		dc.dc = gg.NewContext(int(maxImageWidth), int(maxImageHeight))
+	}
+
 	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
 
 	// Need to invert image because the map format is inverted
-	dc.InvertY()
+	canvas.InvertY()
 
-	drawTerrainTiles(dc, mapData, mapHeight, mapWidth)
-	drawRivers(dc, mapData, mapHeight, mapWidth)
+	mr.DrawTerrainTiles(canvas, mapData, mapHeight, mapWidth)
+	mr.DrawRivers(canvas, mapData, mapHeight, mapWidth)
 	if len(mapData.MapTileImprovements) > 0 {
-		drawRoads(dc, mapData, mapHeight, mapWidth)
+		mr.DrawRoads(canvas, mapData, mapHeight, mapWidth)
 	}
 
 	// Draw city names on top of hexes
-	dc.InvertY()
+	canvas.InvertY()
 
 	if len(mapData.MapTileImprovements) > 0 {
-		for i := 0; i < mapHeight; i++ {
-			for j := 0; j < mapWidth; j++ {
-				// Invert depth because the map is inverted
-				x, y := fileio.GetImagePosition(mapHeight-i, j, radius)
-
-				tile := mapData.MapTileImprovements[i][j]
-				dc.SetRGB255(255, 255, 255)
-				cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
-				dc.DrawString(cityName, x-(5.0*float64(len(cityName))/2.0), y-radius*1.5)
-			}
-		}
+		mr.DrawCityNames(canvas, mapData, mapHeight, mapWidth)
 	}
 
-	return dc.Image()
+	return canvas.Image()
 }
 
-func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+// DrawBorders draws borders between different territories
+func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x1, y1 := fileio.GetImagePosition(i, j, radius)
+			x1, y1 := fileio.GetImagePosition(i, j, mr.config.Radius)
 			neighbors := fileio.GetNeighbors(j, i)
 			currentTileOwner := mapData.MapTileImprovements[i][j].Owner
 			if fileio.IsInvalidTileOwner(currentTileOwner) {
@@ -297,28 +323,29 @@ func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, map
 					if currentTileOwner != otherTileOwner {
 						angle1 := (math.Pi / 6) + float64(n)*(math.Pi/3)
 						angle2 := (math.Pi / 6) + float64(n+1)*(math.Pi/3)
-						edgeX1 := x1 + (radius-1)*math.Cos(angle1)
-						edgeY1 := y1 + (radius-1)*math.Sin(angle1)
-						edgeX2 := x1 + (radius-1)*math.Cos(angle2)
-						edgeY2 := y1 + (radius-1)*math.Sin(angle2)
+						edgeX1 := x1 + (mr.config.Radius-1)*math.Cos(angle1)
+						edgeY1 := y1 + (mr.config.Radius-1)*math.Sin(angle1)
+						edgeX2 := x1 + (mr.config.Radius-1)*math.Cos(angle2)
+						edgeY2 := y1 + (mr.config.Radius-1)*math.Sin(angle2)
 
-						dc.SetRGB255(int(borderColor.R), int(borderColor.G), int(borderColor.B))
-						dc.SetLineWidth(1.5)
-						dc.DrawLine(edgeX1, edgeY1, edgeX2, edgeY2)
-						dc.Stroke()
+						canvas.SetColor(borderColor.R, borderColor.G, borderColor.B)
+						canvas.SetLineWidth(1.5)
+						canvas.DrawLine(edgeX1, edgeY1, edgeX2, edgeY2)
+						canvas.Stroke()
 					}
 				}
 			}
 		}
 	}
-	dc.SetLineWidth(1.0)
+	canvas.SetLineWidth(1.0)
 }
 
-func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
+// DrawCityNames draws city names on the map
+func (mr *MapRenderer) DrawCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			// Invert depth because the map is inverted
-			x, y := fileio.GetImagePosition(mapHeight-i, j, radius)
+			x, y := fileio.GetImagePosition(mapHeight-i, j, mr.config.Radius)
 
 			tile := mapData.MapTileImprovements[i][j]
 			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
@@ -330,42 +357,48 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 				} else {
 					cityColor = renderColor.InnerColor
 				}
-				textColor := getNewCityColor(cityColor)
-				dc.SetRGB255(int(textColor.R), int(textColor.G), int(cityColor.B))
+				textColor := mr.GetNewCityColor(cityColor)
+				canvas.SetColor(textColor.R, textColor.G, cityColor.B)
 			} else {
-				dc.SetRGB255(255, 255, 255)
+				canvas.SetColor(255, 255, 255)
 			}
 
 			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
-			dc.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-radius*1.5)
+			canvas.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-mr.config.Radius*1.5)
 		}
 	}
 }
 
-func DrawPoliticalMap(mapData *fileio.Civ5MapData) image.Image {
+// DrawPoliticalMap creates a political map image using the abstracted canvas
+func (mr *MapRenderer) DrawPoliticalMap(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
-	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, radius)
-	dc := gg.NewContext(int(maxImageWidth), int(maxImageHeight))
+	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
+
+	// Set canvas size if it's a DrawingContext
+	if dc, ok := canvas.(*DrawingContext); ok {
+		dc.dc = gg.NewContext(int(maxImageWidth), int(maxImageHeight))
+	}
+
 	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
 
 	// Need to invert image because the map format is inverted
-	dc.InvertY()
+	canvas.InvertY()
 
-	drawTerritoryTiles(dc, mapData, mapHeight, mapWidth)
-	drawBorders(dc, mapData, mapHeight, mapWidth)
-	drawRivers(dc, mapData, mapHeight, mapWidth)
-	drawRoads(dc, mapData, mapHeight, mapWidth)
+	mr.DrawTerritoryTiles(canvas, mapData, mapHeight, mapWidth)
+	mr.DrawBorders(canvas, mapData, mapHeight, mapWidth)
+	mr.DrawRivers(canvas, mapData, mapHeight, mapWidth)
+	mr.DrawRoads(canvas, mapData, mapHeight, mapWidth)
 
-	dc.InvertY()
+	canvas.InvertY()
 	// Draw city names on top of hexes
-	drawCityNames(dc, mapData, mapHeight, mapWidth)
+	mr.DrawCityNames(canvas, mapData, mapHeight, mapWidth)
 
-	return dc.Image()
+	return canvas.Image()
 }
 
-func SaveImage(outputFilename string, im image.Image) {
-	gg.SavePNG(outputFilename, im)
-	fmt.Println("Saved image to", outputFilename)
+// SaveImage saves the image to a file
+func (mr *MapRenderer) SaveImage(canvas Canvas, outputFilename string) error {
+	return canvas.SavePNG(outputFilename)
 }

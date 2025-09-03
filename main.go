@@ -70,10 +70,18 @@ func main() {
 
 	switch mode {
 	case string(ModePhysical):
-		graphics.SaveImage(outputFilename, graphics.DrawPhysicalMap(mapData))
+		config := graphics.DefaultDrawingConfig()
+		renderer := graphics.NewMapRenderer(config)
+		canvas := graphics.NewDrawingContext(800, 600)
+		renderer.DrawPhysicalMap(canvas, mapData)
+		renderer.SaveImage(canvas, outputFilename)
 		return
 	case string(ModePolitical):
-		graphics.SaveImage(outputFilename, graphics.DrawPoliticalMap(mapData))
+		config := graphics.DefaultDrawingConfig()
+		renderer := graphics.NewMapRenderer(config)
+		canvas := graphics.NewDrawingContext(800, 600)
+		renderer.DrawPoliticalMap(canvas, mapData)
+		renderer.SaveImage(canvas, outputFilename)
 		return
 	case string(ModeReplay):
 		replayFilename := *replayFilePtr

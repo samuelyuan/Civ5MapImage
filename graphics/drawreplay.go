@@ -17,24 +17,9 @@ const (
 	GIF_DELAY = 100
 )
 
-func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, outputFilename string) {
-	outGif := &gif.GIF{}
-
-	replayTurns := fileio.GroupEventsByTurn(replayData.AllReplayEvents)
-	turnNumbers := make([]int, 0)
-	for turn := range replayTurns {
-		turnNumbers = append(turnNumbers, turn)
-	}
-	sort.Ints(turnNumbers)
-
-	// set civ color and civ index map before loading replay turns
-	fmt.Println("Player Civ:", replayData.PlayerCiv)
-	for i := 0; i < len(replayData.AllCivs); i++ {
-		fmt.Println("Index", i, ", civ data:", replayData.AllCivs[i])
-		mapData.CityOwnerIndexMap[i] = i
-	}
-
-	if len(mapData.Civ5PlayerData) == 0 || replayData.IsReplayFile == false {
+// Helper function to setup civ player data from replay
+func setupCivPlayerData(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData) {
+	if len(mapData.Civ5PlayerData) == 0 || !replayData.IsReplayFile {
 		fmt.Println("Rebuilding civ player data from replay file...")
 		mapData.Civ5PlayerData = make([]*fileio.Civ5PlayerData, 0)
 		for i := 0; i < len(replayData.AllCivs); i++ {
@@ -56,8 +41,8 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 			}
 		}
 	} else {
+		// Swap player civilization to index 0
 		indexPlayerCivilization := -1
-
 		for i := 0; i < len(mapData.Civ5PlayerData); i++ {
 			if mapData.Civ5PlayerData[i].CivType == replayData.PlayerCiv {
 				indexPlayerCivilization = i
@@ -65,8 +50,6 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 			}
 		}
 
-		// The replay file sets the player's civId to 0, but the original civId is usually a different value
-		// Swap values to ensure the correct color is assigned
 		fmt.Println("Player civilization index:", indexPlayerCivilization)
 		if indexPlayerCivilization != -1 {
 			temp := mapData.Civ5PlayerData[0]
@@ -74,19 +57,44 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 			mapData.Civ5PlayerData[indexPlayerCivilization] = temp
 		}
 	}
+}
+
+func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, outputFilename string) {
+	outGif := &gif.GIF{}
+
+	replayTurns := fileio.GroupEventsByTurn(replayData.AllReplayEvents)
+	turnNumbers := make([]int, 0)
+	for turn := range replayTurns {
+		turnNumbers = append(turnNumbers, turn)
+	}
+	sort.Ints(turnNumbers)
+
+	// Setup civ data and player mapping
+	fmt.Println("Player Civ:", replayData.PlayerCiv)
+	for i := 0; i < len(replayData.AllCivs); i++ {
+		fmt.Println("Index", i, ", civ data:", replayData.AllCivs[i])
+		mapData.CityOwnerIndexMap[i] = i
+	}
+	setupCivPlayerData(mapData, replayData)
 
 	maxCityId := 0
 
 	var mapPalette color.Palette
 	mapPalette = nil
 
+	// Initialize canvas and renderer once outside the loop
+	config := DefaultDrawingConfig()
+	renderer := NewMapRenderer(config)
+	canvas := NewDrawingContext(800, 600) // Will be resized by renderer
+
 	for _, turn := range turnNumbers {
-		fmt.Println(fmt.Sprintf("Drawing frame for turn %d...", turn))
+		fmt.Printf("Drawing frame for turn %d...\n", turn)
 
 		for i, event := range replayTurns[turn] {
 			fmt.Println("Replay event", i, ":", event)
 
-			if event.TypeId == 1 {
+			switch event.TypeId {
+			case 1:
 				// City founded
 				// Set city id
 				for _, tile := range event.Tiles {
@@ -94,18 +102,18 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 					mapData.MapTileImprovements[tile.Y][tile.X].CityName = event.Text[0 : len(event.Text)-len(" is founded.")]
 					maxCityId += 1
 				}
-			} else if event.TypeId == 2 {
+			case 2:
 				// Tiles claimed
 				// Change owner to new civ id
 				for _, tile := range event.Tiles {
 					mapData.MapTileImprovements[tile.Y][tile.X].Owner = event.CivId
 				}
-			} else if event.TypeId == 3 {
+			case 3:
 				// City transferred to another civ
 				for _, tile := range event.Tiles {
 					mapData.MapTileImprovements[tile.Y][tile.X].Owner = event.CivId
 				}
-			} else if event.TypeId == 4 {
+			case 4:
 				// Tiles razed
 				for _, tile := range event.Tiles {
 					// Remove city from map
@@ -119,7 +127,9 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 		}
 
 		fmt.Println("Drawing map for turn", turn)
-		mapImage := DrawPoliticalMap(mapData)
+
+		// Use the pre-initialized canvas and renderer
+		mapImage := renderer.DrawPoliticalMap(canvas, mapData)
 		bounds := mapImage.Bounds()
 
 		palettedImage := image.NewPaletted(bounds, nil)
