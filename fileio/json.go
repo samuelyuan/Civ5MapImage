@@ -3,7 +3,7 @@ package fileio
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 )
 
@@ -32,7 +32,7 @@ func ImportCiv5MapFileFromJson(inputFilename string) (*Civ5MapData, error) {
 	}
 	defer jsonFile.Close()
 
-	jsonContents, err := ioutil.ReadAll(jsonFile)
+	jsonContents, err := io.ReadAll(jsonFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read json file %q: %w", inputFilename, err)
 	}
@@ -61,7 +61,7 @@ func ExportCiv5MapFile(mapData *Civ5MapData, outputFilename string) error {
 		return fmt.Errorf("failed to marshal map data: %w", err)
 	}
 
-	err = ioutil.WriteFile(outputFilename, file, 0644)
+	err = os.WriteFile(outputFilename, file, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write to %q: %w", outputFilename, err)
 	}
@@ -76,7 +76,7 @@ func ImportCiv5ReplayFileFromJson(inputFilename string) (*Civ5ReplayData, error)
 	}
 	defer jsonFile.Close()
 
-	jsonContents, err := ioutil.ReadAll(jsonFile)
+	jsonContents, err := io.ReadAll(jsonFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read json file %q: %w", inputFilename, err)
 	}
@@ -105,7 +105,7 @@ func ExportCiv5ReplayFile(replayData *Civ5ReplayData, outputFilename string) err
 		return fmt.Errorf("failed to marshal replay data: %w", err)
 	}
 
-	err = ioutil.WriteFile(outputFilename, file, 0644)
+	err = os.WriteFile(outputFilename, file, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write to %q: %w", outputFilename, err)
 	}
@@ -125,7 +125,7 @@ func ExportCiv5SaveFile(saveData *Civ5SaveData, outputFilename string) error {
 		return fmt.Errorf("failed to marshal save data: %w", err)
 	}
 
-	err = ioutil.WriteFile(outputFilename, file, 0644)
+	err = os.WriteFile(outputFilename, file, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write to %q: %w", outputFilename, err)
 	}

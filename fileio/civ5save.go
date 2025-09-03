@@ -5,7 +5,6 @@ import (
 	"compress/zlib"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -369,7 +368,7 @@ func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, ou
 		}
 
 		fmt.Println("Decompressed contents size:", len(decompressedContents))
-		err = ioutil.WriteFile(outputFilename, decompressedContents, 0644)
+		err = os.WriteFile(outputFilename, decompressedContents, 0644)
 		if err != nil {
 			return nil, 0, fmt.Errorf("error writing to %q: %w", outputFilename, err)
 		}
@@ -1173,7 +1172,7 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int) []Civ5Re
 	})
 
 	allReplayEvents := readEvents(streamReader)
-	fmt.Println(fmt.Sprintf("Read %d replay events", len(allReplayEvents)))
+	fmt.Printf("Read %d replay events\n", len(allReplayEvents))
 
 	return allReplayEvents
 }

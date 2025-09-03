@@ -4,7 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"image/color"
-	"io/ioutil"
+	"io"
 	"math"
 	"os"
 
@@ -66,13 +66,13 @@ func dumpColors(filename string) {
 	}
 	defer xmlFile.Close()
 
-	byteValue, _ := ioutil.ReadAll(xmlFile)
+	byteValue, _ := io.ReadAll(xmlFile)
 
 	var colorXmlFile ColorXMLFile
 	xml.Unmarshal(byteValue, &colorXmlFile)
 	for _, row := range colorXmlFile.Colors.Rows {
-		fmt.Println(fmt.Sprintf("colorMap[\"%v\"] = color.RGBA{%v, %v, %v, %v}", row.Type,
-			math.Round(row.Red*255), math.Round(row.Green*255), math.Round(row.Blue*255), math.Round(row.Alpha*255)))
+		fmt.Printf("colorMap[\"%v\"] = color.RGBA{%v, %v, %v, %v}\n", row.Type,
+			math.Round(row.Red*255), math.Round(row.Green*255), math.Round(row.Blue*255), math.Round(row.Alpha*255))
 	}
 }
 
@@ -83,15 +83,15 @@ func dumpCivColors(filename string) {
 	}
 	defer xmlFile.Close()
 
-	byteValue, _ := ioutil.ReadAll(xmlFile)
+	byteValue, _ := io.ReadAll(xmlFile)
 
 	var colorXmlFile PlayerColorXMLFile
 	xml.Unmarshal(byteValue, &colorXmlFile)
 	for _, row := range colorXmlFile.PlayerColors.PlayerColorRows {
-		fmt.Println(fmt.Sprintf("civColorMap[\"%v\"] = CivColor{", row.Type))
-		fmt.Println(fmt.Sprintf("OuterColor: colorMap[\"%v\"],", row.SecondaryColor))
-		fmt.Println(fmt.Sprintf("InnerColor: colorMap[\"%v\"],", row.PrimaryColor))
-		fmt.Println(fmt.Sprintf("TextColor: colorMap[\"%v\"],", row.TextColor))
+		fmt.Printf("civColorMap[\"%v\"] = CivColor{\n", row.Type)
+		fmt.Printf("OuterColor: colorMap[\"%v\"],\n", row.SecondaryColor)
+		fmt.Printf("InnerColor: colorMap[\"%v\"],\n", row.PrimaryColor)
+		fmt.Printf("TextColor: colorMap[\"%v\"],\n", row.TextColor)
 		fmt.Println("}")
 	}
 }
