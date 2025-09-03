@@ -816,13 +816,14 @@ func convertFractionToRGBA(fractionRed float64, fractionGreen float64, fractionB
 }
 
 func convertCivColorInfoToRGBA(civColorInfo fileio.CivColorInfo) color.RGBA {
-	if civColorInfo.Model == "constant" {
+	switch civColorInfo.Model {
+	case "constant":
 		return colorMap[civColorInfo.ColorConstant]
-	} else if civColorInfo.Model == "fraction" {
+	case "fraction":
 		return convertFractionToRGBA(civColorInfo.Red, civColorInfo.Green, civColorInfo.Blue)
-	} else if civColorInfo.Model == "rgb255" {
+	case "rgb255":
 		return color.RGBA{uint8(civColorInfo.Red), uint8(civColorInfo.Green), uint8(civColorInfo.Blue), 255}
-	} else {
+	default:
 		return color.RGBA{0, 0, 0, 255}
 	}
 }

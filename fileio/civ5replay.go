@@ -4,10 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"strconv"
-	"strings"
 )
 
 type Civ5ReplayFileConfigEntry struct {
@@ -55,105 +52,6 @@ type Civ5ReplayData struct {
 	DatasetValues   []Civ5ReplayCivDataset
 }
 
-func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFileConfigEntry) []string {
-	pos, err := reader.Seek(0, io.SeekCurrent)
-	if err != nil {
-		panic(err)
-	}
-
-	fieldValues := make([]string, 0)
-
-	for i := 0; i < len(fileConfigEntries); i++ {
-		fileConfigEntry := fileConfigEntries[i]
-		if fileConfigEntry.VariableType == "varstring" {
-			value := readVarString(reader, "varstring_"+fileConfigEntry.VariableName)
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(str):%v", fileConfigEntry.VariableName, value))
-		} else if fileConfigEntry.VariableType == "float32" {
-			value := float32(0)
-			if err := binary.Read(reader, binary.LittleEndian, &value); err != nil {
-				log.Fatal("Failed to load float32: ", err)
-			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(f32):%f", fileConfigEntry.VariableName, value))
-		} else if fileConfigEntry.VariableType == "uint32" {
-			value := unsafeReadUint32(reader)
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(u32):%d", fileConfigEntry.VariableName, value))
-		} else if fileConfigEntry.VariableType == "int32" {
-			signedIntValue := int32(0)
-			if err := binary.Read(reader, binary.LittleEndian, &signedIntValue); err != nil {
-				log.Fatal("Failed to load int32: ", err)
-			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(i32):%d", fileConfigEntry.VariableName, signedIntValue))
-		} else if fileConfigEntry.VariableType == "uint16" {
-			value := unsafeReadUint16(reader)
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(u16):%d", fileConfigEntry.VariableName, value))
-		} else if fileConfigEntry.VariableType == "uint8" {
-			unsignedIntValue := uint8(0)
-			if err := binary.Read(reader, binary.LittleEndian, &unsignedIntValue); err != nil {
-				log.Fatal("Failed to load uint8: ", err)
-			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(u8):%d", fileConfigEntry.VariableName, unsignedIntValue))
-		} else if strings.Contains(fileConfigEntry.VariableType, "bytearray") {
-			byteArrayLength, err := strconv.Atoi(fileConfigEntry.VariableType[len("bytearray:"):])
-			if err != nil {
-				log.Fatal("Invalid byte array type in file config:", err)
-			}
-
-			byteBlock := make([]byte, byteArrayLength)
-			if err := binary.Read(reader, binary.LittleEndian, &byteBlock); err != nil {
-				log.Fatal("Invalid byte array data", err)
-			}
-
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(bytearray):%v", fileConfigEntry.VariableName, byteBlock))
-		} else {
-			fmt.Println("Unknown variable type:", fileConfigEntry.VariableType)
-		}
-	}
-
-	fmt.Print(fmt.Sprintf("File Pos: 0x%X, ", pos))
-	fmt.Println("Field values:", fieldValues)
-	return fieldValues
-}
-
-func readVarString(reader *io.SectionReader, varName string) string {
-	variableLength := uint32(0)
-	if err := binary.Read(reader, binary.LittleEndian, &variableLength); err != nil {
-		log.Fatal("Failed to load variable length: ", err)
-	}
-
-	stringValue := make([]byte, variableLength)
-	if err := binary.Read(reader, binary.LittleEndian, &stringValue); err != nil {
-		log.Fatal(fmt.Sprintf("Failed to load string value. Variable length: %v, name: %s. Error:", variableLength, varName), err)
-	}
-
-	return string(stringValue[:])
-}
-
-func readArray(reader *io.SectionReader, arrayName string, fileConfigEntries []Civ5ReplayFileConfigEntry) {
-	arrayLength := unsafeReadUint32(reader)
-	if arrayLength > 100000 {
-		log.Fatal("Array length may be too long:", arrayLength)
-	}
-	for i := 0; i < int(arrayLength); i++ {
-		readFileConfig(reader, fileConfigEntries)
-	}
-}
-
-func unsafeReadUint32(reader *io.SectionReader) uint32 {
-	unsignedIntValue := uint32(0)
-	if err := binary.Read(reader, binary.LittleEndian, &unsignedIntValue); err != nil {
-		log.Fatal("Failed to load uint32: ", err)
-	}
-	return unsignedIntValue
-}
-
-func unsafeReadUint16(reader *io.SectionReader) uint16 {
-	unsignedIntValue := uint16(0)
-	if err := binary.Read(reader, binary.LittleEndian, &unsignedIntValue); err != nil {
-		log.Fatal("Failed to load uint16: ", err)
-	}
-	return unsignedIntValue
-}
-
 func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
 	civsLength := unsafeReadUint32(reader)
 	allCivs := make([]Civ5ReplayCiv, 0)
@@ -163,10 +61,22 @@ func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
 		unknownVariable2 := unsafeReadUint32(reader)
 		unknownVariable3 := unsafeReadUint32(reader)
 		unknownVariable4 := unsafeReadUint32(reader)
-		leader := readVarString(reader, "leader")
-		longName := readVarString(reader, "longName")
-		name := readVarString(reader, "name")
-		demonym := readVarString(reader, "demonym")
+		leader, err := readVarString(reader, "leader")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read leader: %v", err))
+		}
+		longName, err := readVarString(reader, "longName")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read longName: %v", err))
+		}
+		name, err := readVarString(reader, "name")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read name: %v", err))
+		}
+		demonym, err := readVarString(reader, "demonym")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read demonym: %v", err))
+		}
 
 		civData := Civ5ReplayCiv{
 			UnknownVariables: [4]int{int(unknownVariable1), int(unknownVariable2), int(unknownVariable3), int(unknownVariable4)},
@@ -202,7 +112,10 @@ func readEvents(reader *io.SectionReader) []Civ5ReplayEvent {
 		}
 
 		civId := int32(unsafeReadUint32(reader))
-		eventText := readVarString(reader, "eventText")
+		eventText, err := readVarString(reader, "eventText")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read eventText: %v", err))
+		}
 
 		allReplayEvents[i] = Civ5ReplayEvent{
 			Turn:   int(turn),
@@ -234,7 +147,11 @@ func readDatasetNames(streamReader *io.SectionReader) []string {
 	datasetLength := unsafeReadUint32(streamReader)
 	datasetNames := make([]string, int(datasetLength))
 	for i := 0; i < int(datasetLength); i++ {
-		datasetNames[i] = readVarString(streamReader, "datasetNames")
+		name, err := readVarString(streamReader, "datasetNames")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read dataset name %d: %v", i, err))
+		}
+		datasetNames[i] = name
 	}
 	return datasetNames
 }
@@ -288,22 +205,20 @@ func buildCivDatasetValues(streamReader *io.SectionReader, datasetNames []string
 
 func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	inputFile, err := os.Open(filename)
-	defer inputFile.Close()
 	if err != nil {
-		log.Fatal("Failed to load replay file: ", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to load replay file %q: %w", filename, err)
 	}
+	defer inputFile.Close()
 
 	fi, err := inputFile.Stat()
 	if err != nil {
-		log.Fatal(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get file info for %q: %w", filename, err)
 	}
 	fileLength := fi.Size()
 	streamReader := io.NewSectionReader(inputFile, int64(0), fileLength)
 	fmt.Println("Loading Civ5Replay...")
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "bytearray:4",
 			VariableName: "gameName",
@@ -329,10 +244,16 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 			VariableName: "unknownBlock2",
 		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read initial file config: %w", err)
+	}
 
-	playerCiv := readVarString(streamReader, "playerCiv")
+	playerCiv, err := readVarString(streamReader, "playerCiv")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read player civ: %w", err)
+	}
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
 			VariableName: "difficulty",
@@ -389,7 +310,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 	})
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "varstring",
 			VariableName: "civName",
@@ -442,10 +363,10 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	// Read one byte of padding
 	unknownBlock2 := [1]byte{}
 	if err := binary.Read(streamReader, binary.LittleEndian, &unknownBlock2); err != nil {
-		log.Fatal("Failed to read block: ", err)
+		return nil, fmt.Errorf("failed to read padding block: %w", err)
 	}
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "uint32",
 			VariableName: "startTurn",
@@ -482,7 +403,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 
 	allReplayEvents := readEvents(streamReader)
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "uint32",
 			VariableName: "mapWidth",

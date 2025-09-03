@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 )
@@ -354,10 +353,10 @@ func readGameOptions(streamReader *io.SectionReader) {
 	})
 }
 
-func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, outputFilename string) (*bytes.Reader, int) {
+func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, outputFilename string) (*bytes.Reader, int, error) {
 	decompressedFileReader, err := zlib.NewReader(compressedStreamReader)
 	if err != nil {
-		log.Fatal("Failed to create zlib new reader:", err)
+		return nil, 0, fmt.Errorf("failed to create zlib new reader: %w", err)
 	}
 	defer decompressedFileReader.Close()
 
@@ -372,11 +371,11 @@ func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, ou
 		fmt.Println("Decompressed contents size:", len(decompressedContents))
 		err = ioutil.WriteFile(outputFilename, decompressedContents, 0644)
 		if err != nil {
-			log.Fatal("Error writing to "+outputFilename, err)
+			return nil, 0, fmt.Errorf("error writing to %q: %w", outputFilename, err)
 		}
 	}
 
-	return bytes.NewReader(decompressedContents), len(decompressedContents)
+	return bytes.NewReader(decompressedContents), len(decompressedContents), nil
 }
 
 func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, error) {
@@ -385,8 +384,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 
 	fi, err := inputFile.Stat()
 	if err != nil {
-		log.Fatal(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get file info for %q: %w", filename, err)
 	}
 	saveFileLength := fi.Size()
 	streamReader := io.NewSectionReader(inputFile, int64(0), saveFileLength)
@@ -419,7 +417,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
-	playerCiv := readVarString(streamReader, "playerCiv")
+	playerCiv, err := readVarString(streamReader, "playerCiv")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read player civ: %w", err)
+	}
 	fmt.Println("Player civ:", playerCiv)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
@@ -554,7 +555,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	fmt.Println("CivNamesLength:", civNamesLength)
 	civNameArr := make([]string, civNamesLength)
 	for i := 0; i < int(civNamesLength); i++ {
-		civName := readVarString(streamReader, "civName")
+		civName, err := readVarString(streamReader, "civName")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read civ name: %v", err))
+		}
 		civNameArr[i] = civName
 	}
 	fmt.Println("CivNames:", civNameArr)
@@ -688,7 +692,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		},
 	})
 
-	gameName := readVarString(streamReader, "gameName")
+	gameName, err := readVarString(streamReader, "gameName")
+	if err != nil {
+		panic(fmt.Sprintf("failed to read game name: %v", err))
+	}
 	fmt.Println("Game name:", gameName)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
@@ -786,7 +793,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	minorCivNamesLength := unsafeReadUint32(streamReader)
 	minorCivNameArr := make([]string, minorCivNamesLength)
 	for i := 0; i < int(minorCivNamesLength); i++ {
-		minorCivName := readVarString(streamReader, "minorCivName")
+		minorCivName, err := readVarString(streamReader, "minorCivName")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read minor civ name: %v", err))
+		}
 		minorCivNameArr[i] = minorCivName
 
 		if strings.Contains(minorCivNameArr[i], "MINOR_CIV") {
@@ -833,7 +843,10 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	playerColorLength := unsafeReadUint32(streamReader)
 	playerColorArr := make([]string, playerColorLength)
 	for i := 0; i < int(playerColorLength); i++ {
-		playerColorName := readVarString(streamReader, "playerColorName")
+		playerColorName, err := readVarString(streamReader, "playerColorName")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read player color name: %v", err))
+		}
 		playerColorArr[i] = playerColorName
 
 		allCivs[i].LongName = playerColorName
@@ -952,12 +965,15 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	// Header of compressed block should begin with 0x789C
 	offsetToCompressedBlock, err := streamReader.Seek(0, io.SeekCurrent)
 	if err != nil {
-		log.Fatal("Failed to call fseek", err)
+		return nil, fmt.Errorf("failed to get current position: %w", err)
 	}
 	fmt.Println("Offset to compressed data:", offsetToCompressedBlock)
 	compressedStreamReader := io.NewSectionReader(inputFile, int64(offsetToCompressedBlock), saveFileLength-int64(offsetToCompressedBlock))
 
-	decompressedStreamReader, decompressedContentsSize := buildReaderForDecompressedFile(compressedStreamReader, outputFilename)
+	decompressedStreamReader, decompressedContentsSize, err := buildReaderForDecompressedFile(compressedStreamReader, outputFilename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress file: %w", err)
+	}
 	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize)
 
 	civ5SaveData := &Civ5SaveData{

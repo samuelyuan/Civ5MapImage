@@ -5,12 +5,39 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+)
+
+// Constants for Civ5 map file processing
+const (
+	// City state offset (city states start at index 32)
+	CityStateOffset = 32
+
+	// Version-specific data sizes
+	BuildingDataSizeV11 = 32
+	BuildingDataSizeV12 = 64
+
+	// String buffer sizes
+	PlayerNameSize   = 64
+	LeaderNameSize   = 64
+	CivNameSize      = 64
+	CivTypeSize      = 64
+	TeamColorSize    = 64
+	EraSize          = 64
+	HandicapSize     = 64
+	PromotionSizeV11 = 32
+	PromotionSizeV12 = 64
+
+	// Flag bit positions
+	IsPuppetStateFlag = 1
+	IsOccupiedFlag    = 2
+
+	// Special values
+	InvalidCityId = -1
 )
 
 type Civ5MapHeader struct {
@@ -81,7 +108,7 @@ type Civ5UnitHeaderV11 struct {
 	Owner           uint8
 	FacingDirection uint8
 	Status          uint8
-	Promotion       [32]byte
+	Promotion       [PromotionSizeV11]byte
 }
 
 type Civ5UnitHeaderV12 struct {
@@ -94,7 +121,7 @@ type Civ5UnitHeaderV12 struct {
 	FacingDirection uint8
 	Status          uint8
 	Unknown2        byte
-	Promotion       [64]byte
+	Promotion       [PromotionSizeV12]byte
 }
 
 type Civ5UnitData struct {
@@ -109,7 +136,7 @@ type Civ5UnitData struct {
 }
 
 type Civ5CityHeader struct {
-	Name       [64]byte
+	Name       [PlayerNameSize]byte
 	Owner      uint8
 	Flags      uint8
 	Population uint16
@@ -139,12 +166,12 @@ type Civ5MapTileHeader struct {
 
 type Civ5PlayerHeader struct {
 	Policies       [32]byte
-	LeaderName     [64]byte
-	CivName        [64]byte
-	CivType        [64]byte
-	TeamColor      [64]byte
-	Era            [64]byte
-	Handicap       [64]byte
+	LeaderName     [LeaderNameSize]byte
+	CivName        [CivNameSize]byte
+	CivType        [CivTypeSize]byte
+	TeamColor      [TeamColorSize]byte
+	Era            [EraSize]byte
+	Handicap       [HandicapSize]byte
 	Culture        uint32
 	Gold           uint32
 	StartPositionX uint32
@@ -310,23 +337,23 @@ func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData
 		}
 
 		owner := cityData.Owner
-		isCityState := owner >= 32
+		isCityState := owner >= CityStateOffset
 		ownerAdjusted := owner
 		if isCityState {
-			ownerAdjusted = owner - 32
+			ownerAdjusted = owner - CityStateOffset
 		}
 
 		flags := cityData.Flags
 		isNameLocalized := flags&1 != 0
-		isPuppetState := (flags>>1)&1 != 0
-		isOccupied := (flags>>2)&1 != 0
+		isPuppetState := (flags>>IsPuppetStateFlag)&1 != 0
+		isOccupied := (flags>>IsOccupiedFlag)&1 != 0
 
-		// 32 for v11, 64 for v12
+		// Version-specific building data size
 		buildingDataSize := 0
 		if version == 12 {
-			buildingDataSize = 64
+			buildingDataSize = BuildingDataSizeV12
 		} else {
-			buildingDataSize = 32
+			buildingDataSize = BuildingDataSizeV11
 		}
 
 		buildingInfo := make([]byte, buildingDataSize)
@@ -392,7 +419,7 @@ func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5M
 
 			newCityId := int(tileInfo.CityId)
 			if tileInfo.CityId == 65535 {
-				newCityId = -1
+				newCityId = InvalidCityId
 			}
 
 			mapTiles[i][j] = &Civ5MapTileImprovement{
@@ -414,16 +441,106 @@ func printList(list []string) {
 	fmt.Printf("[%s]\n", strings.Join(list, ", "))
 }
 
+// Helper function to read string lists from binary data
+func readStringList(reader *io.SectionReader, size uint32, listName string) ([]string, error) {
+	dataBytes := make([]byte, size)
+	if err := binary.Read(reader, binary.LittleEndian, &dataBytes); err != nil {
+		return nil, fmt.Errorf("failed to read %s data: %w", listName, err)
+	}
+	stringList := byteArrayToStringArray(dataBytes)
+	fmt.Printf("%s:\n", listName)
+	printList(stringList)
+	return stringList, nil
+}
+
+// Helper function to process city names and apply localization
+func processCityNames(mapTileImprovements [][]*Civ5MapTileImprovement, cityData []*Civ5CityData, height, width uint32) {
+	for i := 0; i < int(height); i++ {
+		for j := 0; j < int(width); j++ {
+			cityId := mapTileImprovements[i][j].CityId
+			if cityId != InvalidCityId && cityId < len(cityData) {
+				if cityData[cityId].IsNameLocalized {
+					localizedName := cityData[cityId].Name
+					if strings.Contains(localizedName, "CITY_NAME_") {
+						localizedName = localizedName[strings.Index(localizedName, "CITY_NAME_")+len("CITY_NAME_"):]
+					}
+					if strings.Contains(localizedName, "CITYSTATE_") {
+						localizedName = localizedName[strings.Index(localizedName, "CITYSTATE_")+len("CITYSTATE_"):]
+					}
+					localizedName = strings.Replace(localizedName, "_", " ", -1)
+					// If city name has multiple words, set each word's first letter to uppercase
+					localizedName = cases.Title(language.Und).String(localizedName)
+					mapTileImprovements[i][j].CityName = localizedName
+				} else {
+					mapTileImprovements[i][j].CityName = cityData[cityId].Name
+				}
+				fmt.Printf("Set city %v at (%v, %v)\n", mapTileImprovements[i][j].CityName, j, i)
+			}
+		}
+	}
+}
+
+// Helper function to build city owner maps
+func buildCityOwnerMaps(cityData []*Civ5CityData, playerCount, cityStateCount uint8) (map[int][]string, map[int]int) {
+	cityOwnerMap := make(map[int][]string)
+	cityOwnerIndexMap := make(map[int]int)
+
+	// Initialize player maps
+	for i := 0; i < int(playerCount); i++ {
+		cityOwnerMap[i] = make([]string, 0)
+		cityOwnerIndexMap[i] = i
+	}
+
+	// Initialize city state maps
+	for i := 0; i < int(cityStateCount); i++ {
+		cityOwnerMap[i+CityStateOffset] = make([]string, 0)
+		cityOwnerIndexMap[i+CityStateOffset] = int(playerCount) + i
+	}
+
+	// Populate with actual city data
+	for i := 0; i < len(cityData); i++ {
+		owner := cityData[i].Owner
+		if _, ok := cityOwnerMap[owner]; !ok {
+			cityOwnerMap[owner] = make([]string, 0)
+		}
+		cityOwnerMap[owner] = append(cityOwnerMap[owner], cityData[i].Name)
+	}
+
+	fmt.Println("City owner map:", cityOwnerMap)
+	fmt.Println("City owner index map:", cityOwnerIndexMap)
+	return cityOwnerMap, cityOwnerIndexMap
+}
+
+// Helper function to build the final map data structure
+func buildMapData(header *Civ5MapHeader, terrainList, featureTerrainList, resourceList []string,
+	mapTiles [][]*Civ5MapTilePhysical, improvements [][]*Civ5MapTileImprovement,
+	cityData []*Civ5CityData, playerData []*Civ5PlayerData,
+	cityOwnerIndexMap map[int]int) *Civ5MapData {
+
+	return &Civ5MapData{
+		MapHeader:           *header,
+		TerrainList:         terrainList,
+		FeatureTerrainList:  featureTerrainList,
+		ResourceList:        resourceList,
+		TileImprovementList: []string{}, // This could be populated if needed
+		MapTiles:            mapTiles,
+		MapTileImprovements: improvements,
+		CityData:            cityData,
+		Civ5PlayerData:      playerData,
+		CityOwnerIndexMap:   cityOwnerIndexMap,
+		CivColorOverrides:   []CivColorOverride{}, // No overrides by default
+	}
+}
+
 func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	inputFile, err := os.Open(filename)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load map: %w", err)
+		return nil, fmt.Errorf("failed to load map: %w", err)
 	}
 	defer inputFile.Close()
 	fi, err := inputFile.Stat()
 	if err != nil {
-		log.Fatal(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get file info for %q: %w", filename, err)
 	}
 	fileLength := fi.Size()
 	streamReader := io.NewSectionReader(inputFile, int64(0), fileLength)
@@ -443,36 +560,25 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	fmt.Println("Has random resources: ", hasRandomResources)
 	fmt.Println("Has random goodies: ", hasRandomGoodies)
 
-	terrainDataBytes := make([]byte, mapHeader.TerrainDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &terrainDataBytes); err != nil {
+	terrainList, err := readStringList(streamReader, mapHeader.TerrainDataSize, "Terrain data")
+	if err != nil {
 		return nil, err
 	}
-	terrainList := byteArrayToStringArray(terrainDataBytes)
-	fmt.Println("Terrain data:")
-	printList(terrainList)
 
-	featureTerrainDataBytes := make([]byte, mapHeader.FeatureTerrainDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &featureTerrainDataBytes); err != nil {
+	featureTerrainList, err := readStringList(streamReader, mapHeader.FeatureTerrainDataSize, "Feature terrain data")
+	if err != nil {
 		return nil, err
 	}
-	featureTerrainList := byteArrayToStringArray(featureTerrainDataBytes)
-	fmt.Println("Feature terrain data:")
-	printList(featureTerrainList)
 
-	featureWonderDataBytes := make([]byte, mapHeader.FeatureWonderDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &featureWonderDataBytes); err != nil {
+	_, err = readStringList(streamReader, mapHeader.FeatureWonderDataSize, "Feature wonder data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Feature wonder data:")
-	printList(byteArrayToStringArray(featureWonderDataBytes))
 
-	resourceDataBytes := make([]byte, mapHeader.ResourceDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &resourceDataBytes); err != nil {
+	resourceList, err := readStringList(streamReader, mapHeader.ResourceDataSize, "Resource data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Resource data:")
-	resourceList := byteArrayToStringArray(resourceDataBytes)
-	printList(resourceList)
 
 	modDataBytes := make([]byte, mapHeader.ModDataSize)
 	if err := binary.Read(streamReader, binary.LittleEndian, &modDataBytes); err != nil {
@@ -703,67 +809,11 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	}
 
 	// Fill in city names
-	for i := 0; i < int(mapHeader.Height); i++ {
-		for j := 0; j < int(mapHeader.Width); j++ {
-			cityId := mapTileImprovementData[i][j].CityId
-			if cityId != -1 && cityId < len(cityData) {
-				if cityData[cityId].IsNameLocalized {
-					localizedName := cityData[cityId].Name
-					if strings.Contains(localizedName, "CITY_NAME_") {
-						localizedName = localizedName[strings.Index(localizedName, "CITY_NAME_")+len("CITY_NAME_"):]
-					}
-					if strings.Contains(localizedName, "CITYSTATE_") {
-						localizedName = localizedName[strings.Index(localizedName, "CITYSTATE_")+len("CITYSTATE_"):]
-					}
-					localizedName = strings.Replace(localizedName, "_", " ", -1)
-					// If city name has multiple words, set each word's first letter to uppercase
-					localizedName = cases.Title(language.Und).String(localizedName)
-					mapTileImprovementData[i][j].CityName = localizedName
-				} else {
-					mapTileImprovementData[i][j].CityName = cityData[cityId].Name
-				}
+	processCityNames(mapTileImprovementData, cityData, mapHeader.Height, mapHeader.Width)
 
-				fmt.Println(fmt.Sprintf("Set city %v at (%v, %v)", mapTileImprovementData[i][j].CityName, j, i))
-			}
-		}
-	}
+	_, cityOwnerIndexMap := buildCityOwnerMaps(cityData, gameDescriptionHeader.PlayerCount, gameDescriptionHeader.CityStateCount)
 
-	cityOwnerMap := make(map[int][]string)
-	cityOwnerIndexMap := make(map[int]int)
-	for i := 0; i < int(gameDescriptionHeader.PlayerCount); i++ {
-		cityOwnerMap[i] = make([]string, 0)
-		cityOwnerIndexMap[i] = i
-	}
-	for i := 0; i < int(gameDescriptionHeader.CityStateCount); i++ {
-		cityOwnerMap[i+32] = make([]string, 0)
-		cityOwnerIndexMap[i+32] = int(gameDescriptionHeader.PlayerCount) + i
-	}
-
-	for i := 0; i < len(cityData); i++ {
-		owner := cityData[i].Owner
-		if _, ok := cityOwnerMap[owner]; !ok {
-			cityOwnerMap[owner] = make([]string, 0)
-		}
-		cityOwnerMap[owner] = append(cityOwnerMap[owner], cityData[i].Name)
-	}
-	fmt.Println("City owner map:", cityOwnerMap)
-	fmt.Println("City owner index map:", cityOwnerIndexMap)
-
-	// No overrides by default
-	civColorOverrides := []CivColorOverride{}
-
-	mapData := &Civ5MapData{
-		MapHeader:           mapHeader,
-		TerrainList:         terrainList,
-		FeatureTerrainList:  featureTerrainList,
-		ResourceList:        resourceList,
-		TileImprovementList: tileImprovementList,
-		MapTiles:            mapTiles,
-		MapTileImprovements: mapTileImprovementData,
-		CityData:            cityData,
-		Civ5PlayerData:      allPlayerData,
-		CityOwnerIndexMap:   cityOwnerIndexMap,
-		CivColorOverrides:   civColorOverrides,
-	}
-	return mapData, err
+	mapData := buildMapData(&mapHeader, terrainList, featureTerrainList, resourceList,
+		mapTiles, mapTileImprovementData, cityData, allPlayerData, cityOwnerIndexMap)
+	return mapData, nil
 }

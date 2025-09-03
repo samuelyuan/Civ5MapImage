@@ -15,63 +15,6 @@ const (
 	radius = 16.0
 )
 
-var (
-	NeighborOdd  = [6][2]int{{1, 1}, {0, 1}, {-1, 0}, {0, -1}, {1, -1}, {1, 0}}
-	NeighborEven = [6][2]int{{0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, 0}}
-)
-
-func getNeighbors(x int, y int) [6][2]int {
-	var offset [6][2]int
-	if y%2 == 1 {
-		offset = NeighborOdd
-	} else {
-		offset = NeighborEven
-	}
-
-	neighbors := [6][2]int{}
-	for i := 0; i < 6; i++ {
-		newX := x + offset[i][0]
-		newY := y + offset[i][1]
-		neighbors[i][0] = newX
-		neighbors[i][1] = newY
-	}
-	return neighbors
-}
-
-func getImagePosition(i int, j int) (float64, float64) {
-	angle := math.Pi / 6
-
-	x := (radius * 1.5) + float64(j)*(2*radius*math.Cos(angle))
-	y := radius + float64(i)*radius*(1+math.Sin(angle))
-	if i%2 == 1 {
-		x += radius * math.Cos(angle)
-	}
-	return x, y
-}
-
-func getPhysicalMapTileColor(mapData *fileio.Civ5MapData, row int, column int) color.RGBA {
-	terrainString := fileio.GetTerrainString(mapData, row, column)
-	switch terrainString {
-	case "TERRAIN_GRASS":
-		return color.RGBA{105, 125, 54, 255}
-	case "TERRAIN_PLAINS":
-		return color.RGBA{127, 121, 71, 255}
-	case "TERRAIN_DESERT":
-		return color.RGBA{200, 200, 164, 255}
-	case "TERRAIN_TUNDRA":
-		return color.RGBA{118, 123, 117, 255}
-	case "TERRAIN_SNOW":
-		return color.RGBA{238, 249, 255, 255}
-	case "TERRAIN_COAST":
-		return color.RGBA{95, 149, 149, 255}
-	case "TERRAIN_OCEAN":
-		return color.RGBA{47, 74, 93, 255}
-	}
-
-	// default
-	return color.RGBA{0, 0, 0, 255}
-}
-
 func drawMountain(dc *gg.Context, imageX float64, imageY float64) {
 	// draw base
 	dc.DrawRegularPolygon(3, imageX, imageY, radius, math.Pi)
@@ -98,10 +41,11 @@ func drawCityIcon(dc *gg.Context, imageX float64, imageY float64, cityColor colo
 func drawTerrainTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := getImagePosition(i, j)
+			x, y := fileio.GetImagePosition(i, j, radius)
 
 			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
-			tileColor := getPhysicalMapTileColor(mapData, i, j)
+			terrainString := fileio.GetTerrainString(mapData, i, j)
+			tileColor := fileio.GetPhysicalMapTileColor(terrainString)
 			dc.SetRGB255(int(tileColor.R), int(tileColor.G), int(tileColor.B))
 			dc.Fill()
 
@@ -133,13 +77,14 @@ func interpolateColor(color1 color.RGBA, color2 color.RGBA, t float64) color.RGB
 func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := getImagePosition(i, j)
+			x, y := fileio.GetImagePosition(i, j, radius)
 
 			dc.DrawRegularPolygon(6, x, y, radius, math.Pi/2)
 
 			cityColor := color.RGBA{255, 255, 255, 255}
 			if fileio.IsWaterTile(mapData, i, j) {
-				terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
+				terrainString := fileio.GetTerrainString(mapData, i, j)
+				terrainTileColor := fileio.GetPhysicalMapTileColor(terrainString)
 				dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
 				dc.Fill()
 			} else {
@@ -168,7 +113,8 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 					dc.Fill()
 				} else {
 					// Territory not owned by anyone
-					terrainTileColor := getPhysicalMapTileColor(mapData, i, j)
+					terrainString := fileio.GetTerrainString(mapData, i, j)
+					terrainTileColor := fileio.GetPhysicalMapTileColor(terrainString)
 					dc.SetRGB255(int(terrainTileColor.R), int(terrainTileColor.G), int(terrainTileColor.B))
 					dc.Fill()
 				}
@@ -190,7 +136,7 @@ func drawTerritoryTiles(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight i
 func drawRivers(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := getImagePosition(i, j)
+			x, y := fileio.GetImagePosition(i, j, radius)
 			dc.SetRGB255(95, 150, 148)
 
 			riverData := mapData.MapTiles[i][j].RiverData
@@ -241,21 +187,21 @@ func drawRoads(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWi
 	// Draw roads between tiles
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x1, y1 := getImagePosition(i, j)
+			x1, y1 := fileio.GetImagePosition(i, j, radius)
 
 			routeType := mapData.MapTileImprovements[i][j].RouteType
 			if routeType == 255 {
 				continue
 			}
 
-			neighbors := getNeighbors(j, i)
+			neighbors := fileio.GetNeighbors(j, i)
 			for n := 0; n < len(neighbors); n++ {
 				newX := neighbors[n][0]
 				newY := neighbors[n][1]
 				if newX >= 0 && newY >= 0 && newX < mapWidth && newY < mapHeight {
 					if mapData.MapTileImprovements[newY][newX].RouteType != 255 ||
 						mapData.MapTileImprovements[newY][newX].CityName != "" {
-						x2, y2 := getImagePosition(newY, newX)
+						x2, y2 := fileio.GetImagePosition(newY, newX, radius)
 
 						if routeType == 1 {
 							// Railroad
@@ -288,7 +234,7 @@ func DrawPhysicalMap(mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
-	maxImageWidth, maxImageHeight := getImagePosition(mapHeight, mapWidth)
+	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, radius)
 	dc := gg.NewContext(int(maxImageWidth), int(maxImageHeight))
 	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
 
@@ -308,7 +254,7 @@ func DrawPhysicalMap(mapData *fileio.Civ5MapData) image.Image {
 		for i := 0; i < mapHeight; i++ {
 			for j := 0; j < mapWidth; j++ {
 				// Invert depth because the map is inverted
-				x, y := getImagePosition(mapHeight-i, j)
+				x, y := fileio.GetImagePosition(mapHeight-i, j, radius)
 
 				tile := mapData.MapTileImprovements[i][j]
 				dc.SetRGB255(255, 255, 255)
@@ -324,8 +270,8 @@ func DrawPhysicalMap(mapData *fileio.Civ5MapData) image.Image {
 func drawBorders(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x1, y1 := getImagePosition(i, j)
-			neighbors := getNeighbors(j, i)
+			x1, y1 := fileio.GetImagePosition(i, j, radius)
+			neighbors := fileio.GetNeighbors(j, i)
 			currentTileOwner := mapData.MapTileImprovements[i][j].Owner
 			if fileio.IsInvalidTileOwner(currentTileOwner) {
 				continue
@@ -372,7 +318,7 @@ func drawCityNames(dc *gg.Context, mapData *fileio.Civ5MapData, mapHeight int, m
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			// Invert depth because the map is inverted
-			x, y := getImagePosition(mapHeight-i, j)
+			x, y := fileio.GetImagePosition(mapHeight-i, j, radius)
 
 			tile := mapData.MapTileImprovements[i][j]
 			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
@@ -400,7 +346,7 @@ func DrawPoliticalMap(mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
-	maxImageWidth, maxImageHeight := getImagePosition(mapHeight, mapWidth)
+	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, radius)
 	dc := gg.NewContext(int(maxImageWidth), int(maxImageHeight))
 	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
 
