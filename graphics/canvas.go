@@ -26,6 +26,9 @@ type Canvas interface {
 	// Transformations
 	InvertY()
 
+	// Canvas management
+	Resize(width, height int)
+
 	// Text operations
 	DrawString(text string, x, y float64)
 
@@ -77,6 +80,10 @@ func (d *DrawingContext) Stroke() {
 
 func (d *DrawingContext) InvertY() {
 	d.dc.InvertY()
+}
+
+func (d *DrawingContext) Resize(width, height int) {
+	d.dc = gg.NewContext(width, height)
 }
 
 func (d *DrawingContext) DrawString(text string, x, y float64) {
@@ -140,6 +147,13 @@ func (m *MockCanvas) Stroke() {
 
 func (m *MockCanvas) InvertY() {
 	m.operations = append(m.operations, "InvertY()")
+}
+
+func (m *MockCanvas) Resize(width, height int) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("Resize(%d, %d)", width, height))
+	m.width = width
+	m.height = height
 }
 
 func (m *MockCanvas) DrawString(text string, x, y float64) {

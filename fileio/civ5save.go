@@ -379,6 +379,9 @@ func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, ou
 
 func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, error) {
 	inputFile, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %q: %w", filename, err)
+	}
 	defer inputFile.Close()
 
 	fi, err := inputFile.Stat()

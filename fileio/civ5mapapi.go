@@ -63,7 +63,17 @@ func GetPhysicalMapTileColor(terrainString string) color.RGBA {
 }
 
 func GetTerrainString(mapData *Civ5MapData, row int, column int) string {
+	// Check bounds to prevent panic
+	if row < 0 || row >= len(mapData.MapTiles) {
+		return ""
+	}
+	if column < 0 || column >= len(mapData.MapTiles[row]) {
+		return ""
+	}
 	terrainType := mapData.MapTiles[row][column].TerrainType
+	if terrainType < 0 || terrainType >= len(mapData.TerrainList) {
+		return ""
+	}
 	return mapData.TerrainList[terrainType]
 }
 
@@ -73,10 +83,24 @@ func IsWaterTile(mapData *Civ5MapData, row int, column int) bool {
 }
 
 func TileHasCity(mapData *Civ5MapData, row int, column int) bool {
+	// Check bounds to prevent panic
+	if row < 0 || row >= len(mapData.MapTileImprovements) {
+		return false
+	}
+	if column < 0 || column >= len(mapData.MapTileImprovements[row]) {
+		return false
+	}
 	return mapData.MapTileImprovements[row][column].CityId != -1
 }
 
 func TileHasMountain(mapData *Civ5MapData, row int, column int) bool {
+	// Check bounds to prevent panic
+	if row < 0 || row >= len(mapData.MapTiles) {
+		return false
+	}
+	if column < 0 || column >= len(mapData.MapTiles[row]) {
+		return false
+	}
 	return mapData.MapTiles[row][column].Elevation == 2
 }
 
@@ -85,6 +109,13 @@ func IsInvalidTileOwner(value int) bool {
 }
 
 func GetTileCivName(mapData *Civ5MapData, row int, column int) string {
+	// Check bounds to prevent panic
+	if row < 0 || row >= len(mapData.MapTileImprovements) {
+		return ""
+	}
+	if column < 0 || column >= len(mapData.MapTileImprovements[row]) {
+		return ""
+	}
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
 	if IsInvalidTileOwner(tileOwner) {
 		return ""
@@ -97,6 +128,13 @@ func GetTileCivName(mapData *Civ5MapData, row int, column int) string {
 }
 
 func GetPoliticalMapTileColor(mapData *Civ5MapData, row int, column int) string {
+	// Check bounds to prevent panic
+	if row < 0 || row >= len(mapData.MapTileImprovements) {
+		return ""
+	}
+	if column < 0 || column >= len(mapData.MapTileImprovements[row]) {
+		return ""
+	}
 	tileOwner := mapData.MapTileImprovements[row][column].Owner
 	if IsInvalidTileOwner(tileOwner) {
 		return ""

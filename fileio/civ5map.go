@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -20,6 +21,8 @@ const (
 	// Version-specific data sizes
 	BuildingDataSizeV11 = 32
 	BuildingDataSizeV12 = 64
+	UnitDataSizeV11     = 48 // Size of Civ5UnitHeaderV11
+	UnitDataSizeV12     = 84 // Size of Civ5UnitHeaderV12
 
 	// String buffer sizes
 	PlayerNameSize   = 64
@@ -38,6 +41,9 @@ const (
 
 	// Special values
 	InvalidCityId = -1
+
+	// Data structure sizes
+	CivDataSize = 436
 )
 
 type Civ5MapHeader struct {
@@ -246,17 +252,17 @@ func ParseUnitData(unitData []byte, version int) ([]*Civ5UnitData, error) {
 	}
 	streamReader := io.NewSectionReader(bytes.NewReader(unitData), int64(0), int64(len(unitData)))
 
-	numberUnits := uint32(0)
-	if err := binary.Read(streamReader, binary.LittleEndian, &numberUnits); err != nil {
+	numberUnits, err := readUint32(streamReader)
+	if err != nil {
 		return nil, err
 	}
 	fmt.Println("Number units: ", numberUnits)
 
 	maximumPossibleUnits := 0
 	if version == 12 {
-		maximumPossibleUnits = len(unitData) / 84
+		maximumPossibleUnits = len(unitData) / UnitDataSizeV12
 	} else {
-		maximumPossibleUnits = len(unitData) / 48
+		maximumPossibleUnits = len(unitData) / UnitDataSizeV11
 	}
 	fmt.Println("Maximum possible units: ", maximumPossibleUnits)
 
@@ -267,7 +273,8 @@ func ParseUnitData(unitData []byte, version int) ([]*Civ5UnitData, error) {
 
 	allUnits := make([]*Civ5UnitData, int(numberUnits))
 	for i := 0; i < int(numberUnits); i++ {
-		if version == 12 {
+		switch version {
+		case 12:
 			unitData := Civ5UnitHeaderV12{}
 			if err := binary.Read(streamReader, binary.LittleEndian, &unitData); err != nil {
 				return nil, err
@@ -281,7 +288,7 @@ func ParseUnitData(unitData []byte, version int) ([]*Civ5UnitData, error) {
 				FacingDirection: int(unitData.FacingDirection),
 				Status:          int(unitData.Status),
 			}
-		} else if version == 11 {
+		case 11:
 			unitData := Civ5UnitHeaderV11{}
 			if err := binary.Read(streamReader, binary.LittleEndian, &unitData); err != nil {
 				return nil, err
@@ -309,8 +316,8 @@ func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData
 	streamReader := io.NewSectionReader(bytes.NewReader(cityData), int64(0), int64(len(cityData)))
 
 	// This number is not always accurate because it sometimes underestimates the number of cities
-	numberCities := uint32(0)
-	if err := binary.Read(streamReader, binary.LittleEndian, &numberCities); err != nil {
+	numberCities, err := readUint32(streamReader)
+	if err != nil {
 		return nil, err
 	}
 	fmt.Println("Number cities: ", numberCities)
@@ -378,18 +385,25 @@ func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData
 
 func ParseCivData(inputData []byte) ([]*Civ5PlayerData, error) {
 	streamReader := io.NewSectionReader(bytes.NewReader(inputData), int64(0), int64(len(inputData)))
-	civDataSize := 436
-	allCivs := make([]Civ5PlayerHeader, len(inputData)/civDataSize)
+	allCivs := make([]Civ5PlayerHeader, len(inputData)/CivDataSize)
 	if err := binary.Read(streamReader, binary.LittleEndian, &allCivs); err != nil {
 		return nil, err
 	}
 
 	allPlayerData := make([]*Civ5PlayerData, len(allCivs))
+
+	fmt.Printf("\n=== Civilizations (%d civs) ===\n", len(allCivs))
 	for i := 0; i < len(allCivs); i++ {
 		originalCivName := string(strings.Split(string(allCivs[i].CivType[:]), "\x00")[0])
 		teamColor := string(strings.Split(string(allCivs[i].TeamColor[:]), "\x00")[0])
-		fmt.Println("Civ", i, ": Name:", originalCivName, ", Team color:", teamColor,
-			", Team:", allCivs[i].Team, ", Playable:", allCivs[i].Playable)
+
+		fmt.Printf("  %d. %s\n", i+1, originalCivName)
+		fmt.Printf("      Team Color: %s\n", teamColor)
+		fmt.Printf("      Team: %d\n", allCivs[i].Team)
+		fmt.Printf("      Playable: %t\n", allCivs[i].Playable != 0)
+		if i < len(allCivs)-1 {
+			fmt.Println() // Add spacing between civs
+		}
 
 		allPlayerData[i] = &Civ5PlayerData{
 			Index:     i,
@@ -441,43 +455,163 @@ func printList(list []string) {
 	fmt.Printf("[%s]\n", strings.Join(list, ", "))
 }
 
-// Helper function to read string lists from binary data
-func readStringList(reader *io.SectionReader, size uint32, listName string) ([]string, error) {
+// readUint32 reads a uint32 from the binary stream
+func readUint32(reader *io.SectionReader) (uint32, error) {
+	var value uint32
+	if err := binary.Read(reader, binary.LittleEndian, &value); err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
+// readByteArray reads a byte array of specified size from the binary stream
+func readByteArray(reader *io.SectionReader, size uint32) ([]byte, error) {
 	dataBytes := make([]byte, size)
 	if err := binary.Read(reader, binary.LittleEndian, &dataBytes); err != nil {
+		return nil, err
+	}
+	return dataBytes, nil
+}
+
+// readStruct reads a struct from the binary stream
+func readStruct(reader *io.SectionReader, data interface{}) error {
+	return binary.Read(reader, binary.LittleEndian, data)
+}
+
+// Helper function to read string lists from binary data
+func readStringList(reader *io.SectionReader, size uint32, listName string) ([]string, error) {
+	dataBytes, err := readByteArray(reader, size)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read %s data: %w", listName, err)
 	}
 	stringList := byteArrayToStringArray(dataBytes)
-	fmt.Printf("%s:\n", listName)
-	printList(stringList)
+
+	// Pretty print the string list
+	fmt.Printf("\n=== %s (%d items) ===\n", listName, len(stringList))
+	if len(stringList) == 0 {
+		fmt.Println("(empty)")
+	} else {
+		for i, item := range stringList {
+			if item == "" {
+				fmt.Printf("  %d. (empty)\n", i+1)
+			} else {
+				fmt.Printf("  %d. %s\n", i+1, item)
+			}
+		}
+	}
+
 	return stringList, nil
+}
+
+// parsePhysicalMapTiles reads and parses the physical terrain data from map tiles
+func parsePhysicalMapTiles(reader *io.SectionReader, header *Civ5MapHeader) ([][]*Civ5MapTilePhysical, error) {
+	mapTiles := make([][]*Civ5MapTilePhysical, header.Height)
+	for i := 0; i < int(header.Height); i++ {
+		mapTiles[i] = make([]*Civ5MapTilePhysical, header.Width)
+		for j := 0; j < int(header.Width); j++ {
+			tile := Civ5MapTile{}
+			if err := binary.Read(reader, binary.LittleEndian, &tile); err != nil {
+				return nil, fmt.Errorf("failed to read map tile at position (%d, %d): %w", i, j, err)
+			}
+			mapTiles[i][j] = &Civ5MapTilePhysical{
+				X:                  j,
+				Y:                  i,
+				TerrainType:        int(tile.TerrainType),
+				ResourceType:       int(tile.ResourceType),
+				FeatureTerrainType: int(tile.FeatureTerrainType),
+				RiverData:          int(tile.RiverData),
+				Elevation:          int(tile.Elevation),
+				Continent:          int(tile.Continent),
+				FeatureWonderType:  int(tile.FeatureWonderType),
+				ResourceAmount:     int(tile.ResourceAmount),
+			}
+		}
+	}
+	return mapTiles, nil
+}
+
+// findMaxCityId finds the highest city ID in the map tile improvement data
+func findMaxCityId(mapTileImprovements [][]*Civ5MapTileImprovement, height, width int) int {
+	maxCityId := 0
+	for i := 0; i < height; i++ {
+		for j := 0; j < width; j++ {
+			cityId := mapTileImprovements[i][j].CityId
+			if cityId != -1 && cityId > maxCityId {
+				maxCityId = cityId
+			}
+		}
+	}
+	return maxCityId
+}
+
+// isEndOfFile checks if the reader has reached the end of the file
+func isEndOfFile(reader *io.SectionReader) bool {
+	currentPosition, err := reader.Seek(0, io.SeekCurrent)
+	if err != nil {
+		panic(err)
+	}
+	return reader.Size() == currentPosition
+}
+
+// createPhysicalMapData creates a map data structure with only physical terrain data for early EOF cases
+func createPhysicalMapData(header *Civ5MapHeader, terrainList, featureTerrainList, resourceList []string, mapTiles [][]*Civ5MapTilePhysical) *Civ5MapData {
+	fmt.Println("Reached end of file. Skip reading game description header.")
+	return &Civ5MapData{
+		MapHeader:           *header,
+		TerrainList:         terrainList,
+		FeatureTerrainList:  featureTerrainList,
+		ResourceList:        resourceList,
+		TileImprovementList: []string{},
+		MapTiles:            mapTiles,
+		MapTileImprovements: [][]*Civ5MapTileImprovement{},
+		CityData:            []*Civ5CityData{},
+		Civ5PlayerData:      []*Civ5PlayerData{},
+		CityOwnerIndexMap:   map[int]int{},
+		CivColorOverrides:   []CivColorOverride{},
+	}
 }
 
 // Helper function to process city names and apply localization
 func processCityNames(mapTileImprovements [][]*Civ5MapTileImprovement, cityData []*Civ5CityData, height, width uint32) {
+	// Early exit if no city data
+	if len(cityData) == 0 {
+		return
+	}
+
+	cityCount := 0
+	fmt.Printf("\n=== Processing City Names ===\n")
+
 	for i := 0; i < int(height); i++ {
 		for j := 0; j < int(width); j++ {
 			cityId := mapTileImprovements[i][j].CityId
-			if cityId != InvalidCityId && cityId < len(cityData) {
-				if cityData[cityId].IsNameLocalized {
-					localizedName := cityData[cityId].Name
-					if strings.Contains(localizedName, "CITY_NAME_") {
-						localizedName = localizedName[strings.Index(localizedName, "CITY_NAME_")+len("CITY_NAME_"):]
-					}
-					if strings.Contains(localizedName, "CITYSTATE_") {
-						localizedName = localizedName[strings.Index(localizedName, "CITYSTATE_")+len("CITYSTATE_"):]
-					}
-					localizedName = strings.Replace(localizedName, "_", " ", -1)
-					// If city name has multiple words, set each word's first letter to uppercase
-					localizedName = cases.Title(language.Und).String(localizedName)
-					mapTileImprovements[i][j].CityName = localizedName
-				} else {
-					mapTileImprovements[i][j].CityName = cityData[cityId].Name
-				}
-				fmt.Printf("Set city %v at (%v, %v)\n", mapTileImprovements[i][j].CityName, j, i)
+			if cityId == InvalidCityId {
+				continue
 			}
+			if cityId >= len(cityData) {
+				continue
+			}
+
+			if cityData[cityId].IsNameLocalized {
+				localizedName := cityData[cityId].Name
+				if strings.Contains(localizedName, "CITY_NAME_") {
+					localizedName = localizedName[strings.Index(localizedName, "CITY_NAME_")+len("CITY_NAME_"):]
+				}
+				if strings.Contains(localizedName, "CITYSTATE_") {
+					localizedName = localizedName[strings.Index(localizedName, "CITYSTATE_")+len("CITYSTATE_"):]
+				}
+				localizedName = strings.Replace(localizedName, "_", " ", -1)
+				// If city name has multiple words, set each word's first letter to uppercase
+				localizedName = cases.Title(language.Und).String(localizedName)
+				mapTileImprovements[i][j].CityName = localizedName
+			} else {
+				mapTileImprovements[i][j].CityName = cityData[cityId].Name
+			}
+			cityCount++
+			fmt.Printf("  %d. %s at (%d, %d)\n", cityCount, mapTileImprovements[i][j].CityName, j, i)
 		}
 	}
+
+	fmt.Printf("Processed %d cities\n", cityCount)
 }
 
 // Helper function to build city owner maps
@@ -506,9 +640,47 @@ func buildCityOwnerMaps(cityData []*Civ5CityData, playerCount, cityStateCount ui
 		cityOwnerMap[owner] = append(cityOwnerMap[owner], cityData[i].Name)
 	}
 
-	fmt.Println("City owner map:", cityOwnerMap)
-	fmt.Println("City owner index map:", cityOwnerIndexMap)
+	fmt.Printf("\n=== City Owner Map ===\n")
+	if len(cityOwnerMap) == 0 {
+		fmt.Println("(empty)")
+	} else {
+		for _, owner := range getSortedKeys(cityOwnerMap) {
+			cities := cityOwnerMap[owner]
+			if len(cities) > 0 {
+				fmt.Printf("  Owner %d: %s\n", owner, strings.Join(cities, ", "))
+			}
+		}
+	}
+
+	fmt.Printf("\n=== City Owner Index Map ===\n")
+	if len(cityOwnerIndexMap) == 0 {
+		fmt.Println("(empty)")
+	} else {
+		for _, owner := range getSortedKeys(cityOwnerIndexMap) {
+			index := cityOwnerIndexMap[owner]
+			fmt.Printf("  Owner %d -> Index %d\n", owner, index)
+		}
+	}
 	return cityOwnerMap, cityOwnerIndexMap
+}
+
+// getSortedKeys returns the keys of a map sorted in ascending order
+func getSortedKeys[K comparable, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		switch v := any(keys[i]).(type) {
+		case int:
+			return v < any(keys[j]).(int)
+		case string:
+			return v < any(keys[j]).(string)
+		default:
+			return false
+		}
+	})
+	return keys
 }
 
 // Helper function to build the final map data structure
@@ -546,7 +718,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	streamReader := io.NewSectionReader(inputFile, int64(0), fileLength)
 
 	mapHeader := Civ5MapHeader{}
-	if err := binary.Read(streamReader, binary.LittleEndian, &mapHeader); err != nil {
+	if err := readStruct(streamReader, &mapHeader); err != nil {
 		return nil, err
 	}
 
@@ -580,33 +752,33 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 
-	modDataBytes := make([]byte, mapHeader.ModDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &modDataBytes); err != nil {
+	modDataBytes, err := readByteArray(streamReader, mapHeader.ModDataSize)
+	if err != nil {
 		return nil, err
 	}
 	fmt.Println("Mod data:", string(modDataBytes))
 
-	mapNameBytes := make([]byte, mapHeader.MapNameLength)
-	if err := binary.Read(streamReader, binary.LittleEndian, &mapNameBytes); err != nil {
+	mapNameBytes, err := readByteArray(streamReader, mapHeader.MapNameLength)
+	if err != nil {
 		return nil, err
 	}
 	fmt.Println("Map name: ", string(mapNameBytes))
 
-	mapDescriptionBytes := make([]byte, mapHeader.MapDescriptionLength)
-	if err := binary.Read(streamReader, binary.LittleEndian, &mapDescriptionBytes); err != nil {
+	mapDescriptionBytes, err := readByteArray(streamReader, mapHeader.MapDescriptionLength)
+	if err != nil {
 		return nil, err
 	}
 	fmt.Println("Map description: ", string(mapDescriptionBytes))
 
 	// Earlier versions don't have this field
 	if version >= 11 {
-		worldSizeStringLength := uint32(0)
-		if err := binary.Read(streamReader, binary.LittleEndian, &worldSizeStringLength); err != nil {
+		worldSizeStringLength, err := readUint32(streamReader)
+		if err != nil {
 			return nil, err
 		}
 
-		worldSize := make([]byte, worldSizeStringLength)
-		if err := binary.Read(streamReader, binary.LittleEndian, &worldSize); err != nil {
+		worldSize, err := readByteArray(streamReader, worldSizeStringLength)
+		if err != nil {
 			return nil, err
 		}
 		fmt.Println("World size: ", string(worldSize))
@@ -616,152 +788,105 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	fmt.Println("Map height: ", mapHeader.Height)
 	fmt.Println("Map width: ", mapHeader.Width)
 
-	mapTiles := make([][]*Civ5MapTilePhysical, mapHeader.Height)
-	for i := 0; i < int(mapHeader.Height); i++ {
-		mapTiles[i] = make([]*Civ5MapTilePhysical, mapHeader.Width)
-		for j := 0; j < int(mapHeader.Width); j++ {
-			tile := Civ5MapTile{}
-			if err := binary.Read(streamReader, binary.LittleEndian, &tile); err != nil {
-				return nil, err
-			}
-			mapTiles[i][j] = &Civ5MapTilePhysical{
-				X:                  j,
-				Y:                  i,
-				TerrainType:        int(tile.TerrainType),
-				ResourceType:       int(tile.ResourceType),
-				FeatureTerrainType: int(tile.FeatureTerrainType),
-				RiverData:          int(tile.RiverData),
-				Elevation:          int(tile.Elevation),
-				Continent:          int(tile.Continent),
-				FeatureWonderType:  int(tile.FeatureWonderType),
-				ResourceAmount:     int(tile.ResourceAmount),
-			}
-		}
-	}
-
-	currentPosition, err := streamReader.Seek(0, io.SeekCurrent)
+	mapTiles, err := parsePhysicalMapTiles(streamReader, &mapHeader)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	if streamReader.Size() == currentPosition {
-		fmt.Println("Reached end of file. Skip reading game description header.")
-		mapData := &Civ5MapData{
-			MapHeader:           mapHeader,
-			TerrainList:         terrainList,
-			FeatureTerrainList:  featureTerrainList,
-			ResourceList:        resourceList,
-			TileImprovementList: []string{},
-			MapTiles:            mapTiles,
-			MapTileImprovements: [][]*Civ5MapTileImprovement{},
-			CityData:            []*Civ5CityData{},
-			Civ5PlayerData:      []*Civ5PlayerData{},
-			CityOwnerIndexMap:   map[int]int{},
-			CivColorOverrides:   []CivColorOverride{},
-		}
-		return mapData, nil
+	if isEndOfFile(streamReader) {
+		return createPhysicalMapData(&mapHeader, terrainList, featureTerrainList, resourceList, mapTiles), nil
 	}
 
 	fmt.Println("Reading game description header...")
 	gameDescriptionHeader := Civ5GameDescriptionHeader{}
-	if err := binary.Read(streamReader, binary.LittleEndian, &gameDescriptionHeader); err != nil {
+	if err := readStruct(streamReader, &gameDescriptionHeader); err != nil {
 		return nil, err
 	}
-	fmt.Println("gameDescriptionHeader: ", gameDescriptionHeader)
+
+	fmt.Println("\n=== Game Description ===")
+	fmt.Printf("Max Turns: %d\n", gameDescriptionHeader.MaxTurns)
+	fmt.Printf("Start Year: %d\n", gameDescriptionHeader.StartYear)
+	fmt.Printf("Players: %d\n", gameDescriptionHeader.PlayerCount)
+	fmt.Printf("City States: %d\n", gameDescriptionHeader.CityStateCount)
+	fmt.Printf("Teams: %d\n", gameDescriptionHeader.TeamCount)
+
+	// Debug: Print raw struct for unknown field analysis
+	fmt.Printf("Raw struct: %+v\n", gameDescriptionHeader)
 
 	// New fields for game description
 	victoryDataSize := uint32(0)
 	gameOptionDataSize := uint32(0)
 	if version >= 11 {
-		if err := binary.Read(streamReader, binary.LittleEndian, &victoryDataSize); err != nil {
+		victoryDataSize, err = readUint32(streamReader)
+		if err != nil {
 			return nil, err
 		}
-		if err := binary.Read(streamReader, binary.LittleEndian, &gameOptionDataSize); err != nil {
+		gameOptionDataSize, err = readUint32(streamReader)
+		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("Victory Data Size: %d bytes\n", victoryDataSize)
+		fmt.Printf("Game Option Data Size: %d bytes\n", gameOptionDataSize)
 	}
 
-	fmt.Println("Max turns: ", gameDescriptionHeader.MaxTurns)
-	fmt.Println("Start year: ", gameDescriptionHeader.StartYear)
-	fmt.Println("Player count: ", gameDescriptionHeader.PlayerCount)
-	fmt.Println("City state count: ", gameDescriptionHeader.CityStateCount)
-	fmt.Println("Team count: ", gameDescriptionHeader.TeamCount)
-
-	improvementDataBytes := make([]byte, gameDescriptionHeader.ImprovementDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &improvementDataBytes); err != nil {
+	_, err = readStringList(streamReader, gameDescriptionHeader.ImprovementDataSize, "Improvement data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Improvement data:")
-	tileImprovementList := byteArrayToStringArray(improvementDataBytes)
-	printList(tileImprovementList)
 
-	unitTypeDataBytes := make([]byte, gameDescriptionHeader.UnitTypeDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &unitTypeDataBytes); err != nil {
+	_, err = readStringList(streamReader, gameDescriptionHeader.UnitTypeDataSize, "Unit type data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Unit type data:")
-	printList(byteArrayToStringArray(unitTypeDataBytes))
 
-	techTypeDataBytes := make([]byte, gameDescriptionHeader.TechTypeDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &techTypeDataBytes); err != nil {
+	_, err = readStringList(streamReader, gameDescriptionHeader.TechTypeDataSize, "Tech type data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Tech type data:")
-	printList(byteArrayToStringArray(techTypeDataBytes))
 
-	policyTypeDataBytes := make([]byte, gameDescriptionHeader.PolicyTypeDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &policyTypeDataBytes); err != nil {
+	_, err = readStringList(streamReader, gameDescriptionHeader.PolicyTypeDataSize, "Policy type data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Policy type data:")
-	printList(byteArrayToStringArray(policyTypeDataBytes))
 
-	buildingTypeDataBytes := make([]byte, gameDescriptionHeader.BuildingTypeDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &buildingTypeDataBytes); err != nil {
+	_, err = readStringList(streamReader, gameDescriptionHeader.BuildingTypeDataSize, "Building type data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Building type data:")
-	printList(byteArrayToStringArray(buildingTypeDataBytes))
 
-	promotionTypeDataBytes := make([]byte, gameDescriptionHeader.PromotionTypeDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &promotionTypeDataBytes); err != nil {
+	_, err = readStringList(streamReader, gameDescriptionHeader.PromotionTypeDataSize, "Promotion type data")
+	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Promotion type data:")
-	printList(byteArrayToStringArray(promotionTypeDataBytes))
 
 	fmt.Println("Unit data size: ", gameDescriptionHeader.UnitDataSize)
-	unitDataBytes := make([]byte, gameDescriptionHeader.UnitDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &unitDataBytes); err != nil {
+	unitDataBytes, err := readByteArray(streamReader, gameDescriptionHeader.UnitDataSize)
+	if err != nil {
 		return nil, err
 	}
 
 	fmt.Println("Unit name data size: ", gameDescriptionHeader.UnitNameDataSize)
-	unitNameDataBytes := make([]byte, gameDescriptionHeader.UnitNameDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &unitNameDataBytes); err != nil {
+	_, err = readByteArray(streamReader, gameDescriptionHeader.UnitNameDataSize)
+	if err != nil {
 		return nil, err
 	}
 
 	fmt.Println("City data size: ", gameDescriptionHeader.CityDataSize)
-	cityDataBytes := make([]byte, gameDescriptionHeader.CityDataSize)
-	if err := binary.Read(streamReader, binary.LittleEndian, &cityDataBytes); err != nil {
+	cityDataBytes, err := readByteArray(streamReader, gameDescriptionHeader.CityDataSize)
+	if err != nil {
 		return nil, err
 	}
 
 	if version >= 11 {
-		fmt.Println("Victory data size: ", victoryDataSize)
-		victoryDataBytes := make([]byte, victoryDataSize)
-		if err := binary.Read(streamReader, binary.LittleEndian, &victoryDataBytes); err != nil {
+		_, err = readStringList(streamReader, victoryDataSize, "Victory data")
+		if err != nil {
 			return nil, err
 		}
-		fmt.Println("Victory data: ", byteArrayToStringArray(victoryDataBytes))
 
-		fmt.Println("Game option data size: ", gameOptionDataSize)
-		gameOptionDataBytes := make([]byte, gameOptionDataSize)
-		if err := binary.Read(streamReader, binary.LittleEndian, &gameOptionDataBytes); err != nil {
+		_, err = readStringList(streamReader, gameOptionDataSize, "Game option data")
+		if err != nil {
 			return nil, err
 		}
-		fmt.Println("Game option data: ", byteArrayToStringArray(gameOptionDataBytes))
 	}
 
 	mapTileProperties := make([]byte, int(mapHeader.Height)*int(mapHeader.Width)*8)
@@ -775,7 +900,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 
-	playerCivData := make([]byte, 436*(int(gameDescriptionHeader.PlayerCount)+int(gameDescriptionHeader.CityStateCount)))
+	playerCivData := make([]byte, CivDataSize*(int(gameDescriptionHeader.PlayerCount)+int(gameDescriptionHeader.CityStateCount)))
 	_, err = inputFile.ReadAt(playerCivData, fileLength-int64(len(mapTileProperties))-int64(len(playerCivData)))
 	if err != nil {
 		return nil, err
@@ -786,16 +911,7 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return nil, err
 	}
 
-	// Find max city id
-	maxCityId := 0
-	for i := 0; i < int(mapHeader.Height); i++ {
-		for j := 0; j < int(mapHeader.Width); j++ {
-			cityId := mapTileImprovementData[i][j].CityId
-			if cityId != -1 && cityId > maxCityId {
-				maxCityId = cityId
-			}
-		}
-	}
+	maxCityId := findMaxCityId(mapTileImprovementData, int(mapHeader.Height), int(mapHeader.Width))
 	fmt.Println("Max city id is", maxCityId)
 
 	cityData, err := ParseCityData(cityDataBytes, int(version), maxCityId)

@@ -7,13 +7,33 @@ import (
 	"math"
 	"strings"
 
-	"github.com/fogleman/gg"
 	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
 
 // DrawingConfig holds configuration for map drawing
 type DrawingConfig struct {
 	Radius float64
+}
+
+// Line represents a line with start and end points
+type Line struct {
+	X1, Y1, X2, Y2 float64
+}
+
+// getHexEdge calculates the coordinates for a specific hexagon edge
+// edgeIndex: 0-5 representing the 6 edges of a hexagon
+// centerX, centerY: center of the hexagon
+// radius: radius of the hexagon (can be adjusted for inner/outer edges)
+func getHexEdge(edgeIndex int, centerX, centerY, radius float64) Line {
+	angle1 := (math.Pi / 6) + float64(edgeIndex)*(math.Pi/3)
+	angle2 := (math.Pi / 6) + float64(edgeIndex+1)*(math.Pi/3)
+
+	return Line{
+		X1: centerX + radius*math.Cos(angle1),
+		Y1: centerY + radius*math.Sin(angle1),
+		X2: centerX + radius*math.Cos(angle2),
+		Y2: centerY + radius*math.Sin(angle2),
+	}
 }
 
 // DefaultDrawingConfig returns the default drawing configuration
@@ -172,39 +192,24 @@ func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, ma
 			isRiverSoutheast := ((riverData >> 1) & 1) != 0
 			isRiverEast := (riverData & 1) != 0
 
-			// Southwest river
+			// Southwest river (edge 3)
 			if isRiverSouthwest {
-				angleSW1 := (math.Pi / 6) + float64(3)*(math.Pi/3)
-				angleSW2 := (math.Pi / 6) + float64(4)*(math.Pi/3)
-				x1 := x + mr.config.Radius*math.Cos(angleSW1)
-				y1 := y + mr.config.Radius*math.Sin(angleSW1)
-				x2 := x + mr.config.Radius*math.Cos(angleSW2)
-				y2 := y + mr.config.Radius*math.Sin(angleSW2)
-				canvas.DrawLine(x1, y1, x2, y2)
+				line := getHexEdge(3, x, y, mr.config.Radius)
+				canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
 				canvas.Stroke()
 			}
 
-			// Southeast river
+			// Southeast river (edge 4)
 			if isRiverSoutheast {
-				angleSE1 := (math.Pi / 6) + float64(4)*(math.Pi/3)
-				angleSE2 := (math.Pi / 6) + float64(5)*(math.Pi/3)
-				x1 := x + mr.config.Radius*math.Cos(angleSE1)
-				y1 := y + mr.config.Radius*math.Sin(angleSE1)
-				x2 := x + mr.config.Radius*math.Cos(angleSE2)
-				y2 := y + mr.config.Radius*math.Sin(angleSE2)
-				canvas.DrawLine(x1, y1, x2, y2)
+				line := getHexEdge(4, x, y, mr.config.Radius)
+				canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
 				canvas.Stroke()
 			}
 
-			// East river
+			// East river (edge 5)
 			if isRiverEast {
-				angleE1 := (math.Pi / 6) + float64(5)*(math.Pi/3)
-				angleE2 := (math.Pi / 6) + float64(6)*(math.Pi/3)
-				x1 := x + mr.config.Radius*math.Cos(angleE1)
-				y1 := y + mr.config.Radius*math.Sin(angleE1)
-				x2 := x + mr.config.Radius*math.Cos(angleE2)
-				y2 := y + mr.config.Radius*math.Sin(angleE2)
-				canvas.DrawLine(x1, y1, x2, y2)
+				line := getHexEdge(5, x, y, mr.config.Radius)
+				canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
 				canvas.Stroke()
 			}
 		}
@@ -213,6 +218,11 @@ func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, ma
 
 // DrawRoads draws roads between tiles
 func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	// Early exit if no improvement data is present
+	if len(mapData.MapTileImprovements) == 0 {
+		return
+	}
+
 	// Draw roads between tiles
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
@@ -232,15 +242,16 @@ func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, map
 						mapData.MapTileImprovements[newY][newX].CityName != "" {
 						x2, y2 := fileio.GetImagePosition(newY, newX, mr.config.Radius)
 
-						if routeType == 1 {
+						switch routeType {
+						case 1:
 							// Railroad
 							canvas.SetLineWidth(2.0)
 							canvas.SetColor(76, 51, 0)
-						} else if routeType == 0 {
+						case 0:
 							// Road
 							canvas.SetLineWidth(1.0)
 							canvas.SetColor(51, 51, 51)
-						} else {
+						default:
 							// Unknown
 							canvas.SetLineWidth(1.0)
 							canvas.SetColor(0, 0, 0)
@@ -266,10 +277,8 @@ func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapDat
 
 	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
 
-	// Set canvas size if it's a DrawingContext
-	if dc, ok := canvas.(*DrawingContext); ok {
-		dc.dc = gg.NewContext(int(maxImageWidth), int(maxImageHeight))
-	}
+	// Resize canvas to fit the map
+	canvas.Resize(int(maxImageWidth), int(maxImageHeight))
 
 	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
 
@@ -294,6 +303,11 @@ func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapDat
 
 // DrawBorders draws borders between different territories
 func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	// Early exit if no improvement data is present
+	if len(mapData.MapTileImprovements) == 0 {
+		return
+	}
+
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			x1, y1 := fileio.GetImagePosition(i, j, mr.config.Radius)
@@ -321,16 +335,11 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 				if newX >= 0 && newY >= 0 && newX < mapWidth && newY < mapHeight {
 					otherTileOwner := mapData.MapTileImprovements[newY][newX].Owner
 					if currentTileOwner != otherTileOwner {
-						angle1 := (math.Pi / 6) + float64(n)*(math.Pi/3)
-						angle2 := (math.Pi / 6) + float64(n+1)*(math.Pi/3)
-						edgeX1 := x1 + (mr.config.Radius-1)*math.Cos(angle1)
-						edgeY1 := y1 + (mr.config.Radius-1)*math.Sin(angle1)
-						edgeX2 := x1 + (mr.config.Radius-1)*math.Cos(angle2)
-						edgeY2 := y1 + (mr.config.Radius-1)*math.Sin(angle2)
+						line := getHexEdge(n, x1, y1, mr.config.Radius-1)
 
 						canvas.SetColor(borderColor.R, borderColor.G, borderColor.B)
 						canvas.SetLineWidth(1.5)
-						canvas.DrawLine(edgeX1, edgeY1, edgeX2, edgeY2)
+						canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
 						canvas.Stroke()
 					}
 				}
@@ -340,8 +349,33 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 	canvas.SetLineWidth(1.0)
 }
 
-// DrawCityNames draws city names on the map
+// DrawCityNames draws city names on the map (white text for physical maps)
 func (mr *MapRenderer) DrawCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	// Early exit if no improvement data is present
+	if len(mapData.MapTileImprovements) == 0 {
+		return
+	}
+
+	for i := 0; i < mapHeight; i++ {
+		for j := 0; j < mapWidth; j++ {
+			// Invert depth because the map is inverted
+			x, y := fileio.GetImagePosition(mapHeight-i, j, mr.config.Radius)
+
+			tile := mapData.MapTileImprovements[i][j]
+			canvas.SetColor(255, 255, 255)
+			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
+			canvas.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-mr.config.Radius*1.5)
+		}
+	}
+}
+
+// DrawPoliticalCityNames draws city names with political colors
+func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	// Early exit if no improvement data is present
+	if len(mapData.MapTileImprovements) == 0 {
+		return
+	}
+
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			// Invert depth because the map is inverted
@@ -376,10 +410,8 @@ func (mr *MapRenderer) DrawPoliticalMap(canvas Canvas, mapData *fileio.Civ5MapDa
 
 	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
 
-	// Set canvas size if it's a DrawingContext
-	if dc, ok := canvas.(*DrawingContext); ok {
-		dc.dc = gg.NewContext(int(maxImageWidth), int(maxImageHeight))
-	}
+	// Resize canvas to fit the map
+	canvas.Resize(int(maxImageWidth), int(maxImageHeight))
 
 	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
 
@@ -393,7 +425,7 @@ func (mr *MapRenderer) DrawPoliticalMap(canvas Canvas, mapData *fileio.Civ5MapDa
 
 	canvas.InvertY()
 	// Draw city names on top of hexes
-	mr.DrawCityNames(canvas, mapData, mapHeight, mapWidth)
+	mr.DrawPoliticalCityNames(canvas, mapData, mapHeight, mapWidth)
 
 	return canvas.Image()
 }
