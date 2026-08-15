@@ -5,6 +5,7 @@
 * [Introduction](#introduction)
 * [Command-Line Usage](#command-line-usage)
 * [Examples](#examples)
+* [Running Tests](#running-tests)
 * [File Format Documentation](#file-format-documentation)
 
 ## Introduction
@@ -98,6 +99,26 @@ Set -mode=exportjson and output to have a filename ending in .json. No image wil
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="200" height="150" />
 <img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
+
+## Running Tests
+
+This project has unit tests for the `fileio` and `graphics` packages. To run the full test suite:
+
+```
+go test ./...
+```
+
+To see individual test names as they run, add `-v`:
+
+```
+go test ./... -v
+```
+
+To check test coverage:
+
+```
+go test ./... -cover
+```
 
 ## File Format Documentation
 
