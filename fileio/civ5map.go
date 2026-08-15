@@ -696,7 +696,7 @@ func reportCityOwnerMaps(cityOwnerMap map[int][]string, cityOwnerIndexMap map[in
 	if len(cityOwnerMap) == 0 {
 		fmt.Println("(empty)")
 	} else {
-		for _, owner := range getSortedKeys(cityOwnerMap) {
+		for _, owner := range GetSortedKeys(cityOwnerMap) {
 			cities := cityOwnerMap[owner]
 			if len(cities) > 0 {
 				fmt.Printf("  Owner %d: %s\n", owner, strings.Join(cities, ", "))
@@ -708,14 +708,14 @@ func reportCityOwnerMaps(cityOwnerMap map[int][]string, cityOwnerIndexMap map[in
 	if len(cityOwnerIndexMap) == 0 {
 		fmt.Println("(empty)")
 	} else {
-		for _, owner := range getSortedKeys(cityOwnerIndexMap) {
+		for _, owner := range GetSortedKeys(cityOwnerIndexMap) {
 			fmt.Printf("  Owner %d -> Index %d\n", owner, cityOwnerIndexMap[owner])
 		}
 	}
 }
 
-// getSortedKeys returns the keys of a map sorted in ascending order
-func getSortedKeys[K comparable, V any](m map[K]V) []K {
+// GetSortedKeys returns the keys of a map sorted in ascending order
+func GetSortedKeys[K comparable, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)

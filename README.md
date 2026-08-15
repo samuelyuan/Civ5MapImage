@@ -53,6 +53,14 @@ To generate a replay, you will need to provide the base map and the replay file 
 ./Civ5MapImage.exe -mode=replay -input=[map filename] -replay=[replay filename] -output=[gif filename]
 ```
 
+| Flag | Expected extension(s) | Notes |
+|------|------------------------|-------|
+| `-input` | `.civ5map` or `.json` | The base map. Use the same map the replay was recorded on — a mismatched map/replay pair (different dimensions) will fail with a validation error rather than a crash. |
+| `-replay` | `.civ5replay` or `.json` | The replay event log. A `.json` here must be a replay previously exported with `-mode=exportjson` (either directly from a `.civ5replay`, or converted from a `.civ5save` — see [Extract Replay From Save File](#extract-replay-from-save-file) below). |
+| `-output` | `.gif` | The animation is always encoded as a GIF regardless of the extension you provide, so name it `.gif` to avoid confusion. |
+
+Any other extension on `-input` or `-replay` is rejected immediately. If the map and replay are both readable but incompatible (e.g. wrong map for that replay, or a map exported without game/city data), replay generation fails fast with a descriptive error before any frames are rendered, instead of panicking partway through.
+
 ### Extract Replay From Save File
 
 To extract a replay from a save file, you will need to convert the save file into a json and use the new json as a replay file.

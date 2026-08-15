@@ -50,6 +50,11 @@ type Civ5ReplayData struct {
 	AllReplayEvents []Civ5ReplayEvent
 	DatasetNames    []string
 	DatasetValues   []Civ5ReplayCivDataset
+	// MapWidth and MapHeight are the dimensions of the map this replay was recorded on, as
+	// embedded in the .civ5replay file itself. They are 0 when unknown (e.g. a replay
+	// converted from a .civ5save file, which doesn't carry this information).
+	MapWidth  int
+	MapHeight int
 }
 
 func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
@@ -403,16 +408,9 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 
 	allReplayEvents := readEvents(streamReader)
 
-	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "mapWidth",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "mapHeight",
-		},
-	})
+	mapWidth := unsafeReadUint32(streamReader)
+	mapHeight := unsafeReadUint32(streamReader)
+	fmt.Println("Map width:", mapWidth, ", height:", mapHeight)
 
 	readArray(streamReader, "tiles", []Civ5ReplayFileConfigEntry{
 		{
@@ -448,6 +446,8 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		AllReplayEvents: allReplayEvents,
 		DatasetNames:    datasetNames,
 		DatasetValues:   datasetValues,
+		MapWidth:        int(mapWidth),
+		MapHeight:       int(mapHeight),
 	}
 
 	return &replayData, nil

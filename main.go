@@ -86,7 +86,9 @@ func main() {
 	case string(ModeReplay):
 		replayFilename := *replayFilePtr
 		replayData := fileio.LoadReplayDataFromFile(replayFilename)
-		graphics.DrawReplay(mapData, replayData, outputFilename)
+		if err := graphics.DrawReplay(mapData, replayData, outputFilename); err != nil {
+			log.Fatal("Failed to draw replay: ", err)
+		}
 		return
 	default:
 		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [physical, political, replay, exportjson].")

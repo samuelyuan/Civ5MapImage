@@ -87,19 +87,19 @@ func TestMapVersionAndScenario(t *testing.T) {
 
 func TestGetSortedKeysInt(t *testing.T) {
 	m := map[int]string{3: "c", 1: "a", 2: "b"}
-	got := getSortedKeys(m)
+	got := GetSortedKeys(m)
 	want := []int{1, 2, 3}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("getSortedKeys(int map) = %v, want %v", got, want)
+		t.Errorf("GetSortedKeys(int map) = %v, want %v", got, want)
 	}
 }
 
 func TestGetSortedKeysString(t *testing.T) {
 	m := map[string]int{"c": 3, "a": 1, "b": 2}
-	got := getSortedKeys(m)
+	got := GetSortedKeys(m)
 	want := []string{"a", "b", "c"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("getSortedKeys(string map) = %v, want %v", got, want)
+		t.Errorf("GetSortedKeys(string map) = %v, want %v", got, want)
 	}
 }
 
