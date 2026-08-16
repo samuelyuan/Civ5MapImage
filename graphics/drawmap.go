@@ -187,29 +187,8 @@ func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, ma
 			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
 			canvas.SetColor(95, 150, 148)
 
-			riverData := mapData.MapTiles[i][j].RiverData
-			isRiverSouthwest := ((riverData >> 2) & 1) != 0
-			isRiverSoutheast := ((riverData >> 1) & 1) != 0
-			isRiverEast := (riverData & 1) != 0
-
-			// Southwest river (edge 3)
-			if isRiverSouthwest {
-				line := getHexEdge(3, x, y, mr.config.Radius)
-				canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
-				canvas.Stroke()
-			}
-
-			// Southeast river (edge 4)
-			if isRiverSoutheast {
-				line := getHexEdge(4, x, y, mr.config.Radius)
-				canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
-				canvas.Stroke()
-			}
-
-			// East river (edge 5)
-			if isRiverEast {
-				line := getHexEdge(5, x, y, mr.config.Radius)
-				canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
+			for _, edge := range RiverEdgesForTile(mapData.MapTiles[i][j].RiverData, x, y, mr.config.Radius) {
+				canvas.DrawLine(edge.X1, edge.Y1, edge.X2, edge.Y2)
 				canvas.Stroke()
 			}
 		}
@@ -223,48 +202,13 @@ func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, map
 		return
 	}
 
-	// Draw roads between tiles
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x1, y1 := fileio.GetImagePosition(i, j, mr.config.Radius)
-
-			routeType := mapData.MapTileImprovements[i][j].RouteType
-			if routeType == 255 {
-				continue
-			}
-
-			neighbors := fileio.GetNeighbors(j, i)
-			for n := 0; n < len(neighbors); n++ {
-				newX := neighbors[n][0]
-				newY := neighbors[n][1]
-				if newX >= 0 && newY >= 0 && newX < mapWidth && newY < mapHeight {
-					if mapData.MapTileImprovements[newY][newX].RouteType != 255 ||
-						mapData.MapTileImprovements[newY][newX].CityName != "" {
-						x2, y2 := fileio.GetImagePosition(newY, newX, mr.config.Radius)
-
-						switch routeType {
-						case 1:
-							// Railroad
-							canvas.SetLineWidth(2.0)
-							canvas.SetColor(76, 51, 0)
-						case 0:
-							// Road
-							canvas.SetLineWidth(1.0)
-							canvas.SetColor(51, 51, 51)
-						default:
-							// Unknown
-							canvas.SetLineWidth(1.0)
-							canvas.SetColor(0, 0, 0)
-						}
-
-						// Draw only up to midpoint, which would be the tile border
-						borderX := (x1 + x2) / 2.0
-						borderY := (y1 + y2) / 2.0
-
-						canvas.DrawLine(x1, y1, borderX, borderY)
-						canvas.Stroke()
-					}
-				}
+			for _, segment := range RoadSegmentsForTile(mapData, mapHeight, mapWidth, i, j, mr.config.Radius) {
+				canvas.SetLineWidth(segment.LineWidth)
+				canvas.SetColor(segment.R, segment.G, segment.B)
+				canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
+				canvas.Stroke()
 			}
 		}
 	}
@@ -310,39 +254,11 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x1, y1 := fileio.GetImagePosition(i, j, mr.config.Radius)
-			neighbors := fileio.GetNeighbors(j, i)
-			currentTileOwner := mapData.MapTileImprovements[i][j].Owner
-			if fileio.IsInvalidTileOwner(currentTileOwner) {
-				continue
-			}
-
-			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
-			renderColor, ok := civColorMap[tileColor]
-			borderColor := color.RGBA{255, 255, 255, 255}
-			if ok {
-				if strings.Contains(fileio.GetTileCivName(mapData, i, j), "MINOR") {
-					// invert city state colors
-					borderColor = renderColor.OuterColor
-				} else {
-					borderColor = renderColor.InnerColor
-				}
-			}
-
-			for n := 0; n < len(neighbors); n++ {
-				newX := neighbors[n][0]
-				newY := neighbors[n][1]
-				if newX >= 0 && newY >= 0 && newX < mapWidth && newY < mapHeight {
-					otherTileOwner := mapData.MapTileImprovements[newY][newX].Owner
-					if currentTileOwner != otherTileOwner {
-						line := getHexEdge(n, x1, y1, mr.config.Radius-1)
-
-						canvas.SetColor(borderColor.R, borderColor.G, borderColor.B)
-						canvas.SetLineWidth(1.5)
-						canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2)
-						canvas.Stroke()
-					}
-				}
+			for _, segment := range BorderSegmentsForTile(mapData, mapHeight, mapWidth, i, j, mr.config.Radius) {
+				canvas.SetColor(segment.R, segment.G, segment.B)
+				canvas.SetLineWidth(1.5)
+				canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
+				canvas.Stroke()
 			}
 		}
 	}
@@ -358,8 +274,7 @@ func (mr *MapRenderer) DrawCityNames(canvas Canvas, mapData *fileio.Civ5MapData,
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			// Invert depth because the map is inverted
-			x, y := fileio.GetImagePosition(mapHeight-i, j, mr.config.Radius)
+			x, y := fileio.GetImagePosition(InvertedRow(mapHeight, i), j, mr.config.Radius) // see InvertedRow
 
 			tile := mapData.MapTileImprovements[i][j]
 			canvas.SetColor(255, 255, 255)
@@ -378,8 +293,7 @@ func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			// Invert depth because the map is inverted
-			x, y := fileio.GetImagePosition(mapHeight-i, j, mr.config.Radius)
+			x, y := fileio.GetImagePosition(InvertedRow(mapHeight, i), j, mr.config.Radius) // see InvertedRow
 
 			tile := mapData.MapTileImprovements[i][j]
 			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
