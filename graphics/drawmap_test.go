@@ -264,7 +264,7 @@ func TestDrawBordersInvalidOwnerSkipsTile(t *testing.T) {
 	}
 }
 
-func TestDrawCityNames(t *testing.T) {
+func TestDrawPhysicalCityNames(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(200, 200)
 
@@ -274,30 +274,30 @@ func TestDrawCityNames(t *testing.T) {
 		},
 	}
 
-	mr.DrawCityNames(canvas, mapData, 1, 1)
+	mr.DrawPhysicalCityNames(canvas, mapData, 1, 1)
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 {
-		t.Fatalf("DrawCityNames() recorded %d ops, want 2: %v", len(ops), ops)
+		t.Fatalf("DrawPhysicalCityNames() recorded %d ops, want 2: %v", len(ops), ops)
 	}
 	if ops[0] != "SetColor(255, 255, 255)" {
-		t.Errorf("DrawCityNames() color op = %q, want white", ops[0])
+		t.Errorf("DrawPhysicalCityNames() color op = %q, want white", ops[0])
 	}
 	if want := `DrawString("Rome"`; len(ops[1]) < len(want) || ops[1][:len(want)] != want {
-		t.Errorf("DrawCityNames() draw op = %q, want prefix %q", ops[1], want)
+		t.Errorf("DrawPhysicalCityNames() draw op = %q, want prefix %q", ops[1], want)
 	}
 }
 
-func TestDrawCityNamesNoImprovementsIsNoOp(t *testing.T) {
+func TestDrawPhysicalCityNamesNoImprovementsIsNoOp(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(200, 200)
 
 	mapData := &fileio.Civ5MapData{MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{}}
 
-	mr.DrawCityNames(canvas, mapData, 1, 1)
+	mr.DrawPhysicalCityNames(canvas, mapData, 1, 1)
 
 	if ops := canvas.GetOperations(); len(ops) != 0 {
-		t.Fatalf("DrawCityNames() with no improvements recorded %d ops, want 0: %v", len(ops), ops)
+		t.Fatalf("DrawPhysicalCityNames() with no improvements recorded %d ops, want 0: %v", len(ops), ops)
 	}
 }
 

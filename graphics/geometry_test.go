@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"image/color"
 	"reflect"
 	"testing"
 
@@ -197,6 +198,9 @@ func TestBorderSegmentsForTileDifferentOwnerDrawsBorder(t *testing.T) {
 	if segments[0].R != renderColor.InnerColor.R || segments[0].G != renderColor.InnerColor.G || segments[0].B != renderColor.InnerColor.B {
 		t.Errorf("segment color = (%d,%d,%d), want inner color %+v", segments[0].R, segments[0].G, segments[0].B, renderColor.InnerColor)
 	}
+	if segments[0].LineWidth != BorderLineWidth {
+		t.Errorf("segment LineWidth = %v, want %v", segments[0].LineWidth, BorderLineWidth)
+	}
 }
 
 func TestBorderSegmentsForTileUnknownColorFallsBackToWhite(t *testing.T) {
@@ -207,5 +211,64 @@ func TestBorderSegmentsForTileUnknownColorFallsBackToWhite(t *testing.T) {
 	}
 	if segments[0].R != 255 || segments[0].G != 255 || segments[0].B != 255 {
 		t.Errorf("segment color = (%d,%d,%d), want white fallback (255,255,255)", segments[0].R, segments[0].G, segments[0].B)
+	}
+}
+
+// newLabelGeometryTestMap builds a 1x1 map with a single named city tile for label tests.
+func newLabelGeometryTestMap(cityName string, owner int, teamColor, civType string) *fileio.Civ5MapData {
+	mapData := &fileio.Civ5MapData{
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{
+			{{X: 0, Y: 0, CityId: 0, CityName: cityName, Owner: owner}},
+		},
+	}
+	if civType != "" {
+		mapData.Civ5PlayerData = []*fileio.Civ5PlayerData{{Index: 0, CivType: civType, TeamColor: teamColor}}
+		mapData.CityOwnerIndexMap = map[int]int{owner: 0}
+	}
+	return mapData
+}
+
+func TestCityNameLabel(t *testing.T) {
+	const mapHeight, mapWidth, radius = 3, 1, 16.0
+	mapData := newLabelGeometryTestMap("Rome", -1, "", "")
+
+	label := CityNameLabel(mapData, mapHeight, mapWidth, 0, 0, radius)
+
+	wantX, wantY := cityLabelPosition(mapHeight, 0, 0, radius, "Rome")
+	if label.Text != "Rome" || label.X != wantX || label.Y != wantY {
+		t.Errorf("CityNameLabel() = %+v, want {Text:Rome X:%v Y:%v}", label, wantX, wantY)
+	}
+	if label.R != 255 || label.G != 255 || label.B != 255 {
+		t.Errorf("CityNameLabel() color = (%d,%d,%d), want white", label.R, label.G, label.B)
+	}
+}
+
+func TestCityNameLabelTrimsNullByte(t *testing.T) {
+	mapData := newLabelGeometryTestMap("Rome\x00garbage", -1, "", "")
+	label := CityNameLabel(mapData, 1, 1, 0, 0, 16.0)
+	if label.Text != "Rome" {
+		t.Errorf("CityNameLabel().Text = %q, want %q", label.Text, "Rome")
+	}
+}
+
+func TestPoliticalCityNameLabelKnownColor(t *testing.T) {
+	const radius = 16.0
+	mapData := newLabelGeometryTestMap("Rome", 0, "PLAYERCOLOR_BLACK", "CIVILIZATION_ROME")
+
+	label := PoliticalCityNameLabel(mapData, 1, 1, 0, 0, radius)
+
+	renderColor := civColorMap["PLAYERCOLOR_BLACK"]
+	wantColor := blendColor(renderColor.InnerColor, color.RGBA{255, 255, 255, 255}, 0.2)
+	if label.R != wantColor.R || label.G != wantColor.G || label.B != wantColor.B {
+		t.Errorf("PoliticalCityNameLabel() color = %d,%d,%d, want fully blended %d,%d,%d",
+			label.R, label.G, label.B, wantColor.R, wantColor.G, wantColor.B)
+	}
+}
+
+func TestPoliticalCityNameLabelUnknownColorFallsBackToWhite(t *testing.T) {
+	mapData := newLabelGeometryTestMap("Rome", -1, "", "")
+	label := PoliticalCityNameLabel(mapData, 1, 1, 0, 0, 16.0)
+	if label.R != 255 || label.G != 255 || label.B != 255 {
+		t.Errorf("PoliticalCityNameLabel() color = (%d,%d,%d), want white fallback", label.R, label.G, label.B)
 	}
 }

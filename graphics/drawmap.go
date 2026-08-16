@@ -109,15 +109,9 @@ func (mr *MapRenderer) DrawTerrainTiles(canvas Canvas, mapData *fileio.Civ5MapDa
 	}
 }
 
-// InterpolateColor blends two colors by the given factor
+// InterpolateColor blends two colors by the given factor (0.0 = color1, 1.0 = color2).
 func (mr *MapRenderer) InterpolateColor(color1, color2 color.RGBA, t float64) color.RGBA {
-	// t should be between 0.0 and 1.0
-	return color.RGBA{
-		uint8(float64(color1.R) + (float64(color2.R)-float64(color1.R))*t),
-		uint8(float64(color1.G) + (float64(color2.G)-float64(color1.G))*t),
-		uint8(float64(color1.B) + (float64(color2.B)-float64(color1.B))*t),
-		255,
-	}
+	return blendColor(color1, color2, t)
 }
 
 // DrawTerritoryTiles draws territory tiles for the political map
@@ -239,7 +233,7 @@ func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapDat
 	canvas.InvertY()
 
 	if len(mapData.MapTileImprovements) > 0 {
-		mr.DrawCityNames(canvas, mapData, mapHeight, mapWidth)
+		mr.DrawPhysicalCityNames(canvas, mapData, mapHeight, mapWidth)
 	}
 
 	return canvas.Image()
@@ -256,7 +250,7 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 		for j := 0; j < mapWidth; j++ {
 			for _, segment := range BorderSegmentsForTile(mapData, mapHeight, mapWidth, i, j, mr.config.Radius) {
 				canvas.SetColor(segment.R, segment.G, segment.B)
-				canvas.SetLineWidth(1.5)
+				canvas.SetLineWidth(segment.LineWidth)
 				canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
 				canvas.Stroke()
 			}
@@ -265,8 +259,8 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 	canvas.SetLineWidth(1.0)
 }
 
-// DrawCityNames draws city names on the map (white text for physical maps)
-func (mr *MapRenderer) DrawCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+// DrawPhysicalCityNames draws city names on the map (white text for physical maps)
+func (mr *MapRenderer) DrawPhysicalCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	// Early exit if no improvement data is present
 	if len(mapData.MapTileImprovements) == 0 {
 		return
@@ -274,12 +268,9 @@ func (mr *MapRenderer) DrawCityNames(canvas Canvas, mapData *fileio.Civ5MapData,
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(InvertedRow(mapHeight, i), j, mr.config.Radius) // see InvertedRow
-
-			tile := mapData.MapTileImprovements[i][j]
-			canvas.SetColor(255, 255, 255)
-			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
-			canvas.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-mr.config.Radius*1.5)
+			label := CityNameLabel(mapData, mapHeight, mapWidth, i, j, mr.config.Radius)
+			canvas.SetColor(label.R, label.G, label.B)
+			canvas.DrawString(label.Text, label.X, label.Y)
 		}
 	}
 }
@@ -293,26 +284,9 @@ func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(InvertedRow(mapHeight, i), j, mr.config.Radius) // see InvertedRow
-
-			tile := mapData.MapTileImprovements[i][j]
-			tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
-			renderColor, ok := civColorMap[tileColor]
-			if ok {
-				var cityColor color.RGBA
-				if strings.Contains(fileio.GetTileCivName(mapData, i, j), "MINOR") {
-					cityColor = renderColor.OuterColor
-				} else {
-					cityColor = renderColor.InnerColor
-				}
-				textColor := mr.GetNewCityColor(cityColor)
-				canvas.SetColor(textColor.R, textColor.G, cityColor.B)
-			} else {
-				canvas.SetColor(255, 255, 255)
-			}
-
-			cityName := string(strings.Split(string(tile.CityName[:]), "\x00")[0])
-			canvas.DrawString(cityName, x-(6.0*float64(len(cityName))/2.0), y-mr.config.Radius*1.5)
+			label := PoliticalCityNameLabel(mapData, mapHeight, mapWidth, i, j, mr.config.Radius)
+			canvas.SetColor(label.R, label.G, label.B)
+			canvas.DrawString(label.Text, label.X, label.Y)
 		}
 	}
 }
