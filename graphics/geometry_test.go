@@ -272,3 +272,124 @@ func TestPoliticalCityNameLabelUnknownColorFallsBackToWhite(t *testing.T) {
 		t.Errorf("PoliticalCityNameLabel() color = (%d,%d,%d), want white fallback", label.R, label.G, label.B)
 	}
 }
+
+func TestPhysicalHexTile(t *testing.T) {
+	const radius = 16.0
+	mapData := &fileio.Civ5MapData{
+		TerrainList: []string{"TERRAIN_OCEAN"},
+		MapTiles:    [][]*fileio.Civ5MapTilePhysical{{{TerrainType: 0}}},
+	}
+
+	hex := PhysicalHexTile(mapData, 0, 0, radius)
+
+	wantX, wantY := fileio.GetImagePosition(0, 0, radius)
+	oceanColor := fileio.GetPhysicalMapTileColor("TERRAIN_OCEAN")
+	if hex.X != wantX || hex.Y != wantY {
+		t.Errorf("PhysicalHexTile() position = (%v,%v), want (%v,%v)", hex.X, hex.Y, wantX, wantY)
+	}
+	if hex.R != oceanColor.R || hex.G != oceanColor.G || hex.B != oceanColor.B {
+		t.Errorf("PhysicalHexTile() color = (%d,%d,%d), want ocean color %+v", hex.R, hex.G, hex.B, oceanColor)
+	}
+}
+
+func TestPoliticalHexTileWater(t *testing.T) {
+	mapData := newTerritoryTestMapData(1 /* TERRAIN_OCEAN */, -1, "", "")
+	hex, cityColor := PoliticalHexTile(mapData, 0, 0, 16.0)
+
+	oceanColor := fileio.GetPhysicalMapTileColor("TERRAIN_OCEAN")
+	if hex.R != oceanColor.R || hex.G != oceanColor.G || hex.B != oceanColor.B {
+		t.Errorf("PoliticalHexTile() water color = (%d,%d,%d), want ocean color %+v", hex.R, hex.G, hex.B, oceanColor)
+	}
+	if cityColor != (color.RGBA{255, 255, 255, 255}) {
+		t.Errorf("PoliticalHexTile() cityColor = %+v, want white", cityColor)
+	}
+}
+
+func TestPoliticalHexTileUnownedLand(t *testing.T) {
+	mapData := newTerritoryTestMapData(0 /* TERRAIN_GRASS */, -1, "", "")
+	hex, _ := PoliticalHexTile(mapData, 0, 0, 16.0)
+
+	grassColor := fileio.GetPhysicalMapTileColor("TERRAIN_GRASS")
+	if hex.R != grassColor.R || hex.G != grassColor.G || hex.B != grassColor.B {
+		t.Errorf("PoliticalHexTile() unowned color = (%d,%d,%d), want grass color %+v", hex.R, hex.G, hex.B, grassColor)
+	}
+}
+
+func TestPoliticalHexTileOwnedKnownColor(t *testing.T) {
+	mapData := newTerritoryTestMapData(0, 0, "PLAYERCOLOR_BLACK", "CIVILIZATION_ROME")
+	hex, cityColor := PoliticalHexTile(mapData, 0, 0, 16.0)
+
+	renderColor := civColorMap["PLAYERCOLOR_BLACK"]
+	wantBackground := blendColor(renderColor.OuterColor, color.RGBA{255, 255, 255, 255}, 0.2)
+	if hex.R != wantBackground.R || hex.G != wantBackground.G || hex.B != wantBackground.B {
+		t.Errorf("PoliticalHexTile() background = (%d,%d,%d), want %+v", hex.R, hex.G, hex.B, wantBackground)
+	}
+	if cityColor != renderColor.InnerColor {
+		t.Errorf("PoliticalHexTile() cityColor = %+v, want inner color %+v", cityColor, renderColor.InnerColor)
+	}
+}
+
+func TestPoliticalHexTileOwnedUnknownColor(t *testing.T) {
+	mapData := newTerritoryTestMapData(0, 0, "PLAYERCOLOR_DOES_NOT_EXIST", "CIVILIZATION_ROME")
+	hex, _ := PoliticalHexTile(mapData, 0, 0, 16.0)
+	if hex.R != 0 || hex.G != 0 || hex.B != 0 {
+		t.Errorf("PoliticalHexTile() unknown-owner color = (%d,%d,%d), want black", hex.R, hex.G, hex.B)
+	}
+}
+
+func TestTileEntitiesMountain(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
+	}
+	entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255})
+	if len(entities) != 1 || entities[0].Type != EntityMountain {
+		t.Fatalf("TileEntities() = %+v, want a single EntityMountain", entities)
+	}
+}
+
+func TestTileEntitiesCity(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
+	}
+	cityColor := color.RGBA{10, 20, 30, 255}
+	entities := TileEntities(mapData, 0, 0, 16.0, cityColor)
+	if len(entities) != 1 || entities[0].Type != EntityCity {
+		t.Fatalf("TileEntities() = %+v, want a single EntityCity", entities)
+	}
+	if entities[0].R != cityColor.R || entities[0].G != cityColor.G || entities[0].B != cityColor.B {
+		t.Errorf("TileEntities() city color = (%d,%d,%d), want %+v", entities[0].R, entities[0].G, entities[0].B, cityColor)
+	}
+}
+
+func TestTileEntitiesMountainAndCity(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
+	}
+	entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255})
+	if len(entities) != 2 || entities[0].Type != EntityMountain || entities[1].Type != EntityCity {
+		t.Fatalf("TileEntities() = %+v, want [EntityMountain, EntityCity] in that order", entities)
+	}
+}
+
+func TestTileEntitiesNone(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
+	}
+	if entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255}); entities != nil {
+		t.Errorf("TileEntities() = %v, want nil", entities)
+	}
+}
+
+func TestTileEntitiesNoImprovementDataIsSafe(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{},
+	}
+	if entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255}); entities != nil {
+		t.Errorf("TileEntities() with no improvement data = %v, want nil", entities)
+	}
+}

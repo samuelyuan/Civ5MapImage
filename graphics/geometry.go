@@ -2,10 +2,32 @@ package graphics
 
 import (
 	"image/color"
+	"math"
 	"strings"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
+
+// Line represents a line with start and end points.
+type Line struct {
+	X1, Y1, X2, Y2 float64
+}
+
+// getHexEdge calculates the coordinates for a specific hexagon edge.
+// edgeIndex: 0-5 representing the 6 edges of a hexagon
+// centerX, centerY: center of the hexagon
+// radius: radius of the hexagon (can be adjusted for inner/outer edges)
+func getHexEdge(edgeIndex int, centerX, centerY, radius float64) Line {
+	angle1 := (math.Pi / 6) + float64(edgeIndex)*(math.Pi/3)
+	angle2 := (math.Pi / 6) + float64(edgeIndex+1)*(math.Pi/3)
+
+	return Line{
+		X1: centerX + radius*math.Cos(angle1),
+		Y1: centerY + radius*math.Sin(angle1),
+		X2: centerX + radius*math.Cos(angle2),
+		Y2: centerY + radius*math.Sin(angle2),
+	}
+}
 
 // InvertedRow mirrors a row against mapHeight, for city name labels only: they're drawn after a
 // second InvertY() cancels the first back to identity (InvertY()'s transform mirrors text
@@ -21,6 +43,85 @@ type ColoredLine struct {
 	Line      Line
 	LineWidth float64
 	R, G, B   uint8
+}
+
+// HexTile is a hex tile's screen position and fill color.
+type HexTile struct {
+	X, Y    float64
+	R, G, B uint8
+}
+
+// PhysicalHexTile returns tile (row, col)'s position and terrain fill color for the physical map.
+func PhysicalHexTile(mapData *fileio.Civ5MapData, row, col int, radius float64) HexTile {
+	x, y := fileio.GetImagePosition(row, col, radius)
+	c := fileio.GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, row, col))
+	return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}
+}
+
+// PoliticalHexTile returns tile (row, col)'s position and fill color for the political map, plus
+// the color a city icon on this tile should use (white if the tile has no recognized owner).
+func PoliticalHexTile(mapData *fileio.Civ5MapData, row, col int, radius float64) (HexTile, color.RGBA) {
+	x, y := fileio.GetImagePosition(row, col, radius)
+	cityColor := color.RGBA{255, 255, 255, 255}
+
+	if fileio.IsWaterTile(mapData, row, col) {
+		c := fileio.GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, row, col))
+		return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}, cityColor
+	}
+
+	tileColor := fileio.GetPoliticalMapTileColor(mapData, row, col)
+	renderColor, ok := civColorMap[tileColor]
+	if !ok {
+		if tileColor != "" {
+			// No color, but tile is owned by a civ or city state.
+			return HexTile{X: x, Y: y}, cityColor
+		}
+		// Territory not owned by anyone.
+		c := fileio.GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, row, col))
+		return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}, cityColor
+	}
+
+	white := color.RGBA{255, 255, 255, 255}
+	var background color.RGBA
+	if strings.Contains(fileio.GetTileCivName(mapData, row, col), "MINOR") {
+		cityColor = renderColor.OuterColor
+		background = blendColor(renderColor.InnerColor, white, 0.1)
+	} else {
+		cityColor = renderColor.InnerColor
+		background = blendColor(renderColor.OuterColor, white, 0.2)
+	}
+	return HexTile{X: x, Y: y, R: background.R, G: background.G, B: background.B}, cityColor
+}
+
+// EntityType identifies what a map marker represents. The shape used to draw each type (e.g. a
+// triangle for a mountain, a square for a city) is a drawing-layer decision, not encoded here.
+type EntityType string
+
+const (
+	EntityMountain EntityType = "mountain"
+	EntityCity     EntityType = "city"
+)
+
+// Entity is a marker to draw at a tile position.
+type Entity struct {
+	Type    EntityType
+	X, Y    float64
+	R, G, B uint8
+}
+
+// TileEntities returns the mountain/city markers for tile (row, col), or nil if it has neither.
+// cityColor is used for a city marker, if present.
+func TileEntities(mapData *fileio.Civ5MapData, row, col int, radius float64, cityColor color.RGBA) []Entity {
+	x, y := fileio.GetImagePosition(row, col, radius)
+
+	var entities []Entity
+	if fileio.TileHasMountain(mapData, row, col) {
+		entities = append(entities, Entity{Type: EntityMountain, X: x, Y: y})
+	}
+	if fileio.TileHasCity(mapData, row, col) {
+		entities = append(entities, Entity{Type: EntityCity, X: x, Y: y, R: cityColor.R, G: cityColor.G, B: cityColor.B})
+	}
+	return entities
 }
 
 // RiverEdgesForTile decodes a RiverData bitmask into hex edge lines. Only southwest/southeast/

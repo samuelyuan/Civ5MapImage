@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"strings"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
@@ -13,27 +12,6 @@ import (
 // DrawingConfig holds configuration for map drawing
 type DrawingConfig struct {
 	Radius float64
-}
-
-// Line represents a line with start and end points
-type Line struct {
-	X1, Y1, X2, Y2 float64
-}
-
-// getHexEdge calculates the coordinates for a specific hexagon edge
-// edgeIndex: 0-5 representing the 6 edges of a hexagon
-// centerX, centerY: center of the hexagon
-// radius: radius of the hexagon (can be adjusted for inner/outer edges)
-func getHexEdge(edgeIndex int, centerX, centerY, radius float64) Line {
-	angle1 := (math.Pi / 6) + float64(edgeIndex)*(math.Pi/3)
-	angle2 := (math.Pi / 6) + float64(edgeIndex+1)*(math.Pi/3)
-
-	return Line{
-		X1: centerX + radius*math.Cos(angle1),
-		Y1: centerY + radius*math.Sin(angle1),
-		X2: centerX + radius*math.Cos(angle2),
-		Y2: centerY + radius*math.Sin(angle2),
-	}
 }
 
 // DefaultDrawingConfig returns the default drawing configuration
@@ -82,28 +60,27 @@ func (mr *MapRenderer) DrawCityIcon(canvas Canvas, imageX, imageY float64, cityC
 	canvas.Fill()
 }
 
+// drawEntity draws a single Entity using the shape appropriate to its Type.
+func (mr *MapRenderer) drawEntity(canvas Canvas, entity Entity) {
+	switch entity.Type {
+	case EntityMountain:
+		mr.DrawMountain(canvas, entity.X, entity.Y)
+	case EntityCity:
+		mr.DrawCityIcon(canvas, entity.X, entity.Y, color.RGBA{entity.R, entity.G, entity.B, 255})
+	}
+}
+
 // DrawTerrainTiles draws all terrain tiles for the physical map
 func (mr *MapRenderer) DrawTerrainTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
-
-			canvas.DrawRegularPolygon(6, x, y, mr.config.Radius, math.Pi/2)
-			terrainString := fileio.GetTerrainString(mapData, i, j)
-			tileColor := fileio.GetPhysicalMapTileColor(terrainString)
-			canvas.SetColor(tileColor.R, tileColor.G, tileColor.B)
+			hex := PhysicalHexTile(mapData, i, j, mr.config.Radius)
+			canvas.DrawRegularPolygon(6, hex.X, hex.Y, mr.config.Radius, math.Pi/2)
+			canvas.SetColor(hex.R, hex.G, hex.B)
 			canvas.Fill()
 
-			// Draw mountains
-			if fileio.TileHasMountain(mapData, i, j) {
-				mr.DrawMountain(canvas, x, y)
-			}
-
-			// Draw cities
-			if len(mapData.MapTileImprovements) > 0 {
-				if fileio.TileHasCity(mapData, i, j) {
-					mr.DrawCityIcon(canvas, x, y, color.RGBA{255, 255, 255, 255})
-				}
+			for _, entity := range TileEntities(mapData, i, j, mr.config.Radius, color.RGBA{255, 255, 255, 255}) {
+				mr.drawEntity(canvas, entity)
 			}
 		}
 	}
@@ -118,57 +95,13 @@ func (mr *MapRenderer) InterpolateColor(color1, color2 color.RGBA, t float64) co
 func (mr *MapRenderer) DrawTerritoryTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
+			hex, cityColor := PoliticalHexTile(mapData, i, j, mr.config.Radius)
+			canvas.DrawRegularPolygon(6, hex.X, hex.Y, mr.config.Radius, math.Pi/2)
+			canvas.SetColor(hex.R, hex.G, hex.B)
+			canvas.Fill()
 
-			canvas.DrawRegularPolygon(6, x, y, mr.config.Radius, math.Pi/2)
-
-			cityColor := color.RGBA{255, 255, 255, 255}
-			if fileio.IsWaterTile(mapData, i, j) {
-				terrainString := fileio.GetTerrainString(mapData, i, j)
-				terrainTileColor := fileio.GetPhysicalMapTileColor(terrainString)
-				canvas.SetColor(terrainTileColor.R, terrainTileColor.G, terrainTileColor.B)
-				canvas.Fill()
-			} else {
-				tileColor := fileio.GetPoliticalMapTileColor(mapData, i, j)
-
-				renderColor, ok := civColorMap[tileColor]
-
-				if ok {
-					white := color.RGBA{255, 255, 255, 255}
-					if strings.Contains(fileio.GetTileCivName(mapData, i, j), "MINOR") {
-						// Invert city state colors
-						background := renderColor.InnerColor
-						cityColor = renderColor.OuterColor
-						newBackground := mr.InterpolateColor(background, white, 0.1)
-						canvas.SetColor(newBackground.R, newBackground.G, newBackground.B)
-					} else {
-						background := renderColor.OuterColor
-						cityColor = renderColor.InnerColor
-						newBackground := mr.InterpolateColor(background, white, 0.2)
-						canvas.SetColor(newBackground.R, newBackground.G, newBackground.B)
-					}
-					canvas.Fill()
-				} else if tileColor != "" {
-					// No color, but tile is owned by civ or city state
-					canvas.SetColor(0, 0, 0)
-					canvas.Fill()
-				} else {
-					// Territory not owned by anyone
-					terrainString := fileio.GetTerrainString(mapData, i, j)
-					terrainTileColor := fileio.GetPhysicalMapTileColor(terrainString)
-					canvas.SetColor(terrainTileColor.R, terrainTileColor.G, terrainTileColor.B)
-					canvas.Fill()
-				}
-			}
-
-			// Draw mountains
-			if mapData.MapTiles[i][j].Elevation == 2 {
-				mr.DrawMountain(canvas, x, y)
-			}
-
-			// Draw cities
-			if fileio.TileHasCity(mapData, i, j) {
-				mr.DrawCityIcon(canvas, x, y, cityColor)
+			for _, entity := range TileEntities(mapData, i, j, mr.config.Radius, cityColor) {
+				mr.drawEntity(canvas, entity)
 			}
 		}
 	}
