@@ -228,26 +228,26 @@ func newLabelGeometryTestMap(cityName string, owner int, teamColor, civType stri
 	return mapData
 }
 
-func TestCityNameLabel(t *testing.T) {
+func TestPhysicalCityNameLabel(t *testing.T) {
 	const mapHeight, mapWidth, radius = 3, 1, 16.0
 	mapData := newLabelGeometryTestMap("Rome", -1, "", "")
 
-	label := CityNameLabel(mapData, mapHeight, mapWidth, 0, 0, radius)
+	label := PhysicalCityNameLabel(mapData, mapHeight, mapWidth, 0, 0, radius)
 
 	wantX, wantY := cityLabelPosition(mapHeight, 0, 0, radius, "Rome")
 	if label.Text != "Rome" || label.X != wantX || label.Y != wantY {
-		t.Errorf("CityNameLabel() = %+v, want {Text:Rome X:%v Y:%v}", label, wantX, wantY)
+		t.Errorf("PhysicalCityNameLabel() = %+v, want {Text:Rome X:%v Y:%v}", label, wantX, wantY)
 	}
 	if label.R != 255 || label.G != 255 || label.B != 255 {
-		t.Errorf("CityNameLabel() color = (%d,%d,%d), want white", label.R, label.G, label.B)
+		t.Errorf("PhysicalCityNameLabel() color = (%d,%d,%d), want white", label.R, label.G, label.B)
 	}
 }
 
-func TestCityNameLabelTrimsNullByte(t *testing.T) {
+func TestPhysicalCityNameLabelTrimsNullByte(t *testing.T) {
 	mapData := newLabelGeometryTestMap("Rome\x00garbage", -1, "", "")
-	label := CityNameLabel(mapData, 1, 1, 0, 0, 16.0)
+	label := PhysicalCityNameLabel(mapData, 1, 1, 0, 0, 16.0)
 	if label.Text != "Rome" {
-		t.Errorf("CityNameLabel().Text = %q, want %q", label.Text, "Rome")
+		t.Errorf("PhysicalCityNameLabel().Text = %q, want %q", label.Text, "Rome")
 	}
 }
 

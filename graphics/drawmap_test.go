@@ -120,9 +120,9 @@ func TestDrawRiversDrawsEachEdgePresent(t *testing.T) {
 	mr.DrawRivers(canvas, mapData, 1, 1)
 
 	ops := canvas.GetOperations()
-	// 1 SetColor + 3 edges * (DrawLine + Stroke) = 7 ops
-	if len(ops) != 7 {
-		t.Fatalf("DrawRivers() recorded %d ops, want 7: %v", len(ops), ops)
+	// 1 SetColor + 1 SetLineWidth + 3 edges * (DrawLine + Stroke) = 8 ops
+	if len(ops) != 8 {
+		t.Fatalf("DrawRivers() recorded %d ops, want 8: %v", len(ops), ops)
 	}
 }
 
@@ -139,9 +139,9 @@ func TestDrawRiversNoRiverData(t *testing.T) {
 	mr.DrawRivers(canvas, mapData, 1, 1)
 
 	ops := canvas.GetOperations()
-	// Only the unconditional SetColor call.
-	if len(ops) != 1 {
-		t.Fatalf("DrawRivers() recorded %d ops, want 1: %v", len(ops), ops)
+	// Only the unconditional SetColor + SetLineWidth calls.
+	if len(ops) != 2 {
+		t.Fatalf("DrawRivers() recorded %d ops, want 2: %v", len(ops), ops)
 	}
 }
 
@@ -225,13 +225,12 @@ func TestDrawBordersDrawsLineBetweenDifferentOwners(t *testing.T) {
 	mr.DrawBorders(canvas, mapData, 1, 2)
 
 	ops := canvas.GetOperations()
-	// Each tile draws one border edge to the other: SetColor + SetLineWidth + DrawLine + Stroke = 4 ops each,
-	// plus a trailing SetLineWidth(1.0) reset at the end of the function.
-	if len(ops) != 9 {
-		t.Fatalf("DrawBorders() recorded %d ops, want 9: %v", len(ops), ops)
+	// Each tile draws one border edge to the other: SetColor + SetLineWidth + DrawLine + Stroke = 4 ops each.
+	if len(ops) != 8 {
+		t.Fatalf("DrawBorders() recorded %d ops, want 8: %v", len(ops), ops)
 	}
-	if last := ops[len(ops)-1]; last != "SetLineWidth(1.00)" {
-		t.Errorf("DrawBorders() last op = %q, want SetLineWidth(1.00)", last)
+	if last := ops[len(ops)-1]; last != "Stroke()" {
+		t.Errorf("DrawBorders() last op = %q, want Stroke()", last)
 	}
 }
 
@@ -243,10 +242,8 @@ func TestDrawBordersSameOwnerDrawsNothing(t *testing.T) {
 
 	mr.DrawBorders(canvas, mapData, 1, 2)
 
-	ops := canvas.GetOperations()
-	// No border edges drawn, but the trailing SetLineWidth reset still happens.
-	if len(ops) != 1 || ops[0] != "SetLineWidth(1.00)" {
-		t.Fatalf("DrawBorders() with same owner recorded %v, want just [SetLineWidth(1.00)]", ops)
+	if ops := canvas.GetOperations(); len(ops) != 0 {
+		t.Fatalf("DrawBorders() with same owner recorded %v, want no ops", ops)
 	}
 }
 
@@ -258,9 +255,8 @@ func TestDrawBordersInvalidOwnerSkipsTile(t *testing.T) {
 
 	mr.DrawBorders(canvas, mapData, 1, 2)
 
-	ops := canvas.GetOperations()
-	if len(ops) != 1 || ops[0] != "SetLineWidth(1.00)" {
-		t.Fatalf("DrawBorders() with invalid owners recorded %v, want just [SetLineWidth(1.00)]", ops)
+	if ops := canvas.GetOperations(); len(ops) != 0 {
+		t.Fatalf("DrawBorders() with invalid owners recorded %v, want no ops", ops)
 	}
 }
 

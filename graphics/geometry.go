@@ -273,9 +273,9 @@ func blendColor(c1, c2 color.RGBA, t float64) color.RGBA {
 	}
 }
 
-// CityNameLabel returns tile (row, col)'s city name label in white -- used for the physical map,
+// PhysicalCityNameLabel returns tile (row, col)'s city name label in white -- used for the physical map,
 // where labels aren't colored by ownership.
-func CityNameLabel(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int, radius float64) ColoredText {
+func PhysicalCityNameLabel(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int, radius float64) ColoredText {
 	cityName := cityNameText(mapData, row, col)
 	x, y := cityLabelPosition(mapHeight, row, col, radius, cityName)
 	return ColoredText{Text: cityName, X: x, Y: y, R: 255, G: 255, B: 255}

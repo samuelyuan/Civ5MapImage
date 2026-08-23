@@ -113,6 +113,7 @@ func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, ma
 		for j := 0; j < mapWidth; j++ {
 			x, y := fileio.GetImagePosition(i, j, mr.config.Radius)
 			canvas.SetColor(95, 150, 148)
+			canvas.SetLineWidth(1.0)
 
 			for _, edge := range RiverEdgesForTile(mapData.MapTiles[i][j].RiverData, x, y, mr.config.Radius) {
 				canvas.DrawLine(edge.X1, edge.Y1, edge.X2, edge.Y2)
@@ -158,16 +159,11 @@ func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapDat
 
 	mr.DrawTerrainTiles(canvas, mapData, mapHeight, mapWidth)
 	mr.DrawRivers(canvas, mapData, mapHeight, mapWidth)
-	if len(mapData.MapTileImprovements) > 0 {
-		mr.DrawRoads(canvas, mapData, mapHeight, mapWidth)
-	}
+	mr.DrawRoads(canvas, mapData, mapHeight, mapWidth)
 
 	// Draw city names on top of hexes
 	canvas.InvertY()
-
-	if len(mapData.MapTileImprovements) > 0 {
-		mr.DrawPhysicalCityNames(canvas, mapData, mapHeight, mapWidth)
-	}
+	mr.DrawPhysicalCityNames(canvas, mapData, mapHeight, mapWidth)
 
 	return canvas.Image()
 }
@@ -189,7 +185,6 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 			}
 		}
 	}
-	canvas.SetLineWidth(1.0)
 }
 
 // DrawPhysicalCityNames draws city names on the map (white text for physical maps)
@@ -201,7 +196,7 @@ func (mr *MapRenderer) DrawPhysicalCityNames(canvas Canvas, mapData *fileio.Civ5
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			label := CityNameLabel(mapData, mapHeight, mapWidth, i, j, mr.config.Radius)
+			label := PhysicalCityNameLabel(mapData, mapHeight, mapWidth, i, j, mr.config.Radius)
 			canvas.SetColor(label.R, label.G, label.B)
 			canvas.DrawString(label.Text, label.X, label.Y)
 		}
