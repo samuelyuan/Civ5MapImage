@@ -12,12 +12,107 @@ type Civ5ReplayFileConfigEntry struct {
 	VariableName string
 }
 
+var worldSizeNames = []string{
+	"WORLDSIZE_DUEL",
+	"WORLDSIZE_TINY",
+	"WORLDSIZE_SMALL",
+	"WORLDSIZE_STANDARD",
+	"WORLDSIZE_LARGE",
+	"WORLDSIZE_HUGE",
+}
+
+var gameSpeedNames = []string{
+	"GAMESPEED_MARATHON",
+	"GAMESPEED_EPIC",
+	"GAMESPEED_STANDARD",
+	"GAMESPEED_QUICK",
+}
+
+var climateNames = []string{
+	"CLIMATE_TEMPERATE",
+	"CLIMATE_TROPICAL",
+	"CLIMATE_ARID",
+	"CLIMATE_ROCKY",
+	"CLIMATE_COLD",
+}
+
+var seaLevelNames = []string{
+	"SEALEVEL_LOW",
+	"SEALEVEL_MEDIUM",
+	"SEALEVEL_HIGH",
+}
+
+var eraNames = []string{
+	"ERA_ANCIENT",
+	"ERA_CLASSICAL",
+	"ERA_MEDIEVAL",
+	"ERA_RENAISSANCE",
+	"ERA_INDUSTRIAL",
+	"ERA_MODERN",
+	"ERA_POSTMODERN",
+	"ERA_FUTURE",
+}
+
+var victoryTypeNames = []string{
+	"VICTORY_TIME",
+	"VICTORY_SPACE_RACE",
+	"VICTORY_DOMINATION",
+	"VICTORY_CULTURAL",
+	"VICTORY_DIPLOMATIC",
+}
+
+var handicapNames = []string{
+	"HANDICAP_SETTLER",
+	"HANDICAP_CHIEFTAIN",
+	"HANDICAP_WARLORD",
+	"HANDICAP_PRINCE",
+	"HANDICAP_KING",
+	"HANDICAP_EMPEROR",
+	"HANDICAP_IMMORTAL",
+	"HANDICAP_DEITY",
+}
+
+var plotTypeNames = []string{
+	"PLOT_MOUNTAIN",
+	"PLOT_HILLS",
+	"PLOT_LAND",
+	"PLOT_OCEAN",
+}
+
+var gameOptionNames = []string{
+	"GAMEOPTION_NO_CITY_RAZING",
+	"GAMEOPTION_NO_BARBARIANS",
+	"GAMEOPTION_RAGING_BARBARIANS",
+	"GAMEOPTION_ALWAYS_WAR",
+	"GAMEOPTION_ALWAYS_PEACE",
+	"GAMEOPTION_ONE_CITY_CHALLENGE",
+	"GAMEOPTION_NO_CHANGING_WAR_PEACE",
+	"GAMEOPTION_NEW_RANDOM_SEED",
+	"GAMEOPTION_LOCK_MODS",
+	"GAMEOPTION_COMPLETE_KILLS",
+	"GAMEOPTION_NO_GOODY_HUTS",
+	"GAMEOPTION_RANDOM_PERSONALITIES",
+	"GAMEOPTION_POLICY_SAVING",
+	"GAMEOPTION_PROMOTION_SAVING",
+	"GAMEOPTION_END_TURN_TIMER_ENABLED",
+	"GAMEOPTION_QUICK_COMBAT",
+	"GAMEOPTION_DISABLE_START_BIAS",
+	"GAMEOPTION_NO_SCIENCE",
+	"GAMEOPTION_NO_POLICIES",
+	"GAMEOPTION_NO_HAPPINESS",
+	"GAMEOPTION_NO_TUTORIAL",
+	"GAMEOPTION_NO_RELIGION",
+}
+
 type Civ5ReplayCiv struct {
-	UnknownVariables [4]int
-	Leader           string
-	LongName         string
-	Name             string
-	Demonym          string
+	CivilizationIndex int
+	LeaderTypeIndex   int
+	PlayerColorIndex  int
+	Difficulty        string
+	Leader            string
+	LongName          string
+	Name              string
+	Demonym           string
 }
 
 type Civ5ReplayEventTile struct {
@@ -55,6 +150,15 @@ type Civ5ReplayData struct {
 	// converted from a .civ5save file, which doesn't carry this information).
 	MapWidth  int
 	MapHeight int
+
+	WorldSize       string
+	Climate         string
+	SeaLevel        string
+	GameSpeed       string
+	Era             string
+	VictoryTypes    []string
+	VictoryAchieved string
+	GameOptions     []string
 }
 
 func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
@@ -62,10 +166,10 @@ func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
 	allCivs := make([]Civ5ReplayCiv, 0)
 
 	for i := 0; i < int(civsLength); i++ {
-		unknownVariable1 := unsafeReadUint32(reader)
-		unknownVariable2 := unsafeReadUint32(reader)
-		unknownVariable3 := unsafeReadUint32(reader)
-		unknownVariable4 := unsafeReadUint32(reader)
+		civilizationIndex := unsafeReadUint32(reader)
+		leaderTypeIndex := unsafeReadUint32(reader)
+		playerColorIndex := unsafeReadUint32(reader)
+		difficultyIndex := unsafeReadUint32(reader)
 		leader, err := readVarString(reader, "leader")
 		if err != nil {
 			panic(fmt.Sprintf("failed to read leader: %v", err))
@@ -84,11 +188,14 @@ func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
 		}
 
 		civData := Civ5ReplayCiv{
-			UnknownVariables: [4]int{int(unknownVariable1), int(unknownVariable2), int(unknownVariable3), int(unknownVariable4)},
-			Leader:           leader,
-			LongName:         longName,
-			Name:             name,
-			Demonym:          demonym,
+			CivilizationIndex: int(civilizationIndex),
+			LeaderTypeIndex:   int(leaderTypeIndex),
+			PlayerColorIndex:  int(playerColorIndex),
+			Difficulty:        typeName(handicapNames, int(difficultyIndex)),
+			Leader:            leader,
+			LongName:          longName,
+			Name:              name,
+			Demonym:           demonym,
 		}
 		allCivs = append(allCivs, civData)
 	}
@@ -230,7 +337,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 		{
 			VariableType: "uint32",
-			VariableName: "unknownBlock1",
+			VariableName: "unknownUint1",
 		},
 		{
 			VariableType: "varstring",
@@ -246,7 +353,7 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 		{
 			VariableType: "bytearray:1",
-			VariableName: "unknownBlock2",
+			VariableName: "unknownByte1",
 		},
 	})
 	if err != nil {
@@ -329,8 +436,12 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 			VariableName: "playerColor",
 		},
 		{
-			VariableType: "bytearray:8",
-			VariableName: "unknownBlock5",
+			VariableType: "uint32",
+			VariableName: "replayVersion",
+		},
+		{
+			VariableType: "uint32",
+			VariableName: "activePlayerIndex",
 		},
 		{
 			VariableType: "varstring",
@@ -338,37 +449,46 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 	})
 
-	// This block doesn't seem to have a pattern
-	unknownVersion := unsafeReadUint32(streamReader)
-	unknownArr := make([]int, 0)
-	fmt.Println("Unknown version:", unknownVersion)
-	unknownArr = append(unknownArr, int(unknownVersion))
-	for i := 0; i < 4; i++ {
+	worldSizeIndex := unsafeReadUint32(streamReader)
+	worldSizeName := typeName(worldSizeNames, int(worldSizeIndex))
+	fmt.Println("World size:", worldSizeName)
+
+	climateIndex := unsafeReadUint32(streamReader)
+	seaLevelIndex := unsafeReadUint32(streamReader)
+	eraIndex := unsafeReadUint32(streamReader)
+	gameSpeedIndex := unsafeReadUint32(streamReader)
+	climateName := typeName(climateNames, int(climateIndex))
+	seaLevelName := typeName(seaLevelNames, int(seaLevelIndex))
+	eraName := typeName(eraNames, int(eraIndex))
+	gameSpeedName := typeName(gameSpeedNames, int(gameSpeedIndex))
+	fmt.Println("Climate:", climateName)
+	fmt.Println("Sea level:", seaLevelName)
+	fmt.Println("Era:", eraName)
+	fmt.Println("Game speed:", gameSpeedName)
+
+	gameOptionCount := unsafeReadUint32(streamReader)
+	gameOptions := make([]string, 0, gameOptionCount)
+	for i := 0; i < int(gameOptionCount); i++ {
 		value := unsafeReadUint32(streamReader)
-		unknownArr = append(unknownArr, int(value))
+		gameOptions = append(gameOptions, typeName(gameOptionNames, int(value)))
 	}
+	fmt.Println("Game options enabled:", gameOptions)
 
-	unknownCount := unsafeReadUint32(streamReader)
-	unknownArr = append(unknownArr, int(unknownCount))
-
-	for i := 0; i < int(unknownCount); i++ {
+	victoryTypeCount := unsafeReadUint32(streamReader)
+	victoryTypes := make([]string, 0, victoryTypeCount)
+	for i := 0; i < int(victoryTypeCount); i++ {
 		value := unsafeReadUint32(streamReader)
-		unknownArr = append(unknownArr, int(value))
+		victoryTypes = append(victoryTypes, typeName(victoryTypeNames, int(value)))
 	}
+	fmt.Println("Victory types enabled:", victoryTypes)
 
-	unknownCount2 := unsafeReadUint32(streamReader)
-	unknownArr = append(unknownArr, int(unknownCount2))
+	victoryTypeIndex := int32(unsafeReadUint32(streamReader))
+	victoryTypeName := typeName(victoryTypeNames, int(victoryTypeIndex))
+	fmt.Println("Victory type (index):", victoryTypeIndex, "name:", victoryTypeName)
 
-	for i := 0; i < int(unknownCount2)+1; i++ {
-		value := unsafeReadUint32(streamReader)
-		unknownArr = append(unknownArr, int(value))
-	}
-	fmt.Println("Unknown array:", unknownArr)
-
-	// Read one byte of padding
-	unknownBlock2 := [1]byte{}
-	if err := binary.Read(streamReader, binary.LittleEndian, &unknownBlock2); err != nil {
-		return nil, fmt.Errorf("failed to read padding block: %w", err)
+	unknownByte2 := [1]byte{}
+	if err := binary.Read(streamReader, binary.LittleEndian, &unknownByte2); err != nil {
+		return nil, fmt.Errorf("failed to read block: %w", err)
 	}
 
 	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
@@ -415,27 +535,27 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	readArray(streamReader, "tiles", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "uint32",
-			VariableName: "unknownVariable1",
+			VariableName: "mapEntryCount",
 		},
 		{
 			VariableType: "uint32",
-			VariableName: "unknownVariable2",
+			VariableName: "turnKey",
 		},
 		{
 			VariableType: "uint8",
-			VariableName: "elevationId",
+			VariableName: "plotTypeIndex",
 		},
 		{
 			VariableType: "uint8",
-			VariableName: "typeId",
+			VariableName: "terrainIndex",
 		},
 		{
 			VariableType: "uint8",
-			VariableName: "featureId",
+			VariableName: "featureIndex",
 		},
 		{
 			VariableType: "uint8",
-			VariableName: "unknownVariable3",
+			VariableName: "riverBits",
 		},
 	})
 
@@ -448,6 +568,14 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		DatasetValues:   datasetValues,
 		MapWidth:        int(mapWidth),
 		MapHeight:       int(mapHeight),
+		WorldSize:       worldSizeName,
+		Climate:         climateName,
+		SeaLevel:        seaLevelName,
+		GameSpeed:       gameSpeedName,
+		Era:             eraName,
+		VictoryTypes:    victoryTypes,
+		GameOptions:     gameOptions,
+		VictoryAchieved: victoryTypeName,
 	}
 
 	return &replayData, nil

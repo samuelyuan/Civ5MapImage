@@ -11,14 +11,28 @@ This document describes the technical file formats used by Civilization 5 for ma
   + [Map tile data](#map-tile-data)
   + [Game description header](#game-description-header)
   + [Game description data](#game-description-data)
+  + [Free-list allocator](#free-list-allocator)
   + [Unit data format](#unit-data-format)
+    - [Owner encoding](#owner-encoding)
+    - [Unit name array](#unit-name-array)
   + [City format](#city-format)
-  + [Unknown block](#unknown-block)
+  + [Team relationship data](#team-relationship-data)
+  + [City-state influence data](#city-state-influence-data)
+  + [Team visibility data](#team-visibility-data)
   + [Team format](#team-format)
   + [Player format](#player-format)
   + [Map tile improvement properties](#map-tile-improvement-properties)
   + [Map tile improvement data](#map-tile-improvement-data)
 * [Replay File Format](#replay-file-format)
+  + [DLC Array Element](#dlc-array-element)
+  + [Mods Array Element](#mods-array-element)
+  + [Header Continued](#header-continued)
+  + [Civ Names](#civ-names)
+  + [Civ Dataset Names](#civ-dataset-names)
+  + [Civ Dataset Values](#civ-dataset-values)
+  + [Replay Events](#replay-events)
+    - [Replay Event format](#replay-event-format)
+  + [Tiles](#tiles)
 * [Save File Format](#save-file-format)
 
 ## Map File Format
@@ -42,7 +56,7 @@ This file format covers .civ5map files, which stores the map data. All data is s
 | uint32 | 4 bytes | MapNameLength |
 | uint32 | 4 bytes | MapDescriptionLength |
 
-Following the header, is a list of strings whose size is determined in the header. Each string list will have a zero byte to split items.
+String lists follow the header, sized per the header, with items null-separated.
 
 ### Geography list data
 
@@ -52,7 +66,7 @@ Following the header, is a list of strings whose size is determined in the heade
 | String list | FeatureTerrainDataSize bytes | Feature terrain (e.g. FEATURE_ICE) |
 | String list | FeatureWonderDataSize bytes | Feature wonders(e.g. FEATURE_CRATER, FEATURE_FUJI) |
 | String list | ResourceDataSize bytes | Resources (e.g. RESOURCE_IRON) |
-| String | ModDataSize bytes | modData |
+| String | ModDataSize bytes | Mod data |
 | String | MapNameLength bytes | Map name |
 | String | MapDescriptionLength bytes | Map description |
 | uint32 | 4 bytes | WorldSizeLength (Only if version >= 11) |
@@ -60,7 +74,7 @@ Following the header, is a list of strings whose size is determined in the heade
 
 ### Map geography
 
-The map data is inverted, which means that the bottommost row rendered on the screen is stored on the top row of the array and the topmost row rendered on the screen is stored on the last row of the array.
+Rows are stored bottom-to-top: array row 0 is the bottom row on screen, and the array's last row is the top row on screen.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -85,10 +99,11 @@ The size of this struct is 8 bytes.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[68] | 68 bytes | Unknown, seems related to GameSpeed |
+| byte[64] | 64 bytes | GameSpeed: null-terminated string (e.g. GAMESPEED_STANDARD) |
+| uint32 | 4 bytes | StartingTurn |
 | uint32 | 4 bytes | MaxTurns |
-| byte[4] | 4 bytes | Unknown |
-| uint32 | 4 bytes | StartYear |
+| uint32 | 4 bytes | TargetScore: score-victory target |
+| int32 | 4 bytes | StartYear |
 | uint8 | 1 byte | PlayerCount (Number of playable civs) |
 | uint8 | 1 byte | CityStateCount |
 | uint8 | 1 byte | TeamCount (should be the sum of PlayerCount and CityStateCount) |
@@ -121,30 +136,69 @@ The size of this struct is 8 bytes.
 | String list | VictoryDataSize bytes | Victory types (e.g. VICTORY_CULTURAL) |
 | String list | GameOptionDataSize bytes | Game options (e.g. GAMEOPTION_NO_CITY_RAZING) |
 
+### Free-list allocator
+
+The Unit data array, Unit name array, and City array are each preceded by a free-list head, not a record count. The record array has a fixed, power-of-2 capacity, often well above the records in use. Unused slots are threaded into a singly-linked list via their leading bytes (next index, -1 = end); every other field keeps its stale value.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Free-list head index (-1 if none) |
+
 ### Unit data format
 
 In version 11, the sizeof this struct is 48 bytes.
 
 In version 12, the sizeof this struct is 84 bytes.
 
+Preceded by the free-list head; an unused slot's leading 2 bytes hold the link instead of a real stacking value.
+
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[2] | 2 bytes | Unknown |
-| uint16 | 2 bytes | Index to custom unit name data |
+| uint16 | 2 bytes | Index of another unit sharing this unit's tile (0xFFFF if not stacked with anything) |
+| uint16 | 2 bytes | NameIndex: index into the unit name array (0xFFFF if the unit has no custom name) |
 | uint32 | 4 bytes | Experience |
 | uint32 | 4 bytes | Health (100% health is 100000) |
 | uint8 (version 11) or uint32 (version 12) | 1 byte for version 11, 4 bytes for version 12 | Unit type |
 | uint8 | 1 byte | Owner |
 | uint8 | 1 byte | Facing direction |
-| uint8 | 1 byte | Status (The low 3 bits are used. 4 (>>2) is garrisoned, 2 (>>1) is embarked, 1 (>>0) is fortified) |
-| byte | 1 byte | Unknown (Only for version 12)|
-| byte[] | 32 bytes for version 11, 64 bytes for version 12 | Promotion data |
+| uint8 | 1 byte | Status (low 3 bits: garrisoned(4), embarked(2), fortified(1)) |
+| byte | 1 byte | Unknown (only for version 12) |
+| byte[] | 32 bytes for version 11, 64 bytes for version 12 | Promotion data (bitset, one bit per index in the promotion type list; bit N set means the unit has promotion N) |
+
+#### Facing direction encoding
+
+| Raw value | Direction |
+| --- | --- |
+| 0 | Random Direction |
+| 1 | Northeast |
+| 2 | East |
+| 3 | Southeast |
+| 4 | Southwest |
+| 5 | West |
+| 6 | Northwest |
+
+#### Owner encoding
+
+The Owner byte is used the same way for units, cities, and map tile improvement data:
+
+* 0-31: index into the major civilization player list
+* 32-95: city-state; the actual city-state index is the value minus 32
+* 96 (units only): Barbarian unit - a sentinel value, not an index into any player/city-state list
+
+#### Unit name array
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Free-list head index |
+| byte[64][] | (UnitNameDataSize - 4) bytes | Fixed-size null-terminated name records. A unit's `NameIndex` is the 0-based index of its record here |
 
 ### City format
 
 In version 11, the sizeof this struct is 104 bytes.
 
 In version 12, the sizeof this struct is 136 bytes.
+
+Preceded by the free-list head; an unused slot's leading Name bytes hold the link instead, so a freed city's name typically reads empty.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -153,15 +207,27 @@ In version 12, the sizeof this struct is 136 bytes.
 | uint8 | 1 byte | Settings |
 | uint16 | 2 bytes | Population |
 | uint32 | 4 bytes | Health (100% health is 100000) |
-| byte[] | 32 bytes for version 11, 64 bytes for version 12 | Building data |
+| byte[] | 32 bytes for version 11, 64 bytes for version 12 | Building data (bitset, one bit per index in the building type list; bit N set means the city has building N) |
 
-### Unknown block
-
-There is a section between the city data and team data that doesn't seem to be used anywhere, except for padding. The sizeof this block is unknown, but this block size increases as the number of civs increases.
+### Team relationship data
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[] | Unknown bytes | This block doesn't seem to correspond to anything in the game |
+| byte[] | `5 * ceil(TeamCount*(TeamCount-1)/2 / 8)` bytes | Team diplomacy relationship bitsets: `IN_CONTACT`, `AT_WAR`, `PERMANENT_WAR_OR_PEACE`, `OPEN_BORDERS`, `DEFENSIVE_PACT`, one triangular (no self-pairs) bitset per type, in that order |
+
+Within a type's bitset, the bit for team pair `(i, j)` with `i > j` is at index `i*(i-1)/2 + j`.
+
+### City-state influence data
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32[] | `PlayerCount * 64 * 4` bytes | Each major civ player's influence value with every city-state; row-major `[player][cityState]` with a fixed row stride of 64 entries per player, regardless of the actual city-state count |
+
+### Team visibility data
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| byte[] | `ceil(Width*Height*TeamCount / 8)` bytes | Per-team, per-tile visibility/exploration (fog-of-war) bitset: one full `Width*Height`-bit tile bitmap per team |
 
 ### Team format
 
@@ -177,7 +243,7 @@ The sizeof this struct is 436 bytes.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[32] | 32 bytes | Policies |
+| byte[32] | 32 bytes | Policies (bitset, one bit per index in the policy type list; bit N set means the player has policy N) |
 | byte[64] | 64 bytes | Leader name (override leader name) |
 | byte[64] | 64 bytes | Civ name (override civ name) |
 | byte[64] | 64 bytes | Civ type (default civ name) |
@@ -219,12 +285,12 @@ The replay files store a list of civilizations, events, and datasets for differe
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[4] | 4 bytes | Game name |
-| uint32 | 4 bytes | unknownBlock1 |
+| byte[4] | 4 bytes | Game name, should always be "CIV5" |
+| uint32 | 4 bytes | UnknownUint1 |
 | varstring | var bytes | Game version |
 | varstring | var bytes | Game build |
 | uint32 | 4 bytes | Current turn number |
-| byte[1] | 1 bytes | unknownBlock2 |
+| byte[1] | 1 bytes | UnknownByte1 |
 | varstring | var bytes | Player civ |
 | varstring | var bytes | Difficulty |
 | varstring | var bytes | Era start |
@@ -233,58 +299,53 @@ The replay files store a list of civilizations, events, and datasets for differe
 | varstring | var bytes | World size |
 | varstring | var bytes | Map filename |
 
-DLC Array Element
+### DLC Array Element
 
 Array size is uint32 followed by list of elements.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[16] | 16 bytes | dlcId |
-| byte[4] | 4 bytes | dlcEnabled |
-| varstring | var bytes | dlcName |
+| byte[16] | 16 bytes | DLC id |
+| byte[4] | 4 bytes | DLC enabled |
+| varstring | var bytes | DLC name |
 
-Mods Array Element
+### Mods Array Element
 
 Array size is uint32 followed by list of elements.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| varstring | var bytes | modId |
-| byte[4] | 4 bytes | modVersion |
-| varstring | var bytes | modName |
+| varstring | var bytes | Mod id |
+| byte[4] | 4 bytes | Mod version |
+| varstring | var bytes | Mod name |
 
-Header Continued
+### Header Continued
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
 | varstring | var bytes | Civ name |
 | varstring | var bytes | Leader name |
 | varstring | var bytes | Player color |
-| byte[8] | 8 bytes | unknownBlock5 |
-| varstring | var bytes | mapFilename2 |
-
-Unknown Block
-
-| Type | Size | Description |
-| ---- | ---- | ----------- |
-| uint32 | 4 bytes | unknownVersion |
-| uint32[4] | 16 bytes | Unknown array |
-| uint32 | 4 bytes | unknownCount1 |
-| uint32[] | (unknownCount1 * 4) bytes | Unknown array |
-| uint32 | 4 bytes | unknownCount2 |
-| uint32[] | (unknownCount2 + 1) bytes | Unknown array |
-| uint8 | 1 byte | Unknown |
-
-Header Continued
-
-| Type | Size | Description |
-| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Replay version |
+| uint32 | 4 bytes | Active player index |
+| varstring | var bytes | Map filename 2 |
+| uint32 | 4 bytes | WorldSize: 0=WORLDSIZE_DUEL, 1=WORLDSIZE_TINY, 2=WORLDSIZE_SMALL, 3=WORLDSIZE_STANDARD, 4=WORLDSIZE_LARGE, 5=WORLDSIZE_HUGE |
+| uint32 | 4 bytes | Climate: 0=CLIMATE_TEMPERATE, 1=CLIMATE_TROPICAL, 2=CLIMATE_ARID, 3=CLIMATE_ROCKY, 4=CLIMATE_COLD |
+| uint32 | 4 bytes | SeaLevel: 0=SEALEVEL_LOW, 1=SEALEVEL_MEDIUM, 2=SEALEVEL_HIGH |
+| uint32 | 4 bytes | Era: 0=ERA_ANCIENT, 1=ERA_CLASSICAL, 2=ERA_MEDIEVAL, 3=ERA_RENAISSANCE, 4=ERA_INDUSTRIAL, 5=ERA_MODERN, 6=ERA_POSTMODERN, 7=ERA_FUTURE |
+| uint32 | 4 bytes | GameSpeed: 0=GAMESPEED_MARATHON, 1=GAMESPEED_EPIC, 2=GAMESPEED_STANDARD, 3=GAMESPEED_QUICK |
+| uint32 | 4 bytes | GameOptionCount |
+| uint32[] | (GameOptionCount * 4) bytes | names of the game options enabled at game setup: 0=GAMEOPTION_NO_CITY_RAZING, 1=GAMEOPTION_NO_BARBARIANS, 2=GAMEOPTION_RAGING_BARBARIANS, 3=GAMEOPTION_ALWAYS_WAR, 4=GAMEOPTION_ALWAYS_PEACE, 5=GAMEOPTION_ONE_CITY_CHALLENGE, 6=GAMEOPTION_NO_CHANGING_WAR_PEACE, 7=GAMEOPTION_NEW_RANDOM_SEED, 8=GAMEOPTION_LOCK_MODS, 9=GAMEOPTION_COMPLETE_KILLS, 10=GAMEOPTION_NO_GOODY_HUTS, 11=GAMEOPTION_RANDOM_PERSONALITIES, 12=GAMEOPTION_POLICY_SAVING, 13=GAMEOPTION_PROMOTION_SAVING, 14=GAMEOPTION_END_TURN_TIMER_ENABLED, 15=GAMEOPTION_QUICK_COMBAT, 16=GAMEOPTION_DISABLE_START_BIAS, 17=GAMEOPTION_NO_SCIENCE, 18=GAMEOPTION_NO_POLICIES, 19=GAMEOPTION_NO_HAPPINESS, 20=GAMEOPTION_NO_TUTORIAL, 21=GAMEOPTION_NO_RELIGION |
+| uint32 | 4 bytes | VictoryTypeCount |
+| uint32[] | (VictoryTypeCount * 4) bytes | names of the victory conditions enabled at game setup: 0=VICTORY_TIME, 1=VICTORY_SPACE_RACE, 2=VICTORY_DOMINATION, 3=VICTORY_CULTURAL, 4=VICTORY_DIPLOMATIC |
+| uint32 | 4 bytes | VictoryAchieved: victory type PlayerCiv won, or 0xFFFFFFFF if not (ongoing, resigned, or someone else won) |
+| uint8 | 1 byte | UnknownByte2 |
 | uint32 | 4 bytes | Start turn |
 | int32 | 4 bytes | Start year |
 | uint32 | 4 bytes | End turn |
 | varstring | varstring bytes | End year |
-| uint32 | 4 bytes | zeroStartYear |
-| uint32 | 4 bytes | zeroEndYear |
+| uint32 | 4 bytes | Zero start year |
+| uint32 | 4 bytes | Zero end year |
 
 ### Civ Names
 
@@ -296,7 +357,10 @@ Array element format
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32[4] | 4*4 bytes | Unknown |
+| uint32 | 4 bytes | Civilization index |
+| uint32 | 4 bytes | Leader type index |
+| uint32 | 4 bytes | Player color index |
+| uint32 | 4 bytes | Difficulty: 0=HANDICAP_SETTLER, 1=HANDICAP_CHIEFTAIN, 2=HANDICAP_WARLORD, 3=HANDICAP_PRINCE, 4=HANDICAP_KING, 5=HANDICAP_EMPEROR, 6=HANDICAP_IMMORTAL, 7=HANDICAP_DEITY |
 | varstring | var bytes | Leader name |
 | varstring | var bytes | Civ long name |
 | varstring | var bytes | Civ name |
@@ -314,13 +378,13 @@ Array element format
 
 ### Civ Dataset Values
 
-This is a 3D array. The first level is divided by civilization and the second level is divided by category. To get a list of dataset values, you have to call datasetValues[civIndex][datasetNameIndex]. Each dataset value is represented by a Turn and Value pair.
+3D array `datasetValues[civIndex][datasetNameIndex]` of (Turn, Value) pairs.
 
 ### Replay Events
 
 The number of events is a uint32.
 
-Replay Event format
+#### Replay Event format
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -337,12 +401,12 @@ Tile data contains information about the physical map.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | unknownVariable1 |
-| uint32 | 4 bytes | unknownVariable2 |
-| uint8 | 1 byte | Elevation id |
-| uint8 | 1 byte | Type id |
-| uint8 | 1 byte | Feature id |
-| uint8 | 1 byte | unknownVariable3 |
+| uint32 | 4 bytes | Map entry count |
+| uint32 | 4 bytes | Turn key - always equals this file's own "End turn" |
+| uint8 | 1 byte | PlotType: 0=PLOT_MOUNTAIN, 1=PLOT_HILLS, 2=PLOT_LAND, 3=PLOT_OCEAN - not the same field as `.civ5map`'s Elevation |
+| uint8 | 1 byte | TerrainType |
+| uint8 | 1 byte | Feature |
+| uint8 | 1 byte | River bits (bit 0 unused. 8 (>>3) is southwest edge, 4 (>>2) is east edge, 2 (>>1) is southeast edge) - different bit layout from `.civ5map`'s RiverData |
 
 ## Save File Format
 

@@ -614,11 +614,7 @@ func readCivRoster(streamReader *io.SectionReader) []Civ5ReplayCiv {
 	allCivs := make([]Civ5ReplayCiv, 0, len(civNameArr))
 	for _, civName := range civNameArr {
 		allCivs = append(allCivs, Civ5ReplayCiv{
-			UnknownVariables: [4]int{0, 0, 0, 0},
-			Leader:           "",
-			LongName:         "",
-			Name:             civName,
-			Demonym:          "",
+			Name: civName,
 		})
 	}
 	return allCivs

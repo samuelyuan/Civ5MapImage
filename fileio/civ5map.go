@@ -47,13 +47,56 @@ const (
 	IsPuppetStateFlag = 1
 	IsOccupiedFlag    = 2
 
+	// Unit Status bit positions
+	FortifiedBit  = 0
+	EmbarkedBit   = 1
+	GarrisonedBit = 2
+
 	// Special values
-	InvalidCityId = -1    // Sentinel used in our parsed data model
-	RawNoCityId   = 65535 // Sentinel used in the raw file format (uint16 max)
+	InvalidCityId    = -1    // Used in our parsed data model
+	NoCityIdSentinel = 65535 // Used in the raw file format (uint16 max)
+
+	InvalidUnitId    = -1    // Used in our parsed data model
+	NoUnitIdSentinel = 65535 // Used in the raw file format (uint16 max)
+
+	// BarbarianOwner is the Owner value for a unit with no player/city-state (units only).
+	BarbarianOwner = 96
+
+	MaxCityStatesPerPlayer = 64
+
+	// NoNameIndexSentinel is the NameIndex value meaning "no custom name".
+	NoNameIndexSentinel = 65535
+
+	// UnitNameRecordSize is the byte size of each entry in the unit name array.
+	UnitNameRecordSize = 64
+
+	// TeamNameRecordSize is the fixed size, in bytes, of each null-terminated team name entry.
+	TeamNameRecordSize = 64
 
 	// Data structure sizes
 	CivDataSize = 436
 )
+
+// Diplomacy relationship types
+const (
+	DiplomacyInContact = iota
+	DiplomacyAtWar
+	DiplomacyPermanentWarOrPeace
+	DiplomacyOpenBorders
+	DiplomacyDefensivePact
+	diplomacyRelationshipTypeCount
+)
+
+// facingDirectionNames maps a unit's raw FacingDirection byte to its editor-displayed name.
+var facingDirectionNames = []string{
+	"Random Direction",
+	"Northeast",
+	"East",
+	"Southeast",
+	"Southwest",
+	"West",
+	"Northwest",
+}
 
 type Civ5MapHeader struct {
 	ScenarioVersion        uint8
@@ -95,14 +138,15 @@ type Civ5MapTilePhysical struct {
 }
 
 type Civ5GameDescriptionHeader struct {
-	Unknown1              [68]byte
+	GameSpeed             [64]byte // null-terminated string, e.g. GAMESPEED_STANDARD
+	StartingTurn          uint32
 	MaxTurns              uint32
-	Unknown2              [4]byte
+	TargetScore           uint32
 	StartYear             int32
 	PlayerCount           uint8
 	CityStateCount        uint8
 	TeamCount             uint8
-	Unknown3              byte
+	Unknown               byte
 	ImprovementDataSize   uint32
 	UnitTypeDataSize      uint32
 	TechTypeDataSize      uint32
@@ -115,39 +159,43 @@ type Civ5GameDescriptionHeader struct {
 }
 
 type Civ5UnitHeaderV11 struct {
-	Unknown1        [2]byte
-	NameIndex       uint16
-	Experience      uint32
-	Health          uint32
-	UnitType        uint8
-	Owner           uint8
-	FacingDirection uint8
-	Status          uint8
-	Promotion       [PromotionSizeV11]byte
+	StackedUnitHandle uint16 // index of another unit sharing this unit's tile or 0xFFFF for no unit
+	NameIndex         uint16
+	Experience        uint32
+	Health            uint32
+	UnitType          uint8
+	Owner             uint8
+	FacingDirection   uint8
+	Status            uint8
+	Promotion         [PromotionSizeV11]byte
 }
 
 type Civ5UnitHeaderV12 struct {
-	Unknown1        [2]byte
-	NameIndex       uint16
-	Experience      uint32
-	Health          uint32
-	UnitType        uint32
-	Owner           uint8
-	FacingDirection uint8
-	Status          uint8
-	Unknown2        byte
-	Promotion       [PromotionSizeV12]byte
+	StackedUnitHandle uint16 // index of another unit sharing this unit's tile or 0xFFFF for no unit
+	NameIndex         uint16
+	Experience        uint32
+	Health            uint32
+	UnitType          uint32
+	Owner             uint8
+	FacingDirection   uint8
+	Status            uint8
+	Unknown           byte
+	Promotion         [PromotionSizeV12]byte
 }
 
 type Civ5UnitData struct {
-	Name            string
-	Experience      int
-	Health          int
-	UnitType        int
-	Owner           int
-	FacingDirection int
-	Status          int
-	PromotionInfo   []byte
+	Name                string // unit type name (e.g. UNIT_SETTLER), resolved against the unit type list
+	CustomName          string // scenario-assigned custom name, resolved via NameIndex; empty if none
+	Experience          int
+	Health              int
+	UnitType            int
+	Owner               int
+	FacingDirection     int
+	FacingDirectionName string // resolved from FacingDirection; "" if out of range
+	Status              int
+	PromotionInfo       []byte
+	Promotions          []string // names decoded from PromotionInfo against the promotion type list
+	StackedUnitId       int      // index into Civ5MapData.UnitData of another unit on the same tile, or InvalidUnitId
 }
 
 type Civ5CityHeader struct {
@@ -168,11 +216,12 @@ type Civ5CityData struct {
 	Population      int
 	Health          int
 	BuildingInfo    []uint8
+	Buildings       []string // names decoded from BuildingInfo against the building type list
 }
 
 type Civ5MapTileHeader struct {
 	CityId      uint16
-	Unknown     [2]byte // seems to be unused
+	UnitId      uint16 // 0xFFFF (NoUnitIdSentinel) if no unit is on this tile; otherwise an index into UnitData
 	Owner       uint8
 	Improvement uint8
 	RouteType   uint8
@@ -197,9 +246,36 @@ type Civ5PlayerHeader struct {
 }
 
 type Civ5PlayerData struct {
-	Index     int
-	CivType   string
-	TeamColor string
+	Index              int
+	LeaderName         string // override leader name; usually empty unless the scenario sets one
+	CivName            string // override civ name; usually empty unless the scenario sets one
+	CivType            string // default civ identifier
+	TeamColor          string
+	Era                string
+	Handicap           string
+	Culture            int
+	Gold               int
+	StartPositionX     int
+	StartPositionY     int
+	Team               int
+	Playable           bool
+	Policies           []string    // names decoded from the player's Policies bitset against the policy type list
+	CityStateInfluence map[int]int // city-state index -> influence value (major civs only)
+}
+
+// Civ5TeamData holds one team's name.
+type Civ5TeamData struct {
+	Name string
+}
+
+// Civ5TeamRelationships holds team diplomacy data, indexed by team; each slice lists the other
+// teams it has that relationship with (symmetric).
+type Civ5TeamRelationships struct {
+	InContactWith           [][]int
+	AtWarWith               [][]int
+	PermanentWarOrPeaceWith [][]int
+	OpenBordersWith         [][]int
+	DefensivePactWith       [][]int
 }
 
 type Civ5MapTileImprovement struct {
@@ -207,6 +283,7 @@ type Civ5MapTileImprovement struct {
 	Y           int
 	CityId      int
 	CityName    string
+	UnitId      int // index into Civ5MapData.UnitData, or InvalidUnitId if no unit is on this tile
 	Owner       int
 	Improvement int
 	RouteType   int
@@ -233,12 +310,30 @@ type Civ5MapData struct {
 	FeatureTerrainList  []string
 	ResourceList        []string
 	TileImprovementList []string
+	BuildingTypeList    []string
+	PromotionTypeList   []string
+	PolicyTypeList      []string
+	UnitTypeList        []string
+	UnitNameList        []string
 	MapTiles            [][]*Civ5MapTilePhysical
 	MapTileImprovements [][]*Civ5MapTileImprovement
 	CityData            []*Civ5CityData
+	UnitData            []*Civ5UnitData
 	Civ5PlayerData      []*Civ5PlayerData
+	TeamData            []*Civ5TeamData // names only
+	TeamRelationships   Civ5TeamRelationships
+	TeamVisibility      [][][2]int // per team's visible [x,y] tiles
 	CityOwnerIndexMap   map[int]int
 	CivColorOverrides   []CivColorOverride
+}
+
+// Civ5GameTypeLists holds type lists used to decode bitset fields and resolve unit type/custom names.
+type Civ5GameTypeLists struct {
+	BuildingTypeList  []string
+	PromotionTypeList []string
+	PolicyTypeList    []string
+	UnitTypeList      []string // index by Civ5UnitData.UnitType to get the unit type name
+	UnitNameList      []string // index by a unit's NameIndex to get its custom name
 }
 
 // byteArrayToStringArray splits a null-separated byte buffer into a list of strings
@@ -264,30 +359,43 @@ func nullTerminatedString(b []byte) string {
 	return string(b)
 }
 
-// ParseUnitData parses the raw unit section of a map file into unit data
-func ParseUnitData(unitData []byte, version int) ([]*Civ5UnitData, error) {
-	if len(unitData) == 0 {
+// parseUnitNameArray parses the unit name array (leading count skipped, unreliable) into
+// fixed-size null-terminated records, indexed by NameIndex.
+func parseUnitNameArray(data []byte) []string {
+	if len(data) < 4 {
+		return nil
+	}
+	nameFreeListHead := binary.LittleEndian.Uint32(data[:4])
+	fmt.Println("Unit name allocator free-list head: ", int32(nameFreeListHead))
+
+	records := data[4:]
+	count := len(records) / UnitNameRecordSize
+	names := make([]string, count)
+	for i := 0; i < count; i++ {
+		names[i] = nullTerminatedString(records[i*UnitNameRecordSize : (i+1)*UnitNameRecordSize])
+	}
+	return names
+}
+
+// ParseUnitData parses the raw unit section, using typeLists to decode promotions and resolve names.
+func ParseUnitData(unitData []byte, version int, typeLists Civ5GameTypeLists) ([]*Civ5UnitData, error) {
+	if len(unitData) < 4 {
 		return nil, nil
 	}
 	streamReader := io.NewSectionReader(bytes.NewReader(unitData), int64(0), int64(len(unitData)))
 
-	numberUnits, err := readUint32(streamReader)
+	unitFreeListHead, err := readUint32(streamReader)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Number units: ", numberUnits)
+	fmt.Println("Unit allocator free-list head: ", int32(unitFreeListHead))
 
-	maximumPossibleUnits := maxUnitCountForVersion(len(unitData), version)
-	fmt.Println("Maximum possible units: ", maximumPossibleUnits)
+	maximumPossibleUnits := maxUnitCountForVersion(len(unitData)-4, version)
+	fmt.Println("Maximum possible units (buffer capacity): ", maximumPossibleUnits)
 
-	if numberUnits > uint32(maximumPossibleUnits) {
-		numberUnits = uint32(maximumPossibleUnits)
-		fmt.Println("Something wrong with number of units, reduced to", numberUnits)
-	}
-
-	allUnits := make([]*Civ5UnitData, int(numberUnits))
-	for i := 0; i < int(numberUnits); i++ {
-		unit, err := readUnit(streamReader, version)
+	allUnits := make([]*Civ5UnitData, maximumPossibleUnits)
+	for i := 0; i < maximumPossibleUnits; i++ {
+		unit, err := readUnit(streamReader, version, typeLists)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +405,7 @@ func ParseUnitData(unitData []byte, version int) ([]*Civ5UnitData, error) {
 	return allUnits, nil
 }
 
-// maxUnitCountForVersion returns how many units could possibly fit in a buffer of the given size
+// maxUnitCountForVersion returns how many unit records fit in dataLen bytes.
 func maxUnitCountForVersion(dataLen, version int) int {
 	if version == MapVersion12 {
 		return dataLen / UnitDataSizeV12
@@ -305,64 +413,82 @@ func maxUnitCountForVersion(dataLen, version int) int {
 	return dataLen / UnitDataSizeV11
 }
 
-// readUnit reads a single unit record using the binary layout for the given version.
-// Unrecognized versions yield a nil entry, matching the file's historical behavior.
-func readUnit(reader *io.SectionReader, version int) (*Civ5UnitData, error) {
+// readUnit reads one unit record for the given version, using typeLists to resolve names.
+func readUnit(reader *io.SectionReader, version int, typeLists Civ5GameTypeLists) (*Civ5UnitData, error) {
+	var stackedUnitHandle, nameIndex uint16
+	var experience, health uint32
+	var unitType int
+	var owner, facingDirection, status uint8
+	var promotionInfo []byte
+
 	switch version {
 	case MapVersion12:
 		header := Civ5UnitHeaderV12{}
 		if err := readStruct(reader, &header); err != nil {
 			return nil, err
 		}
-		return &Civ5UnitData{
-			Experience:      int(header.Experience),
-			Health:          int(header.Health),
-			UnitType:        int(header.UnitType),
-			Owner:           int(header.Owner),
-			FacingDirection: int(header.FacingDirection),
-			Status:          int(header.Status),
-		}, nil
+		stackedUnitHandle = header.StackedUnitHandle
+		nameIndex = header.NameIndex
+		experience, health = header.Experience, header.Health
+		unitType = int(header.UnitType)
+		owner, facingDirection, status = header.Owner, header.FacingDirection, header.Status
+		promotionInfo = header.Promotion[:]
 	case MapVersion11:
 		header := Civ5UnitHeaderV11{}
 		if err := readStruct(reader, &header); err != nil {
 			return nil, err
 		}
-		return &Civ5UnitData{
-			Experience:      int(header.Experience),
-			Health:          int(header.Health),
-			UnitType:        int(header.UnitType),
-			Owner:           int(header.Owner),
-			FacingDirection: int(header.FacingDirection),
-			Status:          int(header.Status),
-		}, nil
+		stackedUnitHandle = header.StackedUnitHandle
+		nameIndex = header.NameIndex
+		experience, health = header.Experience, header.Health
+		unitType = int(header.UnitType)
+		owner, facingDirection, status = header.Owner, header.FacingDirection, header.Status
+		promotionInfo = header.Promotion[:]
 	default:
 		return nil, nil
 	}
+
+	stackedUnitId := InvalidUnitId
+	if stackedUnitHandle != NoUnitIdSentinel {
+		stackedUnitId = int(stackedUnitHandle)
+	}
+
+	return &Civ5UnitData{
+		Name:                typeName(typeLists.UnitTypeList, unitType),
+		CustomName:          customUnitName(typeLists.UnitNameList, nameIndex),
+		Experience:          int(experience),
+		Health:              int(health),
+		UnitType:            unitType,
+		Owner:               int(owner),
+		FacingDirection:     int(facingDirection),
+		FacingDirectionName: facingDirectionName(int(facingDirection)),
+		Status:              int(status),
+		PromotionInfo:       promotionInfo,
+		Promotions:          decodeBitset(promotionInfo, typeLists.PromotionTypeList),
+		StackedUnitId:       stackedUnitId,
+	}, nil
 }
 
-// ParseCityData parses the raw city section of a map file into city data
-func ParseCityData(cityData []byte, version int, maxCityId int) ([]*Civ5CityData, error) {
+// ParseCityData parses the raw city section, using buildingTypeList to decode each city's buildings.
+func ParseCityData(cityData []byte, version int, maxCityId int, buildingTypeList []string) ([]*Civ5CityData, error) {
 	if len(cityData) == 0 {
 		return nil, nil
 	}
 	streamReader := io.NewSectionReader(bytes.NewReader(cityData), int64(0), int64(len(cityData)))
 
-	// This number is not always accurate because it sometimes underestimates the number of cities
-	numberCities, err := readUint32(streamReader)
+	// The leading 4 bytes are the allocator's free-list head index, not a record count
+	cityFreeListHead, err := readUint32(streamReader)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Number cities: ", numberCities)
+	fmt.Println("City allocator free-list head: ", int32(cityFreeListHead))
 
-	if maxCityId+1 > int(numberCities) {
-		numberCities = uint32(maxCityId) + 1
-		fmt.Println("Number of cities should be", maxCityId+1)
-	}
+	numberCities := uint32(maxCityId) + 1
 
 	buildingDataSize := buildingDataSizeForVersion(version)
 	allCities := make([]*Civ5CityData, int(numberCities))
 	for i := 0; i < int(numberCities); i++ {
-		city, err := readCity(streamReader, buildingDataSize)
+		city, err := readCity(streamReader, buildingDataSize, buildingTypeList)
 		if err != nil {
 			return nil, err
 		}
@@ -387,8 +513,184 @@ func adjustedCityOwner(owner uint8) uint8 {
 	return owner
 }
 
-// readCity reads a single city record and its trailing building data
-func readCity(reader *io.SectionReader, buildingDataSize int) (*Civ5CityData, error) {
+// typeName resolves an index into a type list, returning "" if out of range.
+func typeName(typeList []string, index int) string {
+	if index < 0 || index >= len(typeList) {
+		return ""
+	}
+	return typeList[index]
+}
+
+// facingDirectionName resolves a unit's raw FacingDirection byte, returning "" if out of range.
+func facingDirectionName(raw int) string {
+	return typeName(facingDirectionNames, raw)
+}
+
+// customUnitName resolves NameIndex into a name, or "" if unset or out of range.
+func customUnitName(unitNameList []string, nameIndex uint16) string {
+	if nameIndex == NoNameIndexSentinel || int(nameIndex) >= len(unitNameList) {
+		return ""
+	}
+	return unitNameList[nameIndex]
+}
+
+// decodeBitset returns the names of every set bit in data, where bit N is typeList[N].
+func decodeBitset(data []byte, typeList []string) []string {
+	var names []string
+	for i, name := range typeList {
+		byteIndex := i / 8
+		if byteIndex >= len(data) {
+			break
+		}
+		if (data[byteIndex]>>uint(i%8))&1 != 0 {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// triangularPairCount returns the number of unordered pairs among n elements (n*(n-1)/2).
+func triangularPairCount(n int) int {
+	return n * (n - 1) / 2
+}
+
+// relationshipBitsetSize returns the per-type bitset size in bytes for teamCount teams.
+func relationshipBitsetSize(teamCount int) int {
+	return (triangularPairCount(teamCount) + 7) / 8
+}
+
+// relationshipBitIndex returns the bit index for team pair (large, small), large > small.
+func relationshipBitIndex(large, small int) int {
+	return triangularPairCount(large) + small
+}
+
+// decodeRelationshipPairs decodes one relationship type's bitset into every team pair (i, j), i > j.
+func decodeRelationshipPairs(bitsetData []byte, teamCount int) [][2]int {
+	var pairs [][2]int
+	for i := 1; i < teamCount; i++ {
+		for j := 0; j < i; j++ {
+			bitIndex := relationshipBitIndex(i, j)
+			byteIndex := bitIndex / 8
+			if byteIndex >= len(bitsetData) {
+				continue
+			}
+			if (bitsetData[byteIndex]>>uint(bitIndex%8))&1 != 0 {
+				pairs = append(pairs, [2]int{i, j})
+			}
+		}
+	}
+	return pairs
+}
+
+// ParseTeamNames decodes the team name array into one Civ5TeamData per team.
+func ParseTeamNames(teamNameData []byte, teamCount int) []*Civ5TeamData {
+	teams := make([]*Civ5TeamData, teamCount)
+	for i := 0; i < teamCount; i++ {
+		start := i * TeamNameRecordSize
+		end := start + TeamNameRecordSize
+		name := ""
+		if end <= len(teamNameData) {
+			name = nullTerminatedString(teamNameData[start:end])
+		}
+		teams[i] = &Civ5TeamData{Name: name}
+	}
+	return teams
+}
+
+// relationshipTypeSlice returns relType's byte slice of relationshipData, clamped to what's available.
+func relationshipTypeSlice(relationshipData []byte, relType, typeSize int) (slice []byte, ok bool) {
+	start := relType * typeSize
+	if start > len(relationshipData) {
+		return nil, false
+	}
+	end := start + typeSize
+	if end > len(relationshipData) {
+		end = len(relationshipData)
+	}
+	return relationshipData[start:end], true
+}
+
+// ParseTeamRelationships decodes relationshipData into Civ5TeamRelationships.
+func ParseTeamRelationships(relationshipData []byte, teamCount int) Civ5TeamRelationships {
+	rel := Civ5TeamRelationships{
+		InContactWith:           make([][]int, teamCount),
+		AtWarWith:               make([][]int, teamCount),
+		PermanentWarOrPeaceWith: make([][]int, teamCount),
+		OpenBordersWith:         make([][]int, teamCount),
+		DefensivePactWith:       make([][]int, teamCount),
+	}
+
+	assign := func(pairs [][2]int, target [][]int) {
+		for _, pair := range pairs {
+			i, j := pair[0], pair[1]
+			target[i] = append(target[i], j)
+			target[j] = append(target[j], i)
+		}
+	}
+
+	relationshipTargets := [][][]int{
+		DiplomacyInContact:           rel.InContactWith,
+		DiplomacyAtWar:               rel.AtWarWith,
+		DiplomacyPermanentWarOrPeace: rel.PermanentWarOrPeaceWith,
+		DiplomacyOpenBorders:         rel.OpenBordersWith,
+		DiplomacyDefensivePact:       rel.DefensivePactWith,
+	}
+
+	typeSize := relationshipBitsetSize(teamCount)
+	for relType := 0; relType < diplomacyRelationshipTypeCount; relType++ {
+		slice, ok := relationshipTypeSlice(relationshipData, relType, typeSize)
+		if !ok {
+			break
+		}
+		pairs := decodeRelationshipPairs(slice, teamCount)
+		assign(pairs, relationshipTargets[relType])
+	}
+
+	return rel
+}
+
+// ParseTeamVisibility decodes visibilityData into each team's visible tiles, indexed by team.
+func ParseTeamVisibility(visibilityData []byte, mapWidth, mapHeight, teamCount int) [][][2]int {
+	mapSize := mapWidth * mapHeight
+	matrix := make([][][2]int, teamCount)
+	for t := 0; t < teamCount; t++ {
+		var visible [][2]int
+		for y := 0; y < mapHeight; y++ {
+			for x := 0; x < mapWidth; x++ {
+				bitIndex := t*mapSize + y*mapWidth + x
+				byteIndex := bitIndex / 8
+				if byteIndex >= len(visibilityData) {
+					continue
+				}
+				if (visibilityData[byteIndex]>>uint(bitIndex%8))&1 != 0 {
+					visible = append(visible, [2]int{x, y})
+				}
+			}
+		}
+		matrix[t] = visible
+	}
+	return matrix
+}
+
+// ParseCityStateInfluence decodes each player's influence with every city-state, indexed by player.
+func ParseCityStateInfluence(influenceData []byte, playerCount, cityStateCount int) []map[int]int {
+	result := make([]map[int]int, playerCount)
+	for p := 0; p < playerCount; p++ {
+		influence := make(map[int]int, cityStateCount)
+		for cs := 0; cs < cityStateCount; cs++ {
+			offset := (p*MaxCityStatesPerPlayer + cs) * 4
+			if offset+4 > len(influenceData) {
+				break
+			}
+			influence[cs] = int(int32(binary.LittleEndian.Uint32(influenceData[offset : offset+4])))
+		}
+		result[p] = influence
+	}
+	return result
+}
+
+// readCity reads a single city record and its trailing building data, decoded via buildingTypeList.
+func readCity(reader *io.SectionReader, buildingDataSize int, buildingTypeList []string) (*Civ5CityData, error) {
 	header := Civ5CityHeader{}
 	if err := readStruct(reader, &header); err != nil {
 		return nil, err
@@ -409,17 +711,18 @@ func readCity(reader *io.SectionReader, buildingDataSize int) (*Civ5CityData, er
 		Population:      int(header.Population), // 100% health is 100000
 		Health:          int(header.Health),
 		BuildingInfo:    buildingInfo,
+		Buildings:       decodeBitset(buildingInfo, buildingTypeList),
 	}, nil
 }
 
-// ParseCivData parses the raw civilization section of a map file into player data
-func ParseCivData(inputData []byte) ([]*Civ5PlayerData, error) {
+// ParseCivData parses the raw civilization section, using policyTypeList to decode each player's policies.
+func ParseCivData(inputData []byte, policyTypeList []string) ([]*Civ5PlayerData, error) {
 	allCivs, err := parseCivHeaders(inputData)
 	if err != nil {
 		return nil, err
 	}
 	reportCivData(allCivs)
-	return civHeadersToPlayerData(allCivs), nil
+	return civHeadersToPlayerData(allCivs, policyTypeList), nil
 }
 
 // parseCivHeaders reads the fixed-size civilization headers from the raw byte buffer
@@ -432,14 +735,25 @@ func parseCivHeaders(inputData []byte) ([]Civ5PlayerHeader, error) {
 	return allCivs, nil
 }
 
-// civHeadersToPlayerData maps raw civilization headers to the public player data model
-func civHeadersToPlayerData(allCivs []Civ5PlayerHeader) []*Civ5PlayerData {
+// civHeadersToPlayerData maps raw civ headers to player data, decoding Policies via policyTypeList.
+func civHeadersToPlayerData(allCivs []Civ5PlayerHeader, policyTypeList []string) []*Civ5PlayerData {
 	allPlayerData := make([]*Civ5PlayerData, len(allCivs))
 	for i, civ := range allCivs {
 		allPlayerData[i] = &Civ5PlayerData{
-			Index:     i,
-			CivType:   nullTerminatedString(civ.CivType[:]),
-			TeamColor: nullTerminatedString(civ.TeamColor[:]),
+			Index:          i,
+			LeaderName:     nullTerminatedString(civ.LeaderName[:]),
+			CivName:        nullTerminatedString(civ.CivName[:]),
+			CivType:        nullTerminatedString(civ.CivType[:]),
+			TeamColor:      nullTerminatedString(civ.TeamColor[:]),
+			Era:            nullTerminatedString(civ.Era[:]),
+			Handicap:       nullTerminatedString(civ.Handicap[:]),
+			Culture:        int(civ.Culture),
+			Gold:           int(civ.Gold),
+			StartPositionX: int(civ.StartPositionX),
+			StartPositionY: int(civ.StartPositionY),
+			Team:           int(civ.Team),
+			Playable:       civ.Playable != 0,
+			Policies:       decodeBitset(civ.Policies[:], policyTypeList),
 		}
 	}
 	return allPlayerData
@@ -478,14 +792,20 @@ func ParseMapTileProperties(inputData []byte, height int, width int) ([][]*Civ5M
 			}
 
 			newCityId := int(tileInfo.CityId)
-			if tileInfo.CityId == RawNoCityId {
+			if tileInfo.CityId == NoCityIdSentinel {
 				newCityId = InvalidCityId
+			}
+
+			newUnitId := int(tileInfo.UnitId)
+			if tileInfo.UnitId == NoUnitIdSentinel {
+				newUnitId = InvalidUnitId
 			}
 
 			mapTiles[i][j] = &Civ5MapTileImprovement{
 				X:           j,
 				Y:           i,
 				CityId:      newCityId,
+				UnitId:      newUnitId,
 				Owner:       int(tileInfo.Owner),
 				Improvement: int(tileInfo.Improvement),
 				RouteType:   int(tileInfo.RouteType),
@@ -605,12 +925,12 @@ func isEndOfFile(reader *io.SectionReader) (bool, error) {
 	return reader.Size() == currentPosition, nil
 }
 
-// createPhysicalMapData builds a map data structure containing only physical terrain data,
-// used when the file ends before any game/city data is present
+// createPhysicalMapData builds map data with only physical terrain, for files that end early.
 func createPhysicalMapData(header *Civ5MapHeader, terrainList, featureTerrainList, resourceList []string, mapTiles [][]*Civ5MapTilePhysical) *Civ5MapData {
 	fmt.Println("Reached end of file. Skip reading game description header.")
 	return buildMapData(header, terrainList, featureTerrainList, resourceList, mapTiles,
-		[][]*Civ5MapTileImprovement{}, []*Civ5CityData{}, []*Civ5PlayerData{}, map[int]int{})
+		[][]*Civ5MapTileImprovement{}, []*Civ5CityData{}, nil, []*Civ5PlayerData{}, []*Civ5TeamData{},
+		Civ5TeamRelationships{}, nil, map[int]int{}, Civ5GameTypeLists{})
 }
 
 // resolvedCityName captures a city name resolved onto a specific tile, for reporting purposes
@@ -714,6 +1034,34 @@ func reportCityOwnerMaps(cityOwnerMap map[int][]string, cityOwnerIndexMap map[in
 	}
 }
 
+// reportTeamRelationships prints each team's diplomatic relationships, one line per pair.
+func reportTeamRelationships(teamNames []*Civ5TeamData, rel Civ5TeamRelationships) {
+	fmt.Printf("\n=== Team Relationships ===\n")
+	if len(teamNames) == 0 {
+		fmt.Println("(empty)")
+		return
+	}
+	printOnce := func(label string, otherTeams []int, selfIndex int) {
+		var names []string
+		for _, other := range otherTeams {
+			if other <= selfIndex {
+				continue // already printed from the other team's perspective
+			}
+			names = append(names, teamNames[other].Name)
+		}
+		if len(names) > 0 {
+			fmt.Printf("  %s %s: %s\n", teamNames[selfIndex].Name, label, strings.Join(names, ", "))
+		}
+	}
+	for i := range teamNames {
+		printOnce("in contact with", rel.InContactWith[i], i)
+		printOnce("at war with", rel.AtWarWith[i], i)
+		printOnce("permanent war/peace with", rel.PermanentWarOrPeaceWith[i], i)
+		printOnce("open borders with", rel.OpenBordersWith[i], i)
+		printOnce("defensive pact with", rel.DefensivePactWith[i], i)
+	}
+}
+
 // GetSortedKeys returns the keys of a map sorted in ascending order
 func GetSortedKeys[K comparable, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
@@ -736,8 +1084,9 @@ func GetSortedKeys[K comparable, V any](m map[K]V) []K {
 // buildMapData assembles the final map data structure from its parsed components
 func buildMapData(header *Civ5MapHeader, terrainList, featureTerrainList, resourceList []string,
 	mapTiles [][]*Civ5MapTilePhysical, improvements [][]*Civ5MapTileImprovement,
-	cityData []*Civ5CityData, playerData []*Civ5PlayerData,
-	cityOwnerIndexMap map[int]int) *Civ5MapData {
+	cityData []*Civ5CityData, unitData []*Civ5UnitData, playerData []*Civ5PlayerData, teamData []*Civ5TeamData,
+	teamRelationships Civ5TeamRelationships, teamVisibility [][][2]int,
+	cityOwnerIndexMap map[int]int, typeLists Civ5GameTypeLists) *Civ5MapData {
 
 	return &Civ5MapData{
 		MapHeader:           *header,
@@ -745,10 +1094,19 @@ func buildMapData(header *Civ5MapHeader, terrainList, featureTerrainList, resour
 		FeatureTerrainList:  featureTerrainList,
 		ResourceList:        resourceList,
 		TileImprovementList: []string{}, // This could be populated if needed
+		BuildingTypeList:    typeLists.BuildingTypeList,
+		PromotionTypeList:   typeLists.PromotionTypeList,
+		PolicyTypeList:      typeLists.PolicyTypeList,
+		UnitTypeList:        typeLists.UnitTypeList,
+		UnitNameList:        typeLists.UnitNameList,
 		MapTiles:            mapTiles,
 		MapTileImprovements: improvements,
 		CityData:            cityData,
+		UnitData:            unitData,
 		Civ5PlayerData:      playerData,
+		TeamData:            teamData,
+		TeamRelationships:   teamRelationships,
+		TeamVisibility:      teamVisibility,
 		CityOwnerIndexMap:   cityOwnerIndexMap,
 		CivColorOverrides:   []CivColorOverride{}, // No overrides by default
 	}
@@ -812,8 +1170,7 @@ func readTerrainTypeLists(reader *io.SectionReader, header *Civ5MapHeader) (terr
 	return terrainList, featureTerrainList, resourceList, nil
 }
 
-// skipMapMetadata reads (and logs) the mod data, map name, map description, and world size fields.
-// None of this data is retained in the parsed map, matching the file's historical behavior.
+// skipMapMetadata reads and logs mod/name/description/world-size fields; none are retained.
 func skipMapMetadata(reader *io.SectionReader, header *Civ5MapHeader, version int) error {
 	modDataBytes, err := readByteArray(reader, header.ModDataSize)
 	if err != nil {
@@ -852,22 +1209,32 @@ func skipMapMetadata(reader *io.SectionReader, header *Civ5MapHeader, version in
 // reportGameDescriptionHeader prints a human-readable summary of the game description header
 func reportGameDescriptionHeader(header *Civ5GameDescriptionHeader) {
 	fmt.Println("\n=== Game Description ===")
+	fmt.Printf("Game Speed: %s\n", nullTerminatedString(header.GameSpeed[:]))
+	fmt.Printf("Starting Turn: %d\n", header.StartingTurn)
 	fmt.Printf("Max Turns: %d\n", header.MaxTurns)
+	fmt.Printf("Target Score: %d\n", header.TargetScore)
 	fmt.Printf("Start Year: %d\n", header.StartYear)
 	fmt.Printf("Players: %d\n", header.PlayerCount)
 	fmt.Printf("City States: %d\n", header.CityStateCount)
 	fmt.Printf("Teams: %d\n", header.TeamCount)
-	// Debug: Print raw struct for unknown field analysis
-	fmt.Printf("Raw struct: %+v\n", *header)
 }
 
-// readGameDescriptionSection reads the game description header and the type/unit/city data
-// sections that follow it, returning the raw unit and city data for later parsing
-func readGameDescriptionSection(reader *io.SectionReader, version int) (Civ5GameDescriptionHeader, []byte, []byte, error) {
+// gameDescriptionSectionData bundles byte blobs from the game description section for later parsing.
+type gameDescriptionSectionData struct {
+	UnitDataBytes         []byte
+	CityDataBytes         []byte
+	RelationshipDataBytes []byte
+	InfluenceDataBytes    []byte
+	VisibilityDataBytes   []byte
+}
+
+// readGameDescriptionSection reads the game description header through the visibility bitset.
+func readGameDescriptionSection(reader *io.SectionReader, version int, mapWidth, mapHeight uint32) (Civ5GameDescriptionHeader, gameDescriptionSectionData, Civ5GameTypeLists, error) {
 	fmt.Println("Reading game description header...")
 	gameDescriptionHeader := Civ5GameDescriptionHeader{}
+	typeLists := Civ5GameTypeLists{}
 	if err := readStruct(reader, &gameDescriptionHeader); err != nil {
-		return gameDescriptionHeader, nil, nil, err
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 	}
 	reportGameDescriptionHeader(&gameDescriptionHeader)
 
@@ -877,60 +1244,104 @@ func readGameDescriptionSection(reader *io.SectionReader, version int) (Civ5Game
 		var err error
 		victoryDataSize, err = readUint32(reader)
 		if err != nil {
-			return gameDescriptionHeader, nil, nil, err
+			return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 		}
 		gameOptionDataSize, err = readUint32(reader)
 		if err != nil {
-			return gameDescriptionHeader, nil, nil, err
+			return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 		}
 		fmt.Printf("Victory Data Size: %d bytes\n", victoryDataSize)
 		fmt.Printf("Game Option Data Size: %d bytes\n", gameOptionDataSize)
 	}
 
-	namedListSizes := []struct {
-		size uint32
-		name string
-	}{
-		{gameDescriptionHeader.ImprovementDataSize, "Improvement data"},
-		{gameDescriptionHeader.UnitTypeDataSize, "Unit type data"},
-		{gameDescriptionHeader.TechTypeDataSize, "Tech type data"},
-		{gameDescriptionHeader.PolicyTypeDataSize, "Policy type data"},
-		{gameDescriptionHeader.BuildingTypeDataSize, "Building type data"},
-		{gameDescriptionHeader.PromotionTypeDataSize, "Promotion type data"},
+	// Only Policy/Building/Promotion/UnitType lists are retained; the rest are read and logged only.
+	if _, err := readReportedStringList(reader, gameDescriptionHeader.ImprovementDataSize, "Improvement data"); err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 	}
-	for _, list := range namedListSizes {
-		if _, err := readReportedStringList(reader, list.size, list.name); err != nil {
-			return gameDescriptionHeader, nil, nil, err
-		}
+	unitTypeList, err := readReportedStringList(reader, gameDescriptionHeader.UnitTypeDataSize, "Unit type data")
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+	if _, err := readReportedStringList(reader, gameDescriptionHeader.TechTypeDataSize, "Tech type data"); err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+	policyTypeList, err := readReportedStringList(reader, gameDescriptionHeader.PolicyTypeDataSize, "Policy type data")
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+	buildingTypeList, err := readReportedStringList(reader, gameDescriptionHeader.BuildingTypeDataSize, "Building type data")
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+	promotionTypeList, err := readReportedStringList(reader, gameDescriptionHeader.PromotionTypeDataSize, "Promotion type data")
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 	}
 
 	fmt.Println("Unit data size: ", gameDescriptionHeader.UnitDataSize)
 	unitDataBytes, err := readByteArray(reader, gameDescriptionHeader.UnitDataSize)
 	if err != nil {
-		return gameDescriptionHeader, nil, nil, err
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 	}
 
 	fmt.Println("Unit name data size: ", gameDescriptionHeader.UnitNameDataSize)
-	if _, err := readByteArray(reader, gameDescriptionHeader.UnitNameDataSize); err != nil {
-		return gameDescriptionHeader, nil, nil, err
+	unitNameBytes, err := readByteArray(reader, gameDescriptionHeader.UnitNameDataSize)
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+	unitNameList := parseUnitNameArray(unitNameBytes)
+
+	typeLists = Civ5GameTypeLists{
+		BuildingTypeList:  buildingTypeList,
+		PromotionTypeList: promotionTypeList,
+		PolicyTypeList:    policyTypeList,
+		UnitTypeList:      unitTypeList,
+		UnitNameList:      unitNameList,
 	}
 
 	fmt.Println("City data size: ", gameDescriptionHeader.CityDataSize)
 	cityDataBytes, err := readByteArray(reader, gameDescriptionHeader.CityDataSize)
 	if err != nil {
-		return gameDescriptionHeader, nil, nil, err
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 	}
 
 	if version >= MapVersion11 {
 		if _, err := readReportedStringList(reader, victoryDataSize, "Victory data"); err != nil {
-			return gameDescriptionHeader, nil, nil, err
+			return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 		}
 		if _, err := readReportedStringList(reader, gameOptionDataSize, "Game option data"); err != nil {
-			return gameDescriptionHeader, nil, nil, err
+			return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
 		}
 	}
 
-	return gameDescriptionHeader, unitDataBytes, cityDataBytes, nil
+	// Team relationship bitsets, right after city data.
+	relationshipDataSize := relationshipBitsetSize(int(gameDescriptionHeader.TeamCount)) * diplomacyRelationshipTypeCount
+	relationshipDataBytes, err := readByteArray(reader, uint32(relationshipDataSize))
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+
+	// City-state influence array, right after the relationship bitsets.
+	influenceDataSize := int(gameDescriptionHeader.PlayerCount) * MaxCityStatesPerPlayer * 4
+	influenceDataBytes, err := readByteArray(reader, uint32(influenceDataSize))
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+
+	// Per-team tile visibility bitset, right after the influence array.
+	visibilityDataSize := (int(mapWidth)*int(mapHeight)*int(gameDescriptionHeader.TeamCount) + 7) / 8
+	visibilityDataBytes, err := readByteArray(reader, uint32(visibilityDataSize))
+	if err != nil {
+		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
+	}
+
+	return gameDescriptionHeader, gameDescriptionSectionData{
+		UnitDataBytes:         unitDataBytes,
+		CityDataBytes:         cityDataBytes,
+		RelationshipDataBytes: relationshipDataBytes,
+		InfluenceDataBytes:    influenceDataBytes,
+		VisibilityDataBytes:   visibilityDataBytes,
+	}, typeLists, nil
 }
 
 // readFileTail reads a fixed-size section of a file, ending precedingBytes before the end of the file
@@ -943,32 +1354,52 @@ func readFileTail(inputFile *os.File, fileLength int64, size, precedingBytes int
 	return data, nil
 }
 
-// readTailSections reads the map tile properties and player civilization data that are
-// stored at fixed-size offsets from the end of the file
-func readTailSections(inputFile *os.File, fileLength int64, mapHeader *Civ5MapHeader, gameDescriptionHeader *Civ5GameDescriptionHeader) ([][]*Civ5MapTileImprovement, []*Civ5PlayerData, error) {
+// readTailSections reads map tile properties, player civ data, and team names from the end of the file.
+func readTailSections(inputFile *os.File, fileLength int64, mapHeader *Civ5MapHeader, gameDescriptionHeader *Civ5GameDescriptionHeader, policyTypeList []string) ([][]*Civ5MapTileImprovement, []*Civ5PlayerData, []*Civ5TeamData, error) {
 	mapTilePropertiesSize := int(mapHeader.Height) * int(mapHeader.Width) * binary.Size(Civ5MapTileHeader{})
 	mapTileProperties, err := readFileTail(inputFile, fileLength, mapTilePropertiesSize, 0)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	mapTileImprovementData, err := ParseMapTileProperties(mapTileProperties, int(mapHeader.Height), int(mapHeader.Width))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	playerCivDataSize := CivDataSize * (int(gameDescriptionHeader.PlayerCount) + int(gameDescriptionHeader.CityStateCount))
 	playerCivData, err := readFileTail(inputFile, fileLength, playerCivDataSize, mapTilePropertiesSize)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	allPlayerData, err := ParseCivData(playerCivData)
+	allPlayerData, err := ParseCivData(playerCivData, policyTypeList)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return mapTileImprovementData, allPlayerData, nil
+	teamCount := int(gameDescriptionHeader.TeamCount)
+	teamNames, err := readTeamNamesSection(inputFile, fileLength, mapTilePropertiesSize+playerCivDataSize, teamCount)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return mapTileImprovementData, allPlayerData, teamNames, nil
+}
+
+// readTeamNamesSection reads the team name array and decodes it via ParseTeamNames.
+func readTeamNamesSection(inputFile *os.File, fileLength int64, precedingBytes int, teamCount int) ([]*Civ5TeamData, error) {
+	if teamCount <= 0 {
+		return nil, nil
+	}
+
+	teamNameDataSize := TeamNameRecordSize * teamCount
+	teamNameData, err := readFileTail(inputFile, fileLength, teamNameDataSize, precedingBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParseTeamNames(teamNameData, teamCount), nil
 }
 
 func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
@@ -1012,12 +1443,16 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return createPhysicalMapData(&mapHeader, terrainList, featureTerrainList, resourceList, mapTiles), nil
 	}
 
-	gameDescriptionHeader, unitDataBytes, cityDataBytes, err := readGameDescriptionSection(streamReader, version)
+	gameDescriptionHeader, sectionData, typeLists, err := readGameDescriptionSection(streamReader, version, mapHeader.Width, mapHeader.Height)
 	if err != nil {
 		return nil, err
 	}
 
-	mapTileImprovementData, allPlayerData, err := readTailSections(inputFile, fileLength, &mapHeader, &gameDescriptionHeader)
+	teamCount := int(gameDescriptionHeader.TeamCount)
+	teamRelationships := ParseTeamRelationships(sectionData.RelationshipDataBytes, teamCount)
+	teamVisibility := ParseTeamVisibility(sectionData.VisibilityDataBytes, int(mapHeader.Width), int(mapHeader.Height), teamCount)
+
+	mapTileImprovementData, allPlayerData, teamData, err := readTailSections(inputFile, fileLength, &mapHeader, &gameDescriptionHeader, typeLists.PolicyTypeList)
 	if err != nil {
 		return nil, err
 	}
@@ -1025,13 +1460,21 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	maxCityId := findMaxCityId(mapTileImprovementData, int(mapHeader.Height), int(mapHeader.Width))
 	fmt.Println("Max city id is", maxCityId)
 
-	cityData, err := ParseCityData(cityDataBytes, version, maxCityId)
+	cityData, err := ParseCityData(sectionData.CityDataBytes, version, maxCityId, typeLists.BuildingTypeList)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := ParseUnitData(unitDataBytes, version); err != nil {
+	unitData, err := ParseUnitData(sectionData.UnitDataBytes, version, typeLists)
+	if err != nil {
 		return nil, err
+	}
+
+	cityStateInfluence := ParseCityStateInfluence(sectionData.InfluenceDataBytes, int(gameDescriptionHeader.PlayerCount), int(gameDescriptionHeader.CityStateCount))
+	for i, influence := range cityStateInfluence {
+		if i < len(allPlayerData) {
+			allPlayerData[i].CityStateInfluence = influence
+		}
 	}
 
 	if len(cityData) > 0 {
@@ -1042,6 +1485,9 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	cityOwnerMap, cityOwnerIndexMap := buildCityOwnerMaps(cityData, gameDescriptionHeader.PlayerCount, gameDescriptionHeader.CityStateCount)
 	reportCityOwnerMaps(cityOwnerMap, cityOwnerIndexMap)
 
+	reportTeamRelationships(teamData, teamRelationships)
+
 	return buildMapData(&mapHeader, terrainList, featureTerrainList, resourceList,
-		mapTiles, mapTileImprovementData, cityData, allPlayerData, cityOwnerIndexMap), nil
+		mapTiles, mapTileImprovementData, cityData, unitData, allPlayerData, teamData,
+		teamRelationships, teamVisibility, cityOwnerIndexMap, typeLists), nil
 }

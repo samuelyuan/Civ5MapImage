@@ -45,11 +45,11 @@ func TestGroupEventsByTurnEmpty(t *testing.T) {
 
 func TestReadCivs(t *testing.T) {
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, uint32(1)) // civsLength
-	binary.Write(&buf, binary.LittleEndian, uint32(1)) // unknownVariable1
-	binary.Write(&buf, binary.LittleEndian, uint32(2)) // unknownVariable2
-	binary.Write(&buf, binary.LittleEndian, uint32(3)) // unknownVariable3
-	binary.Write(&buf, binary.LittleEndian, uint32(4)) // unknownVariable4
+	binary.Write(&buf, binary.LittleEndian, uint32(1))  // civsLength
+	binary.Write(&buf, binary.LittleEndian, uint32(14)) // civilizationIndex
+	binary.Write(&buf, binary.LittleEndian, uint32(2))  // leaderTypeIndex
+	binary.Write(&buf, binary.LittleEndian, uint32(77)) // playerColorIndex
+	binary.Write(&buf, binary.LittleEndian, uint32(3))  // difficultyRaw (HANDICAP_PRINCE)
 	writeVarString(&buf, "Augustus")
 	writeVarString(&buf, "Roman Empire")
 	writeVarString(&buf, "Rome")
@@ -62,11 +62,14 @@ func TestReadCivs(t *testing.T) {
 	}
 	got := civs[0]
 	want := Civ5ReplayCiv{
-		UnknownVariables: [4]int{1, 2, 3, 4},
-		Leader:           "Augustus",
-		LongName:         "Roman Empire",
-		Name:             "Rome",
-		Demonym:          "Romans",
+		CivilizationIndex: 14,
+		LeaderTypeIndex:   2,
+		PlayerColorIndex:  77,
+		Difficulty:        "HANDICAP_PRINCE",
+		Leader:            "Augustus",
+		LongName:          "Roman Empire",
+		Name:              "Rome",
+		Demonym:           "Romans",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("readCivs()[0] = %+v, want %+v", got, want)
