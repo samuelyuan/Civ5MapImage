@@ -34,6 +34,26 @@ This document describes the technical file formats used by Civilization 5 for ma
     - [Replay Event format](#replay-event-format)
   + [Tiles](#tiles)
 * [Save File Format](#save-file-format)
+  + [Player & Map Info](#player--map-info)
+  + [Civ Roster](#civ-roster)
+  + [Leaders & Civ Arrays](#leaders--civ-arrays)
+  + [Climate Section](#climate-section)
+  + [Game Name & Turn Info](#game-name--turn-info)
+  + [Leader Array 2 & Player Setup](#leader-array-2--player-setup)
+  + [Minor Civ Names](#minor-civ-names)
+  + [Player Arrays & Colors](#player-arrays--colors)
+  + [Sea Level](#sea-level)
+  + [Additional Pre-Game Fields](#additional-pre-game-fields)
+  + [Turn Speed Data](#turn-speed-data)
+  + [World Size Data](#world-size-data)
+  + [Game Options](#game-options)
+  + [Compressed Block](#compressed-block)
+  + [Decompressed Header](#decompressed-header)
+  + [Version-Dependent Unit Data](#version-dependent-unit-data)
+  + [Great Person](#great-person)
+  + [Votes](#votes)
+  + [Random State](#random-state)
+  + [Save File Replay Events](#save-file-replay-events)
 
 ## Map File Format
 
@@ -411,3 +431,447 @@ Tile data contains information about the physical map.
 ## Save File Format
 
 Most of the save file is compressed and the header begins with 0x789C, which is a ZLIB header.
+
+### Player & Map Info
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| varstring | var bytes | Player civ name |
+| varstring | var bytes | Player leader name |
+| varstring | var bytes | Player color |
+| byte[16] | 16 bytes | UnknownBytes1 |
+| varstring | var bytes | Version |
+| byte[16] | 16 bytes | UnknownBytes2 |
+| uint32 | 4 bytes | UnknownUint1 |
+| uint32 | 4 bytes | Slot hints version (loadSlotHints/loadSlotsHelper's own uiVersion) |
+| uint32 | 4 bytes | UnknownUint3 |
+| uint32 | 4 bytes | UnknownUint4 |
+| varstring | var bytes | Map filename 2 |
+| uint32 | 4 bytes | Civilization index array count |
+| int32[] | (count * 4) bytes | Civilization index per player slot |
+| uint32 | 4 bytes | Nickname array count |
+| varstring[] | var bytes | Nickname per player slot |
+| uint32 | 4 bytes | Slot status array count |
+| uint32[] | (count * 4) bytes | Slot status per player slot: 0=OPEN, 1=COMPUTER, 2=CLOSED, 3=TAKEN, 4=OBSERVER |
+| uint32 | 4 bytes | Slot claim array count |
+| uint32[] | (count * 4) bytes | Slot claim per player slot: 0=UNASSIGNED, 1=RESERVED, 2=ASSIGNED |
+| uint32 | 4 bytes | Team type array count |
+| uint32[] | (count * 4) bytes | Team index per player slot |
+| uint32 | 4 bytes | Handicap array count |
+| uint32[] | (count * 4) bytes | Handicap index per player slot |
+
+### Civ Roster
+
+Absent entirely (zero bytes) when slot hints version < 3 - see Player & Map Info above.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Civilization key array count (only if slot hints version >= 3) |
+| varstring[] | var bytes | Civilization key per player slot (only if slot hints version >= 3) |
+
+### Leaders & Civ Arrays
+
+Leader key array is absent entirely (zero bytes) when slot hints version < 3 - see Player & Map Info
+above.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Leader key array count (only if slot hints version >= 3) |
+| varstring[] | var bytes | Leader key per player slot (only if slot hints version >= 3) |
+| uint32 | 4 bytes | Pre-game format marker (0 if the block below is absent) |
+| byte[12] | 12 bytes | UnknownBytes1 (only if pre-game format marker != 0) |
+| varstring | var bytes | Computer username |
+| uint32 | 4 bytes | UnknownInt array count |
+| int32[] | (count * 4) bytes | UnknownInt array elements |
+| byte[53] | 53 bytes | UnknownBytes2 |
+| uint32 | 4 bytes | UnknownUint1 array count |
+| uint32[] | (count * 4) bytes | UnknownUint1 array elements |
+| uint32 | 4 bytes | Civ array count |
+| varstring[] | var bytes | Civ names (again) |
+| uint32 | 4 bytes | UnknownUint2 array count |
+| uint32[] | (count * 4) bytes | UnknownUint2 array elements |
+| uint32 | 4 bytes | Civ array 2 count |
+| varstring[] | var bytes | Civ array 2 strings |
+| uint32 | 4 bytes | Extra array count (only if slot hints version < 3) |
+| uint32[] | (count * 4) bytes | Extra array elements (only if slot hints version < 3) |
+
+### Climate Section
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Climate enum |
+| uint32 | 4 bytes | Climate info id |
+| uint32 | 4 bytes | Climate info civilopedia |
+| varstring | var bytes | Climate display name |
+| uint32 | 4 bytes | Climate help |
+| uint32 | 4 bytes | Climate disabled help |
+| uint32 | 4 bytes | Climate strategy |
+| varstring | var bytes | Climate type (e.g. CLIMATE_TEMPERATE) |
+| varstring | var bytes | Climate text key |
+| varstring | var bytes | Climate display name 2 |
+| int32 | 4 bytes | Desert percent change |
+| uint32 | 4 bytes | Jungle latitude |
+| uint32 | 4 bytes | Hill range |
+| uint32 | 4 bytes | Mountain percent |
+| float32 | 4 bytes | Snow latitude change |
+| float32 | 4 bytes | Tundra latitude change |
+| float32 | 4 bytes | Grass latitude change |
+| float32 | 4 bytes | Desert bottom latitude change |
+| float32 | 4 bytes | Desert top latitude change |
+| float32 | 4 bytes | Ice latitude |
+| float32 | 4 bytes | Rand ice latitude |
+
+### Game Name & Turn Info
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Era enum |
+| uint32 | 4 bytes | Email address array count (MAX_PLAYERS) |
+| varstring[] | var bytes | Email addresses |
+| float32 | 4 bytes | End turn timer length |
+| uint32 | 4 bytes | Flag decal array count |
+| varstring[] | var bytes | Flag decals |
+| uint32 | 4 bytes | Deprecated force-controls count |
+| byte[7] | 7 bytes | Deprecated force-controls flags |
+| int32 | 4 bytes | Game mode enum |
+| varstring | var bytes | Game name |
+| uint32 | 4 bytes | Game speed enum |
+| uint8 | 1 byte | Game started (bool) |
+| uint32 | 4 bytes | Current turn number |
+| int32 | 4 bytes | Legacy game-type dummy int (unused, uiVersion==0 branch) |
+| uint8 | 1 byte | Network multiplayer game (bool) |
+| uint32 | 4 bytes | Game update time |
+| uint32 | 4 bytes | Handicap array count (MAX_PLAYERS) |
+| uint32[] | (count * 4) bytes | Handicap array elements (HandicapTypes per player; element 0 matches the header's own difficulty string) |
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Tracked-player handicap array count (only if pre-game format marker != 4) |
+| int32[] | (count * 4) bytes | Tracked-player handicap array elements (only if pre-game format marker != 4) |
+| byte[2] | 2 bytes | UnknownBytes3 (only if pre-game format marker != 4) |
+| byte[2] | 2 bytes | Reserved bytes, present instead of the above 2 rows when pre-game format marker == 4 |
+
+### Leader Array 2 & Player Setup
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Leader name array count |
+| varstring[] | var bytes | Leader names |
+| uint32 | 4 bytes | Padding marker |
+| byte[] | (marker + 1) * 4 bytes | UnknownBytes1 (only if marker != 0) |
+| varstring | var bytes | Computer username 2 |
+| byte[7] | 7 bytes | UnknownId4 |
+| varstring | var bytes | Map filename 3 |
+| uint32 | 4 bytes | Max city elimination |
+| uint32 | 4 bytes | Max turns |
+| uint32 | 4 bytes | Num minor civs |
+
+### Minor Civ Names
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Minor civ names array count (only as many entries as real city-states in the game, not MAX_PLAYERS) |
+| varstring[] | var bytes | Minor civ (city-state) names — patches matching entries into the civ roster |
+| uint32 | 4 bytes | Minor nation civ array count (MAX_PLAYERS) |
+| uint8[] | count bytes | Minor nation civ array elements (bool) |
+| uint8 | 1 byte | Dummy value (bool) |
+| uint32 | 4 bytes | Multiplayer options array count |
+| uint8[] | count bytes | Multiplayer options array elements (bool): 0=SIMULTANEOUS_TURNS, 1=TAKEOVER_AI, 2=SHUFFLE_TEAMS, 3=ANONYMOUS |
+
+### Player Arrays & Colors
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Net ID array count (MAX_PLAYERS) |
+| int32[] | (count * 4) bytes | Net ID array elements (-1 = no network ID, expected for non-multiplayer saves) |
+| uint32 | 4 bytes | Nickname array 2 count (MAX_PLAYERS; a second, independent nickname array - see Player & Map Info's own Nickname array) |
+| varstring[] | var bytes | Nickname array 2 elements |
+| int32 | 4 bytes | Num victory infos (the ruleset's own victory type count) |
+| int32 | 4 bytes | Pitboss turn time |
+| uint32 | 4 bytes | Playable civs array count (MAX_PLAYERS) |
+| uint8[] | count bytes | Playable civs array elements (bool) |
+| uint32 | 4 bytes | Player color array count (only as many entries as real players in the game, not MAX_PLAYERS) |
+| varstring[] | var bytes | Player colors |
+| uint8 | 1 byte | Private game (bool) |
+| uint8 | 1 byte | Quick combat (bool) |
+| uint8 | 1 byte | Quick combat default (bool) |
+| int32 | 4 bytes | Quick handicap (HandicapTypes; -1 = NO_HANDICAP) |
+| uint8 | 1 byte | Quickstart (bool) |
+| uint8 | 1 byte | Random world size (bool) |
+| uint8 | 1 byte | Random map script (bool) |
+| uint32 | 4 bytes | Ready players array count (MAX_PLAYERS) |
+| uint8[] | count bytes | Ready players array elements (bool) |
+
+### Sea Level
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Sea level enum |
+| uint32 | 4 bytes | Sea level info id |
+| uint32 | 4 bytes | Sea level info civilopedia |
+| varstring | var bytes | Sea level display name |
+| uint32 | 4 bytes | Sea level help |
+| uint32 | 4 bytes | Sea level disabled help |
+| uint32 | 4 bytes | Sea level strategy |
+| varstring | var bytes | Sea level type |
+| varstring | var bytes | Sea level text key |
+| varstring | var bytes | Sea level display name 2 |
+| int32 | 4 bytes | Sea level change |
+| uint8 | 1 byte | Dummy value 2 |
+
+### Additional Pre-Game Fields
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Slot claim array 2 count (a second, independent slot-claim array - see Player & Map Info's own Slot claim array) |
+| uint32[] | (count * 4) bytes | Slot claim array 2 elements: 0=UNASSIGNED, 1=RESERVED, 2=ASSIGNED |
+| uint32 | 4 bytes | Slot status array 2 count (a second, independent slot-status array - see Player & Map Info's own Slot status array) |
+| uint32[] | (count * 4) bytes | Slot status array 2 elements: 0=OPEN, 1=COMPUTER, 2=CLOSED, 3=TAKEN, 4=OBSERVER |
+| varstring | var bytes | SMTP host (typically empty) |
+| uint32 | 4 bytes | Sync random seed |
+| int32 | 4 bytes | Target score |
+| uint32 | 4 bytes | Team type array 2 count (a second, independent team-type array - see Player & Map Info's own Team type array) |
+| uint32[] | (count * 4) bytes | Team type array 2 elements |
+| uint8 | 1 byte | Transferred map (bool) |
+
+### Turn Speed Data
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Turn timer id |
+| uint32 | 4 bytes | Turn timer civilopedia |
+| varstring | var bytes | Turn timer display name |
+| uint32 | 4 bytes | Turn timer help |
+| uint32 | 4 bytes | Turn timer disabled help |
+| uint32 | 4 bytes | Turn timer strategy |
+| varstring | var bytes | Turn timer type (e.g. TURNTIMER_SNAIL) |
+| varstring | var bytes | Turn timer text key |
+| varstring | var bytes | Turn timer display name 2 |
+| uint32 | 4 bytes | Turn timer base time |
+| uint32 | 4 bytes | Turn timer city bonus |
+| uint32 | 4 bytes | Turn timer unit bonus |
+| uint32 | 4 bytes | Turn timer first-turn multiplayer |
+| uint32 | 4 bytes | Turn timer type enum |
+| uint8 | 1 byte | Turn timer city screen blocked |
+| uint32 | 4 bytes | Victory flags array count (one per victory condition - 5 in vanilla/BNW) |
+| uint8[] | count bytes | Victory flags |
+| uint32 | 4 bytes | White flag array count |
+| uint8[] | count bytes | White flag array elements (bool) |
+
+### World Size Data
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Serialization version (typically 2) |
+| uint32 | 4 bytes | World info id |
+| uint32 | 4 bytes | World info civilopedia (v2 only) |
+| varstring | var bytes | World size display name |
+| varstring | var bytes | World size help text |
+| uint32 | 4 bytes | World size disabled help |
+| uint32 | 4 bytes | World size strategy |
+| varstring | var bytes | World size type (e.g. WORLDSIZE_STANDARD) |
+| varstring | var bytes | World size text key |
+| varstring | var bytes | World size display name 2 |
+| uint32 | 4 bytes | Default players |
+| uint32 | 4 bytes | Default minor civs |
+| uint32 | 4 bytes | Fog tiles per barbarian camp |
+| uint32 | 4 bytes | Num natural wonders |
+| uint32 | 4 bytes | Unit name modifier |
+| uint32 | 4 bytes | Target num cities |
+| uint32 | 4 bytes | Num free building resources |
+| uint32 | 4 bytes | Building class prereq modifier |
+| int32 | 4 bytes | Max conscript modifier |
+| uint32 | 4 bytes | Grid width |
+| uint32 | 4 bytes | Grid height |
+| uint32 | 4 bytes | Max active religions (v2 only) |
+| int32 | 4 bytes | Terrain grain change |
+| int32 | 4 bytes | Feature grain change |
+| uint32 | 4 bytes | Research percent |
+| uint32 | 4 bytes | Advanced start points mod |
+| uint32 | 4 bytes | Num cities unhappiness percent |
+| uint32 | 4 bytes | Num cities policy cost mod |
+| uint32 | 4 bytes | Num cities tech cost mod |
+| uint32 | 4 bytes | World size enum (v2 only) |
+
+### Game Options
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Game option array count |
+| varstring | var bytes | Game option name (repeated per element) |
+| uint32 | 4 bytes | Game option enabled (repeated per element) |
+| uint32 | 4 bytes | Map option array count (per the active map script's own custom options; 0 for a fixed .Civ5Map file) |
+| varstring | var bytes | Map option name (repeated per element) |
+| uint32 | 4 bytes | Map option value (repeated per element) |
+| varstring | var bytes | Game version 2 |
+| uint32 | 4 bytes | Should-notify Steam invite array count |
+| uint8[] | count bytes | Should-notify Steam invite array elements (bool) |
+| uint32 | 4 bytes | Should-notify email array count |
+| uint8[] | count bytes | Should-notify email array elements (bool) |
+| uint32 | 4 bytes | Turn-notify email address array count |
+| varstring[] | var bytes | Turn-notify email address array elements |
+
+### Compressed Block
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| byte[8] | 8 bytes | Padding, always `[2,0,0,0,0,0,1,0]` |
+
+ZLIB-compressed data follows, starting with the 0x789C signature. Everything below is inside the decompressed contents.
+
+### Decompressed Header
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Save file version — 0x0B (11) enables the named arrays |
+| uint32 | 4 bytes | End turn messages sent |
+| uint32 | 4 bytes | Elapsed game turns (turns played since Start turn - the displayed/current turn is Start turn + this) |
+| uint32 | 4 bytes | Start turn (the turn this game began counting from - 0 for a normal game, or an offset for a scenario/late-era start) |
+| uint32 | 4 bytes | Winning turn (0 if no winner yet; relative to Start turn, same as Elapsed game turns) |
+| int32 | 4 bytes | Start year — defaults to -4000 (4000 BC); only differs when the map file itself has a custom start year baked in (scenario/mod maps), independent of the era chosen at game setup |
+| int32 | 4 bytes | Estimate end turn |
+| int32 | 4 bytes | Default estimate end turn |
+| int32 | 4 bytes | Turn slice |
+| int32 | 4 bytes | Cutoff slice |
+| int32 | 4 bytes | Num cities (global count across all civs, not just the player) |
+| int32 | 4 bytes | Total population |
+| int32 | 4 bytes | No-nukes count |
+| int32 | 4 bytes | Nukes exploded |
+| int32 | 4 bytes | Max population |
+| int32 | 4 bytes | Unused1 (typically 0) |
+| int32 | 4 bytes | Unused2 (typically 0) |
+| int32 | 4 bytes | Unused3 (typically 0) |
+| int32 | 4 bytes | Init population |
+| int32 | 4 bytes | Init land |
+| int32 | 4 bytes | Init tech |
+| int32 | 4 bytes | Init wonders |
+| int32 | 4 bytes | AI auto play |
+| int32 | 4 bytes | Total religion tech cost |
+| int32 | 4 bytes | Cached world religion tech progress |
+| int32 | 4 bytes | United Nations countdown |
+| int32 | 4 bytes | Num victory votes tallied |
+| int32 | 4 bytes | Num victory votes expected |
+| int32 | 4 bytes | Votes needed for diplo victory |
+| int32 | 4 bytes | Map score mod |
+| byte | 1 byte | Score dirty (bool) |
+| byte | 1 byte | Circumnavigated (bool) |
+| byte | 1 byte | Final initialized (bool) |
+| byte | 1 byte | Hot PBEM between turns (bool) |
+| byte | 1 byte | Nukes valid (bool) |
+| byte | 1 byte | End game tech researched (bool) |
+| byte | 1 byte | Tuner ever connected (bool) |
+| byte | 1 byte | Tutorial ever attacked (bool) |
+| byte | 1 byte | Static tutorial active (bool) |
+| byte | 1 byte | Ever right-click moved (bool) |
+| uint32 | 4 bytes | Advisor messages viewed array count |
+| varstring[] | var bytes | Advisor message IDs (e.g. `RIGHT_CLICK_MOVE`, `CHOOSE_IDEOLOGY`) |
+| uint32 | 4 bytes | Handicap: 0=HANDICAP_SETTLER, 1=HANDICAP_CHIEFTAIN, 2=HANDICAP_WARLORD, 3=HANDICAP_PRINCE, 4=HANDICAP_KING, 5=HANDICAP_EMPEROR, 6=HANDICAP_IMMORTAL, 7=HANDICAP_DEITY |
+| int32 | 4 bytes | Pause player (-1 if none) |
+| int32 | 4 bytes | AI auto play return player (-1 if none) |
+| int32 | 4 bytes | Best land unit player |
+| int32 | 4 bytes | Winner (-1 if no winner yet; whole-game winner, not tied to whichever player this file happens to track) |
+| uint32 | 4 bytes | Victory: 0=VICTORY_TIME, 1=VICTORY_SPACE_RACE, 2=VICTORY_DOMINATION, 3=VICTORY_CULTURAL, 4=VICTORY_DIPLOMATIC (0xFFFFFFFF if none yet) |
+| uint32 | 4 bytes | GameState: 0=GAMESTATE_ON, 1=GAMESTATE_OVER, 2=GAMESTATE_EXTENDED |
+| int32 | 4 bytes | Best wonders player |
+| int32 | 4 bytes | Best policies player |
+| int32 | 4 bytes | Best great people player |
+| int32 | 4 bytes | Religion tech (-1 if none) |
+| int32 | 4 bytes | Industrial route (1=railroad, matching `.civ5map`'s RouteType) |
+| varstring | var bytes | Script data |
+| int32[64] | 256 bytes | End turn messages received, per player (no length prefix) |
+| int32[64] | 256 bytes | Rank -> player: which player holds each rank |
+| int32[64] | 256 bytes | Player -> rank: each player's rank |
+| int32[64] | 256 bytes | Player score |
+| int32[64] | 256 bytes | Rank -> team: which team holds each rank |
+| int32[64] | 256 bytes | Team -> rank: each team's rank |
+| int32[64] | 256 bytes | Team score |
+
+### Version-Dependent Unit Data
+
+If save file version == 0x0B (11):
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Unit name array count |
+| (varstring,uint32)[] | var bytes | Unit name array: (unit name, count created) per unit type |
+| uint32 | 4 bytes | Unit class array count |
+| (varstring,uint32)[] | var bytes | Unit class array: (unit class, count created) per unit class |
+| uint32 | 4 bytes | Building class array count |
+| (varstring,uint32)[] | var bytes | Building class array: (building class, count created) per building class |
+| byte[2366] | 2366 bytes | Unknown padding |
+
+Otherwise:
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Unit created count array length |
+| (uint32,int32)[] | var bytes | Unit created count: (type name hash, count created) per unit type |
+| uint32 | 4 bytes | Unit class created count array length |
+| (uint32,int32)[] | var bytes | Unit class created count: (type name hash, count created) per unit class |
+| uint32 | 4 bytes | Building class created count array length |
+| (uint32,int32)[] | var bytes | Building class created count: (type name hash, count created) per building class |
+| uint32 | 4 bytes | Project created count array length |
+| (uint32,int32)[] | var bytes | Project created count: (type name hash, count created) per project type |
+| uint32 | 4 bytes | Vote outcome array length |
+| (uint32,int32)[] | var bytes | Vote outcome: (type name hash, outcome) per vote type |
+| uint32 | 4 bytes | Secretary general timer array length |
+| (uint32,int32)[] | var bytes | Secretary general timer: (type name hash, timer) per vote source type |
+| uint32 | 4 bytes | Vote timer array length |
+| (uint32,int32)[] | var bytes | Vote timer: (type name hash, timer) per vote source type |
+| uint32 | 4 bytes | Diplo vote array length |
+| (uint32,int32)[] | var bytes | Diplo vote: (type name hash, value) per vote source type |
+| int32[63] | 252 bytes | Votes cast |
+| int32[63] | 252 bytes | Previous votes cast |
+| int32[63] | 252 bytes | Num votes for team |
+| uint32 | 4 bytes | Special unit valid array length |
+| (uint32,bool)[] | var bytes | Special unit valid: (type name hash, is valid) per special unit type — 1-byte bool value, not 4 |
+| uint32 | 4 bytes | Team victory rank array length |
+| (uint32,int32[5])[] | var bytes | Team victory rank: (type name hash, rank per victory-point-award) per victory type — the sub-array size (5) isn't stored in the file |
+| uint32 | 4 bytes | Destroyed cities array count |
+| varstring[] | var bytes | Destroyed city names |
+
+### Great Person
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Great person array count |
+| varstring[] | var bytes | Great person names |
+
+### Votes
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Vote selections: num slots |
+| int32 | 4 bytes | Vote selections: last index |
+| int32 | 4 bytes | Vote selections: free list head |
+| int32 | 4 bytes | Vote selections: free list count |
+| int32 | 4 bytes | Vote selections: current ID |
+| int32[numSlots] | numSlots * 4 bytes | Vote selections: next-free-index per slot |
+| uint32 | 4 bytes | Vote selections: entry count (0 when no World Congress votes have been proposed yet; entry format not decoded) |
+| int32 | 4 bytes | Votes triggered: num slots |
+| int32 | 4 bytes | Votes triggered: last index |
+| int32 | 4 bytes | Votes triggered: free list head |
+| int32 | 4 bytes | Votes triggered: free list count |
+| int32 | 4 bytes | Votes triggered: current ID |
+| int32[numSlots] | numSlots * 4 bytes | Votes triggered: next-free-index per slot |
+| uint32 | 4 bytes | Votes triggered: entry count (0 when no votes have been triggered yet; entry format not decoded) |
+
+### Random State
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Map rand: version |
+| uint32 | 4 bytes | Map rand: seed |
+| uint32 | 4 bytes | Map rand: call count |
+| uint32 | 4 bytes | Map rand: reset count |
+| byte | 1 byte | Map rand: extended callstack debugging flag (always 0 in a release build) |
+| uint32 | 4 bytes | Other rand: version |
+| uint32 | 4 bytes | Other rand: seed |
+| uint32 | 4 bytes | Other rand: call count |
+| uint32 | 4 bytes | Other rand: reset count |
+| byte | 1 byte | Other rand: extended callstack debugging flag (always 0 in a release build) |
+| uint32 | 4 bytes | Replay message version |
+
+### Save File Replay Events
+
+Same format as replay events in the shared Replay File Format section - the save file's own event log, read by the same code.

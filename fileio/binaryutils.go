@@ -3,6 +3,7 @@ package fileio
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"strconv"
 	"strings"
@@ -124,4 +125,136 @@ func unsafeReadUint16(reader *io.SectionReader) uint16 {
 		panic(fmt.Sprintf("failed to load uint16: %v", err))
 	}
 	return unsignedIntValue
+}
+
+// unsafeReadFixedInt32Array reads a fixed-length array of int32 values with no length prefix
+func unsafeReadFixedInt32Array(reader *io.SectionReader, count int) []int32 {
+	values := make([]int32, count)
+	for i := 0; i < count; i++ {
+		values[i] = int32(unsafeReadUint32(reader))
+	}
+	return values
+}
+
+// unsafeReadByte reads a single byte from the binary stream, panicking on error.
+func unsafeReadByte(reader *io.SectionReader) byte {
+	value := make([]byte, 1)
+	if _, err := io.ReadFull(reader, value); err != nil {
+		panic(fmt.Sprintf("failed to load byte: %v", err))
+	}
+	return value[0]
+}
+
+type HashValuePair struct {
+	Hash  uint32
+	Value int32
+}
+
+func readHashValuePairs(reader *io.SectionReader, count int) []HashValuePair {
+	pairs := make([]HashValuePair, count)
+	for i := 0; i < count; i++ {
+		hash := unsafeReadUint32(reader)
+		var value int32
+		if hash != 0 {
+			value = int32(unsafeReadUint32(reader))
+		}
+		pairs[i] = HashValuePair{Hash: hash, Value: value}
+	}
+	return pairs
+}
+
+type HashBoolPair struct {
+	Hash  uint32
+	Value bool
+}
+
+func readHashBoolPairs(reader *io.SectionReader, count int) []HashBoolPair {
+	pairs := make([]HashBoolPair, count)
+	for i := 0; i < count; i++ {
+		hash := unsafeReadUint32(reader)
+		var value bool
+		if hash != 0 {
+			value = unsafeReadByte(reader) != 0
+		}
+		pairs[i] = HashBoolPair{Hash: hash, Value: value}
+	}
+	return pairs
+}
+
+type HashIntArrayPair struct {
+	Hash   uint32
+	Values []int32
+}
+
+func readHashIntArrayPairs(reader *io.SectionReader, count int, subArraySize int) []HashIntArrayPair {
+	pairs := make([]HashIntArrayPair, count)
+	for i := 0; i < count; i++ {
+		hash := unsafeReadUint32(reader)
+		var values []int32
+		if hash != 0 {
+			values = unsafeReadFixedInt32Array(reader, subArraySize)
+		}
+		pairs[i] = HashIntArrayPair{Hash: hash, Values: values}
+	}
+	return pairs
+}
+
+type FreeListArrayHeader struct {
+	NumSlots      int32
+	LastIndex     int32
+	FreeListHead  int32
+	FreeListCount int32
+	CurrentID     int32
+	NextFreeIndex []int32
+}
+
+func readFreeListArrayHeader(reader *io.SectionReader) FreeListArrayHeader {
+	numSlots := int32(unsafeReadUint32(reader))
+	lastIndex := int32(unsafeReadUint32(reader))
+	freeListHead := int32(unsafeReadUint32(reader))
+	freeListCount := int32(unsafeReadUint32(reader))
+	currentID := int32(unsafeReadUint32(reader))
+	nextFreeIndex := unsafeReadFixedInt32Array(reader, int(numSlots))
+	return FreeListArrayHeader{
+		NumSlots:      numSlots,
+		LastIndex:     lastIndex,
+		FreeListHead:  freeListHead,
+		FreeListCount: freeListCount,
+		CurrentID:     currentID,
+		NextFreeIndex: nextFreeIndex,
+	}
+}
+
+func readEmptyFreeListTrashArray(reader *io.SectionReader, name string) FreeListArrayHeader {
+	header := readFreeListArrayHeader(reader)
+	count := unsafeReadUint32(reader)
+	if count != 0 {
+		panic(fmt.Sprintf("%s: non-empty FreeListTrashArray (count=%d) not supported", name, count))
+	}
+	return header
+}
+
+type RandomState struct {
+	Version    uint32
+	Seed       uint32
+	CallCount  uint32
+	ResetCount uint32
+}
+
+func readRandomState(reader *io.SectionReader) RandomState {
+	version := unsafeReadUint32(reader)
+	seed := unsafeReadUint32(reader)
+	callCount := unsafeReadUint32(reader)
+	resetCount := unsafeReadUint32(reader)
+	unsafeReadByte(reader) // extended callstack debugging flag - always false in a release build
+	return RandomState{Version: version, Seed: seed, CallCount: callCount, ResetCount: resetCount}
+}
+
+func civ5StringHash(s string) uint32 {
+	table := crc32.MakeTable(crc32.IEEE)
+	crc := uint32(0xFFFFFFFF)
+	for i := 0; i < len(s); i++ {
+		crc = table[byte(crc)^s[i]] ^ (crc >> 8)
+	}
+	return crc
 }

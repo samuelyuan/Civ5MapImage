@@ -79,6 +79,12 @@ var plotTypeNames = []string{
 	"PLOT_OCEAN",
 }
 
+var gameStateNames = []string{
+	"GAMESTATE_ON",
+	"GAMESTATE_OVER",
+	"GAMESTATE_EXTENDED",
+}
+
 var gameOptionNames = []string{
 	"GAMEOPTION_NO_CITY_RAZING",
 	"GAMEOPTION_NO_BARBARIANS",
