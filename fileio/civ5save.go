@@ -28,397 +28,157 @@ type Civ5SaveData struct {
 
 func readClimateSection(streamReader *io.SectionReader) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "climateEnum",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "climateInfoId",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "climateInfoCivilopedia",
-		},
+		{VariableType: "uint32", VariableName: "climateEnum"},
+		{VariableType: "uint32", VariableName: "climateInfoId"},
+		{VariableType: "uint32", VariableName: "climateInfoCivilopedia"},
 	})
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "climateDisplayName",
-		},
+		{VariableType: "varstring", VariableName: "climateDisplayName"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "climateHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "climateDisabledHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "climateStrategy",
-		},
+		{VariableType: "uint32", VariableName: "climateHelp"},
+		{VariableType: "uint32", VariableName: "climateDisabledHelp"},
+		{VariableType: "uint32", VariableName: "climateStrategy"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "climateType",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "climateTextKey",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "climateDisplayName2",
-		},
+		{VariableType: "varstring", VariableName: "climateType"},
+		{VariableType: "varstring", VariableName: "climateTextKey"},
+		{VariableType: "varstring", VariableName: "climateDisplayName2"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "int32",
-			VariableName: "desertPercentChange",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "jungleLatitude",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "hillRange",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "mountainPercent",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "snowLatitudeChange",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "tundraLatitudeChange",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "grassLatitudeChange",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "desertBottomLatitudeChange",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "desertTopLatitudeChange",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "iceLatitude",
-		},
-		{
-			VariableType: "float32",
-			VariableName: "randIceLatitude",
-		},
+		{VariableType: "int32", VariableName: "desertPercentChange"},
+		{VariableType: "uint32", VariableName: "jungleLatitude"},
+		{VariableType: "uint32", VariableName: "hillRange"},
+		{VariableType: "uint32", VariableName: "mountainPercent"},
+		{VariableType: "float32", VariableName: "snowLatitudeChange"},
+		{VariableType: "float32", VariableName: "tundraLatitudeChange"},
+		{VariableType: "float32", VariableName: "grassLatitudeChange"},
+		{VariableType: "float32", VariableName: "desertBottomLatitudeChange"},
+		{VariableType: "float32", VariableName: "desertTopLatitudeChange"},
+		{VariableType: "float32", VariableName: "iceLatitude"},
+		{VariableType: "float32", VariableName: "randIceLatitude"},
 	})
 }
 
 func readSeaLevel(streamReader *io.SectionReader) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "seaLevelEnum",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "seaLevelInfoId",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "seaLevelInfoCivilopedia",
-		},
+		{VariableType: "uint32", VariableName: "seaLevelEnum"},
+		{VariableType: "uint32", VariableName: "seaLevelInfoId"},
+		{VariableType: "uint32", VariableName: "seaLevelInfoCivilopedia"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelDisplayName",
-		},
+		{VariableType: "varstring", VariableName: "seaLevelDisplayName"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "seaLevelHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "seaLevelDisabledHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "seaLevelStrategy",
-		},
+		{VariableType: "uint32", VariableName: "seaLevelHelp"},
+		{VariableType: "uint32", VariableName: "seaLevelDisabledHelp"},
+		{VariableType: "uint32", VariableName: "seaLevelStrategy"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelType",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelTextKey",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "seaLevelDisplayName2",
-		},
+		{VariableType: "varstring", VariableName: "seaLevelType"},
+		{VariableType: "varstring", VariableName: "seaLevelTextKey"},
+		{VariableType: "varstring", VariableName: "seaLevelDisplayName2"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "int32",
-			VariableName: "seaLevelChange",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "seaLevelDummyValue2",
-		},
+		{VariableType: "int32", VariableName: "seaLevelChange"},
+		{VariableType: "uint8", VariableName: "seaLevelDummyValue2"},
 	})
 }
 
 func readTurnSpeedData(streamReader *io.SectionReader) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerId",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerCivilopedia",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimerDisplayName",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerDisabledHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerStrategy",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimerType",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimerTextKey",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "turnTimerDisplayName2",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerBaseTime",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerCityBonus",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerUnitBonus",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerFirstTurnMultiplayer",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnTimerTypeEnum",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "turnTimerCityScreenBlocked",
-		},
+		{VariableType: "uint32", VariableName: "turnTimerId"},
+		{VariableType: "uint32", VariableName: "turnTimerCivilopedia"},
+		{VariableType: "varstring", VariableName: "turnTimerDisplayName"},
+		{VariableType: "uint32", VariableName: "turnTimerHelp"},
+		{VariableType: "uint32", VariableName: "turnTimerDisabledHelp"},
+		{VariableType: "uint32", VariableName: "turnTimerStrategy"},
+		{VariableType: "varstring", VariableName: "turnTimerType"},
+		{VariableType: "varstring", VariableName: "turnTimerTextKey"},
+		{VariableType: "varstring", VariableName: "turnTimerDisplayName2"},
+		{VariableType: "uint32", VariableName: "turnTimerBaseTime"},
+		{VariableType: "uint32", VariableName: "turnTimerCityBonus"},
+		{VariableType: "uint32", VariableName: "turnTimerUnitBonus"},
+		{VariableType: "uint32", VariableName: "turnTimerFirstTurnMultiplayer"},
+		{VariableType: "uint32", VariableName: "turnTimerTypeEnum"},
+		{VariableType: "uint8", VariableName: "turnTimerCityScreenBlocked"},
 	})
 
 	readArray(streamReader, "turnTimerVictoryFlags", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint8",
-			VariableName: "victoryFlag",
-		},
+		{VariableType: "uint8", VariableName: "victoryFlag"},
 	})
 }
 
 func readWorldSizeData(streamReader *io.SectionReader) {
 	worldInfoVersion := unsafeReadUint32(streamReader)
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "worldInfoId",
-		},
+		{VariableType: "uint32", VariableName: "worldInfoId"},
 	})
 
 	if worldInfoVersion == 2 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "uint32",
-				VariableName: "worldInfoCivilopedia",
-			},
+			{VariableType: "uint32", VariableName: "worldInfoCivilopedia"},
 		})
 	}
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "worldSizeDisplayName",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSizeHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "worldSizeDisabledHelp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "worldSizeStrategy",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSizeType",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSizeTextKey",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSizeDisplayName2",
-		},
+		{VariableType: "varstring", VariableName: "worldSizeDisplayName"},
+		{VariableType: "varstring", VariableName: "worldSizeHelp"},
+		{VariableType: "uint32", VariableName: "worldSizeDisabledHelp"},
+		{VariableType: "uint32", VariableName: "worldSizeStrategy"},
+		{VariableType: "varstring", VariableName: "worldSizeType"},
+		{VariableType: "varstring", VariableName: "worldSizeTextKey"},
+		{VariableType: "varstring", VariableName: "worldSizeDisplayName2"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "defaultPlayers",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "defaultMinorCivs",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "fogTilesPerBarbarianCamp",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "numNaturalWonders",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "unitNameModifier",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "targetNumCities",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "numFreeBuildingResources",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "buildingClassPrereqModifier",
-		},
-		{
-			VariableType: "int32",
-			VariableName: "maxConscriptModifier",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "gridWidth",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "gridHeight",
-		},
+		{VariableType: "uint32", VariableName: "defaultPlayers"},
+		{VariableType: "uint32", VariableName: "defaultMinorCivs"},
+		{VariableType: "uint32", VariableName: "fogTilesPerBarbarianCamp"},
+		{VariableType: "uint32", VariableName: "numNaturalWonders"},
+		{VariableType: "uint32", VariableName: "unitNameModifier"},
+		{VariableType: "uint32", VariableName: "targetNumCities"},
+		{VariableType: "uint32", VariableName: "numFreeBuildingResources"},
+		{VariableType: "uint32", VariableName: "buildingClassPrereqModifier"},
+		{VariableType: "int32", VariableName: "maxConscriptModifier"},
+		{VariableType: "uint32", VariableName: "gridWidth"},
+		{VariableType: "uint32", VariableName: "gridHeight"},
 	})
 
 	if worldInfoVersion == 2 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "uint32",
-				VariableName: "maxActiveReligions",
-			},
+			{VariableType: "uint32", VariableName: "maxActiveReligions"},
 		})
 	}
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "int32",
-			VariableName: "terrainGrainChange",
-		},
-		{
-			VariableType: "int32",
-			VariableName: "featureGrainChange",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "researchPercent",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "advancedStartPointsMod",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "numCitiesUnhappinessPercent",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "numCitiesPolicyCostMod",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "numCitiesTechCostMod",
-		},
+		{VariableType: "int32", VariableName: "terrainGrainChange"},
+		{VariableType: "int32", VariableName: "featureGrainChange"},
+		{VariableType: "uint32", VariableName: "researchPercent"},
+		{VariableType: "uint32", VariableName: "advancedStartPointsMod"},
+		{VariableType: "uint32", VariableName: "numCitiesUnhappinessPercent"},
+		{VariableType: "uint32", VariableName: "numCitiesPolicyCostMod"},
+		{VariableType: "uint32", VariableName: "numCitiesTechCostMod"},
 	})
 
 	if worldInfoVersion == 2 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "uint32",
-				VariableName: "worldSizeEnum",
-			},
+			{VariableType: "uint32", VariableName: "worldSizeEnum"},
 		})
 	}
 }
 
 func readGameOptions(streamReader *io.SectionReader) {
 	readArray(streamReader, "gameOptionArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "gameOption",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "gameOptionEnabled",
-		},
+		{VariableType: "varstring", VariableName: "gameOption"},
+		{VariableType: "uint32", VariableName: "gameOptionEnabled"},
 	})
 }
 
@@ -470,10 +230,7 @@ func readDynamicPaddingBlock(reader *io.SectionReader, marker uint32, blockName 
 		return
 	}
 	readFileConfig(reader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: fmt.Sprintf("bytearray:%d", (marker+1)*4),
-			VariableName: blockName,
-		},
+		{VariableType: fmt.Sprintf("bytearray:%d", (marker+1)*4), VariableName: blockName},
 	})
 }
 
@@ -495,30 +252,12 @@ func openSaveFileReader(filename string) (*os.File, int64, *io.SectionReader, er
 // readSaveHeader reads the game name/version/build/turn number header and the active player's civ
 func readSaveHeader(streamReader *io.SectionReader) (string, error) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:4",
-			VariableName: "gameName",
-		},
-		{
-			VariableType: "bytearray:4",
-			VariableName: "unknownBlock1",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "gameVersion",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "gameBuild",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "currentTurnNumber",
-		},
-		{
-			VariableType: "bytearray:1",
-			VariableName: "unknownBlock2",
-		},
+		{VariableType: "bytearray:4", VariableName: "gameName"},
+		{VariableType: "bytearray:4", VariableName: "unknownBlock1"},
+		{VariableType: "varstring", VariableName: "gameVersion"},
+		{VariableType: "varstring", VariableName: "gameBuild"},
+		{VariableType: "uint32", VariableName: "currentTurnNumber"},
+		{VariableType: "bytearray:1", VariableName: "unknownBlock2"},
 	})
 
 	playerCiv, err := readVarString(streamReader, "playerCiv")
@@ -533,147 +272,63 @@ func readSaveHeader(streamReader *io.SectionReader) (string, error) {
 // readGameSettingsAndContent reads the difficulty/era/speed/world-size block and the DLC and mod lists
 func readGameSettingsAndContent(streamReader *io.SectionReader) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "difficulty",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "eraStart",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "eraEnd",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "gameSpeed",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "mapFilename1",
-		},
+		{VariableType: "varstring", VariableName: "difficulty"},
+		{VariableType: "varstring", VariableName: "eraStart"},
+		{VariableType: "varstring", VariableName: "eraEnd"},
+		{VariableType: "varstring", VariableName: "gameSpeed"},
+		{VariableType: "varstring", VariableName: "worldSize"},
+		{VariableType: "varstring", VariableName: "mapFilename1"},
 	})
 
 	readArray(streamReader, "dlc", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:16",
-			VariableName: "dlcId",
-		},
-		{
-			VariableType: "bytearray:4",
-			VariableName: "dlcEnabled",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "dlcName",
-		},
+		{VariableType: "bytearray:16", VariableName: "dlcId"},
+		{VariableType: "bytearray:4", VariableName: "dlcEnabled"},
+		{VariableType: "varstring", VariableName: "dlcName"},
 	})
 
 	readArray(streamReader, "mods", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "modId",
-		},
-		{
-			VariableType: "bytearray:4",
-			VariableName: "modVersion",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "modName",
-		},
+		{VariableType: "varstring", VariableName: "modId"},
+		{VariableType: "bytearray:4", VariableName: "modVersion"},
+		{VariableType: "varstring", VariableName: "modName"},
 	})
 }
 
 func readPlayerAndMapInfo(streamReader *io.SectionReader) uint32 {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "playerCivName",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "playerLeaderName",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "playerColor",
-		},
-		{
-			VariableType: "bytearray:16",
-			VariableName: "unknownId1",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "version",
-		},
-		{
-			VariableType: "bytearray:16",
-			VariableName: "unknownId2",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "unknownId3-1",
-		},
+		{VariableType: "varstring", VariableName: "playerCivName"},
+		{VariableType: "varstring", VariableName: "playerLeaderName"},
+		{VariableType: "varstring", VariableName: "playerColor"},
+		{VariableType: "bytearray:16", VariableName: "unknownId1"},
+		{VariableType: "varstring", VariableName: "version"},
+		{VariableType: "bytearray:16", VariableName: "unknownId2"},
+		{VariableType: "uint32", VariableName: "unknownId3-1"},
 	})
 
 	slotHintsVersion := unsafeReadUint32(streamReader)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "unknownId3-3",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "unknownId3-4",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "mapFilename2",
-		},
+		{VariableType: "uint32", VariableName: "unknownId3-3"},
+		{VariableType: "uint32", VariableName: "unknownId3-4"},
+		{VariableType: "varstring", VariableName: "mapFilename2"},
 	})
 
 	readArray(streamReader, "civilizationIndexArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "int32",
-			VariableName: "civilizationIndex",
-		},
+		{VariableType: "int32", VariableName: "civilizationIndex"},
 	})
 	readArray(streamReader, "nicknameArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "nickname",
-		},
+		{VariableType: "varstring", VariableName: "nickname"},
 	})
 	readArray(streamReader, "slotStatusArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "slotStatus",
-		},
+		{VariableType: "uint32", VariableName: "slotStatus"},
 	})
 	readArray(streamReader, "slotClaimArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "slotClaim",
-		},
+		{VariableType: "uint32", VariableName: "slotClaim"},
 	})
 	readArray(streamReader, "teamTypeArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "teamType",
-		},
+		{VariableType: "uint32", VariableName: "teamType"},
 	})
 	readArray(streamReader, "handicapArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "handicap",
-		},
+		{VariableType: "uint32", VariableName: "handicap"},
 	})
 
 	return slotHintsVersion
@@ -702,10 +357,7 @@ func readCivRoster(streamReader *io.SectionReader, slotHintsVersion uint32) []Ci
 func readLeadersAndCivArrays(streamReader *io.SectionReader, slotHintsVersion uint32) uint32 {
 	if slotHintsVersion >= 3 {
 		readArray(streamReader, "leaderKeyArr", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "varstring",
-				VariableName: "leaderKey",
-			},
+			{VariableType: "varstring", VariableName: "leaderKey"},
 		})
 	}
 
@@ -713,67 +365,40 @@ func readLeadersAndCivArrays(streamReader *io.SectionReader, slotHintsVersion ui
 	fmt.Println("preGameFormatMarker:", preGameFormatMarker)
 	if preGameFormatMarker != 0 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "bytearray:12",
-				VariableName: "unknownBlock5",
-			},
+			{VariableType: "bytearray:12", VariableName: "unknownBlock5"},
 		})
 	}
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "computerUsername1",
-		},
+		{VariableType: "varstring", VariableName: "computerUsername1"},
 	})
 
 	readArray(streamReader, "unknownBlock6-1", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "int32",
-			VariableName: "unknownBlock6-1",
-		},
+		{VariableType: "int32", VariableName: "unknownBlock6-1"},
 	})
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:53",
-			VariableName: "unknownBlock6-2",
-		},
+		{VariableType: "bytearray:53", VariableName: "unknownBlock6-2"},
 	})
 
 	readArray(streamReader, "unknownArray1", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "unknownArray1Var",
-		},
+		{VariableType: "uint32", VariableName: "unknownArray1Var"},
 	})
 
 	readArray(streamReader, "civArray1", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "civName",
-		},
+		{VariableType: "varstring", VariableName: "civName"},
 	})
 
 	readArray(streamReader, "unknownArray2", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "unknownArray2Var",
-		},
+		{VariableType: "uint32", VariableName: "unknownArray2Var"},
 	})
 
 	readArray(streamReader, "civArray2", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "civArray2String",
-		},
+		{VariableType: "varstring", VariableName: "civArray2String"},
 	})
 
 	if slotHintsVersion < 3 {
 		readArray(streamReader, "extraArrBeforeClimate", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "uint32",
-				VariableName: "extraArrBeforeClimateVar",
-			},
+			{VariableType: "uint32", VariableName: "extraArrBeforeClimateVar"},
 		})
 	}
 
@@ -782,10 +407,7 @@ func readLeadersAndCivArrays(streamReader *io.SectionReader, slotHintsVersion ui
 
 func readGameNameAndTurnInfo(streamReader *io.SectionReader, preGameFormatMarker uint32) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "eraEnum",
-		},
+		{VariableType: "uint32", VariableName: "eraEnum"},
 	})
 
 	readArray(streamReader, "emailAddressArr", []Civ5ReplayFileConfigEntry{
@@ -796,10 +418,7 @@ func readGameNameAndTurnInfo(streamReader *io.SectionReader, preGameFormatMarker
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "float32",
-			VariableName: "endTurnTimerLength",
-		},
+		{VariableType: "float32", VariableName: "endTurnTimerLength"},
 	})
 
 	readArray(streamReader, "flagDecalArr", []Civ5ReplayFileConfigEntry{
@@ -810,18 +429,9 @@ func readGameNameAndTurnInfo(streamReader *io.SectionReader, preGameFormatMarker
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "deprecatedForceControlsCount",
-		},
-		{
-			VariableType: "bytearray:7",
-			VariableName: "deprecatedForceControlsFlags",
-		},
-		{
-			VariableType: "int32",
-			VariableName: "gameModeEnum",
-		},
+		{VariableType: "uint32", VariableName: "deprecatedForceControlsCount"},
+		{VariableType: "bytearray:7", VariableName: "deprecatedForceControlsFlags"},
+		{VariableType: "int32", VariableName: "gameModeEnum"},
 	})
 
 	gameName, err := readVarString(streamReader, "gameName")
@@ -858,71 +468,38 @@ func readGameNameAndTurnInfo(streamReader *io.SectionReader, preGameFormatMarker
 	})
 
 	readArray(streamReader, "handicapArr2", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "handicap",
-		},
+		{VariableType: "uint32", VariableName: "handicap"},
 	})
 
 	if preGameFormatMarker != 4 {
 		readArray(streamReader, "trackedPlayerHandicapArr", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "int32",
-				VariableName: "trackedPlayerHandicap",
-			},
+			{VariableType: "int32", VariableName: "trackedPlayerHandicap"},
 		})
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "bytearray:2",
-				VariableName: "unknownBlock10",
-			},
+			{VariableType: "bytearray:2", VariableName: "unknownBlock10"},
 		})
 	} else {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "bytearray:2",
-				VariableName: "reservedBytesWhenHandicapArrAbsent",
-			},
+			{VariableType: "bytearray:2", VariableName: "reservedBytesWhenHandicapArrAbsent"},
 		})
 	}
 }
 
 func readLeaderArray2AndPlayerSetup(streamReader *io.SectionReader) {
 	readArray(streamReader, "leaderNameArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "leaderName",
-		},
+		{VariableType: "varstring", VariableName: "leaderName"},
 	})
 
 	unknownBlock11Number := unsafeReadUint32(streamReader)
 	readDynamicPaddingBlock(streamReader, unknownBlock11Number, "unknownBlock11")
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "computerUsername2",
-		},
-		{
-			VariableType: "bytearray:7",
-			VariableName: "unknownId4",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "mapFilename3",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "maxCityElimination",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "maxTurns",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "numMinorCivs",
-		},
+		{VariableType: "varstring", VariableName: "computerUsername2"},
+		{VariableType: "bytearray:7", VariableName: "unknownId4"},
+		{VariableType: "varstring", VariableName: "mapFilename3"},
+		{VariableType: "uint32", VariableName: "maxCityElimination"},
+		{VariableType: "uint32", VariableName: "maxTurns"},
+		{VariableType: "uint32", VariableName: "numMinorCivs"},
 	})
 }
 
@@ -1030,103 +607,58 @@ func readPlayerArraysAndColors(streamReader *io.SectionReader, allCivs []Civ5Rep
 	})
 
 	readArray(streamReader, "readyPlayersArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint8",
-			VariableName: "readyPlayer",
-		},
+		{VariableType: "uint8", VariableName: "readyPlayer"},
 	})
 }
 
 func readWorldSettings(streamReader *io.SectionReader) {
 	readArray(streamReader, "slotClaimArr2", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "slotClaim",
-		},
+		{VariableType: "uint32", VariableName: "slotClaim"},
 	})
 
 	readArray(streamReader, "slotStatusArr2", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "slotStatus",
-		},
+		{VariableType: "uint32", VariableName: "slotStatus"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "smtpHost",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "syncRandomSeed",
-		},
-		{
-			VariableType: "int32",
-			VariableName: "targetScore",
-		},
+		{VariableType: "varstring", VariableName: "smtpHost"},
+		{VariableType: "uint32", VariableName: "syncRandomSeed"},
+		{VariableType: "int32", VariableName: "targetScore"},
 	})
 
 	readArray(streamReader, "teamTypeArr2", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "teamType",
-		},
+		{VariableType: "uint32", VariableName: "teamType"},
 	})
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint8",
-			VariableName: "transferredMap",
-		},
+		{VariableType: "uint8", VariableName: "transferredMap"},
 	})
 
 	readTurnSpeedData(streamReader)
 	readArray(streamReader, "whiteFlagArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint8",
-			VariableName: "whiteFlag",
-		},
+		{VariableType: "uint8", VariableName: "whiteFlag"},
 	})
 	readWorldSizeData(streamReader)
 	readGameOptions(streamReader)
 
 	readArray(streamReader, "mapOptionArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "mapOptionName",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "mapOptionValue",
-		},
+		{VariableType: "varstring", VariableName: "mapOptionName"},
+		{VariableType: "uint32", VariableName: "mapOptionValue"},
 	})
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "gameVersion2",
-		},
+		{VariableType: "varstring", VariableName: "gameVersion2"},
 	})
 
 	readArray(streamReader, "shouldNotifySteamInviteArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint8",
-			VariableName: "shouldNotifySteamInvite",
-		},
+		{VariableType: "uint8", VariableName: "shouldNotifySteamInvite"},
 	})
 
 	readArray(streamReader, "shouldNotifyEmailArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint8",
-			VariableName: "shouldNotifyEmail",
-		},
+		{VariableType: "uint8", VariableName: "shouldNotifyEmail"},
 	})
 
 	readArray(streamReader, "turnNotifyEmailAddressArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "turnNotifyEmailAddress",
-		},
+		{VariableType: "varstring", VariableName: "turnNotifyEmailAddress"},
 	})
 }
 
@@ -1134,10 +666,7 @@ func readWorldSettings(streamReader *io.SectionReader) {
 // positioned at its start
 func locateCompressedBlock(streamReader *io.SectionReader, inputFile *os.File, saveFileLength int64) (*io.SectionReader, error) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:8", // value is always [2 0 0 0 0 0 1 0]
-			VariableName: "paddingBeforeCompressedBlock",
-		},
+		{VariableType: "bytearray:8", VariableName: "paddingBeforeCompressedBlock"}, // value is always [2 0 0 0 0 0 1 0]
 	})
 
 	// Header of compressed block should begin with 0x789C
@@ -1349,51 +878,27 @@ func readRandomAndReplayMessageVersion(streamReader *io.SectionReader) {
 func readVersionDependentUnitData(streamReader *io.SectionReader, saveFileVersion uint32) {
 	if saveFileVersion == SaveVersionWithUnitClassData {
 		readArray(streamReader, "unitNameArr", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "varstring",
-				VariableName: "unitName",
-			},
-			{
-				VariableType: "uint32",
-				VariableName: "unitCreatedCount",
-			},
+			{VariableType: "varstring", VariableName: "unitName"},
+			{VariableType: "uint32", VariableName: "unitCreatedCount"},
 		})
 		readArray(streamReader, "unitClassArr", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "varstring",
-				VariableName: "unitClass",
-			},
-			{
-				VariableType: "uint32",
-				VariableName: "unitClassCreatedCount",
-			},
+			{VariableType: "varstring", VariableName: "unitClass"},
+			{VariableType: "uint32", VariableName: "unitClassCreatedCount"},
 		})
 		readArray(streamReader, "buildingClassArr", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "varstring",
-				VariableName: "buildingClass",
-			},
-			{
-				VariableType: "uint32",
-				VariableName: "buildingClassCreatedCount",
-			},
+			{VariableType: "varstring", VariableName: "buildingClass"},
+			{VariableType: "uint32", VariableName: "buildingClassCreatedCount"},
 		})
 
 		// TODO: find padding
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "bytearray:2366", // for RED WW2 save files, likely different for other mods
-				VariableName: "unknownPadding",
-			},
+			{VariableType: "bytearray:2366", VariableName: "unknownPadding"}, // for RED WW2 save files, likely different for other mods
 		})
 	} else {
 		readCreatedCountHashArrays(streamReader)
 		readWorldCongressVotingState(streamReader)
 		readArray(streamReader, "destroyedCitiesArr", []Civ5ReplayFileConfigEntry{
-			{
-				VariableType: "varstring",
-				VariableName: "destroyedCityName",
-			},
+			{VariableType: "varstring", VariableName: "destroyedCityName"},
 		})
 	}
 }
@@ -1404,16 +909,86 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int) []Civ5Re
 	saveFileVersion := readDecompressedHeader(streamReader)
 	readVersionDependentUnitData(streamReader, saveFileVersion)
 	readArray(streamReader, "greatPersonArr", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "greatPersonName",
-		},
+		{VariableType: "varstring", VariableName: "greatPersonName"},
 	})
 	readVoteSelectionAndTriggeredArrays(streamReader)
 	readRandomAndReplayMessageVersion(streamReader)
 
 	allReplayEvents := readEvents(streamReader)
 	fmt.Printf("Read %d replay events\n", len(allReplayEvents))
+	for i, e := range allReplayEvents {
+		fmt.Printf("  replayEvent[%d]: turn=%d type=%d civ=%d tiles=%v text=%q\n", i, e.Turn, e.TypeId, e.CivId, e.Tiles, e.Text)
+	}
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{VariableType: "int32", VariableName: "numSessions"},
+	})
+
+	plotExtraYields := readPlotExtraYields(streamReader)
+	fmt.Println("plotExtraYields:", plotExtraYields)
+
+	readArray(streamReader, "plotExtraCostArr", []Civ5ReplayFileConfigEntry{
+		{VariableType: "int32", VariableName: "plotExtraCostX"},
+		{VariableType: "int32", VariableName: "plotExtraCostY"},
+		{VariableType: "int32", VariableName: "plotExtraCost"},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{VariableType: "uint8", VariableName: "archaeologyTriggered"},
+		{VariableType: "int32", VariableName: "earliestBarbarianReleaseTurn"},
+	})
+
+	gameDeals := readGameDeals(streamReader)
+	fmt.Printf("gameDeals: %d proposed, %d current, %d historical\n", len(gameDeals.ProposedDeals), len(gameDeals.CurrentDeals), len(gameDeals.HistoricalDeals))
+	printDealList := func(label string, deals []Deal) {
+		for i, d := range deals {
+			fmt.Printf("  %s[%d]: from=%d to=%d items=%d startTurn=%d finalTurn=%d duration=%d dealCancelled=%v\n",
+				label, i, d.FromPlayer, d.ToPlayer, len(d.TradedItems), d.StartTurn, d.FinalTurn, d.Duration, d.DealCancelled)
+		}
+	}
+	printDealList("proposedDeals", gameDeals.ProposedDeals)
+	printDealList("currentDeals", gameDeals.CurrentDeals)
+	printDealList("historicalDeals", gameDeals.HistoricalDeals)
+
+	gameReligions := readGameReligions(streamReader)
+	fmt.Printf("gameReligions: minFaithNextPantheon=%d, %d religions\n", gameReligions.MinimumFaithNextPantheon, len(gameReligions.CurrentReligions))
+	for i, r := range gameReligions.CurrentReligions {
+		fmt.Printf("  religion[%d]: type=%d founder=%d holyCity=(%d,%d) turnFounded=%d pantheon=%v enhanced=%v customName=%q\n",
+			i, r.ReligionType, r.Founder, r.HolyCityX, r.HolyCityY, r.TurnFounded, r.Pantheon, r.Enhanced, r.CustomName)
+	}
+
+	gameCulture := readGameCulture(streamReader)
+	fmt.Printf("gameCulture: %d great works, reportedSomeoneInfluential=%v\n", len(gameCulture.CurrentGreatWorks), gameCulture.ReportedSomeoneInfluential)
+	for i, gw := range gameCulture.CurrentGreatWorks {
+		fmt.Printf("  greatWork[%d]: name=%q type=%d class=%d turnFounded=%d era=%d player=%d\n",
+			i, gw.GreatPersonName, gw.GWType, gw.ClassType, gw.TurnFounded, gw.Era, gw.Player)
+	}
+
+	gameLeagues := readGameLeagues(streamReader)
+	fmt.Printf("gameLeagues: %d active leagues, numLeaguesEverFounded=%d, diplomaticVictor=%d\n", len(gameLeagues.ActiveLeagues), gameLeagues.NumLeaguesEverFounded, gameLeagues.DiplomaticVictor)
+	for i, l := range gameLeagues.ActiveLeagues {
+		fmt.Printf("  league[%d]: id=%d host=%d inSession=%v turnsUntilSession=%d numResolutionsEverEnacted=%d members=%d enactProposals=%d repealProposals=%d activeResolutions=%d customName=%q\n",
+			i, l.ID, l.Host, l.InSession, l.TurnsUntilSession, l.NumResolutionsEverEnacted, len(l.Members), len(l.EnactProposals), len(l.RepealProposals), len(l.ActiveResolutions), l.CustomName)
+		for j, m := range l.Members {
+			fmt.Printf("    member[%d]: player=%d votes=%d abstainedVotes=%d mayPropose=%v everBeenHost=%v voteSources=%q\n",
+				j, m.Player, m.Votes, m.AbstainedVotes, m.MayPropose, m.EverBeenHost, m.VoteSources)
+		}
+	}
+
+	gameTrade := readGameTrade(streamReader)
+	fmt.Printf("gameTrade: %d trade connections, nextID=%d\n", len(gameTrade.TradeConnections), gameTrade.NextID)
+	for i, tc := range gameTrade.TradeConnections {
+		fmt.Printf("  tradeConnection[%d]: id=%d origin=(%d,%d) dest=(%d,%d) originOwner=%d destOwner=%d domain=%d connType=%d circuitsCompleted=%d circuitsToComplete=%d\n",
+			i, tc.ID, tc.OriginX, tc.OriginY, tc.DestX, tc.DestY, tc.OriginOwner, tc.DestOwner, tc.Domain, tc.ConnectionType, tc.CircuitsCompleted, tc.CircuitsToComplete)
+	}
+
+	embeddedDatabase := readEmbeddedDatabase(streamReader)
+	fmt.Printf("embeddedDatabase: %d bytes, magic=%q\n", len(embeddedDatabase), string(embeddedDatabase[:min(16, len(embeddedDatabase))]))
+
+	mapHeader := readMapHeader(streamReader)
+	fmt.Printf("mapHeader: version=%d grid=%dx%d landPlots=%d ownedPlots=%d naturalWonders=%d latitude=%d/%d wrap=%v/%v resourceTypes=%d/%d\n",
+		mapHeader.Version, mapHeader.GridWidth, mapHeader.GridHeight, mapHeader.LandPlotCount, mapHeader.OwnedPlotCount, mapHeader.NumNaturalWonders,
+		mapHeader.TopLatitude, mapHeader.BottomLatitude, mapHeader.WrapX, mapHeader.WrapY, len(mapHeader.ResourceCounts), len(mapHeader.ResourceCountsOnLand))
 
 	return allReplayEvents
 }

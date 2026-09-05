@@ -54,6 +54,26 @@ This document describes the technical file formats used by Civilization 5 for ma
   + [Votes](#votes)
   + [Random State](#random-state)
   + [Save File Replay Events](#save-file-replay-events)
+  + [Session & Barbarian State](#session--barbarian-state)
+  + [Game Deals](#game-deals)
+    - [Deal Element](#deal-element)
+    - [Traded Item Element](#traded-item-element)
+  + [Game Religions](#game-religions)
+    - [Religion Element](#religion-element)
+    - [Religion Beliefs Element](#religion-beliefs-element)
+  + [Game Culture](#game-culture)
+    - [Great Work Element](#great-work-element)
+  + [Game Leagues](#game-leagues)
+    - [League Element](#league-element)
+    - [League Member Element](#league-member-element)
+    - [League Project Element](#league-project-element)
+    - [Resolution Element](#resolution-element)
+    - [Resolution Effects Element](#resolution-effects-element)
+    - [Voter/Proposer Decision Elements](#voterproposer-decision-elements)
+  + [Game Trade](#game-trade)
+    - [Trade Connection Element](#trade-connection-element)
+  + [Embedded Database](#embedded-database)
+  + [Map Header](#map-header)
 
 ## Map File Format
 
@@ -875,3 +895,330 @@ Otherwise:
 ### Save File Replay Events
 
 Same format as replay events in the shared Replay File Format section - the save file's own event log, read by the same code.
+
+### Session & Barbarian State
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Num sessions (how many times this game has been reloaded) |
+| uint32 | 4 bytes | Plot extra yield array count |
+| (int32,int32,uint32,int32[])[] | var bytes | Plot extra yield array elements: (x, y, extra-yield count, extra-yield values per yield type) |
+| uint32 | 4 bytes | Plot extra cost array count |
+| (int32,int32,int32)[] | var bytes | Plot extra cost array elements: (x, y, cost) |
+| uint8 | 1 byte | Archaeology triggered (bool) |
+| int32 | 4 bytes | Earliest barbarian release turn |
+
+### Game Deals
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Deals format version |
+| uint32 | 4 bytes | Proposed deal array count |
+| Deal[] | var bytes | Proposed deals (in-progress negotiations; typically empty) |
+| uint32 | 4 bytes | Current deal array count |
+| Deal[] | var bytes | Currently active deals |
+| uint32 | 4 bytes | Historical deal array count |
+| Deal[] | var bytes | Past (expired/cancelled) deals |
+
+#### Deal Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Deal format version |
+| int32 | 4 bytes | From player |
+| int32 | 4 bytes | To player |
+| int32 | 4 bytes | Final turn |
+| int32 | 4 bytes | Duration |
+| int32 | 4 bytes | Start turn |
+| uint8 | 1 byte | Considering for renewal (bool) |
+| uint8 | 1 byte | Checked for renewal (bool, only if deal format version >= 3) |
+| uint8 | 1 byte | Deal cancelled (bool) |
+| int32 | 4 bytes | Peace treaty type |
+| int32 | 4 bytes | Surrendering player |
+| int32 | 4 bytes | Demanding player |
+| int32 | 4 bytes | Requesting player |
+| uint32 | 4 bytes | Traded item array count |
+| TradedItem[] | var bytes | Traded items |
+
+#### Traded Item Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Traded item format version |
+| int32 | 4 bytes | Item type |
+| int32 | 4 bytes | Duration |
+| int32 | 4 bytes | Final turn |
+| int32 | 4 bytes | Data 1 |
+| int32 | 4 bytes | Data 2 |
+| int32 | 4 bytes | Data 3 (only if traded item format version >= 2) |
+| uint8 | 1 byte | Flag 1 (bool, only if traded item format version >= 2) |
+| int32 | 4 bytes | From player |
+| uint8 | 1 byte | From renewed (bool) |
+| uint8 | 1 byte | To renewed (bool) |
+
+### Game Religions
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Religions format version |
+| int32 | 4 bytes | Minimum faith for next pantheon (only if religions format version >= 3) |
+| uint32 | 4 bytes | Legacy minimum faith for next great prophet, discarded (only if religions format version < 4) |
+| uint32 | 4 bytes | Current religion array count (only if religions format version >= 2) |
+| Religion[] | var bytes | Current religions - both pantheons and founded religions are listed here (only if religions format version >= 2) |
+
+#### Religion Element
+
+A pantheon has its own entry too: religion type 0 (RELIGION_PANTHEON), pantheon bool set, exactly 1 belief, and a meaningless/uninitialized holy city X/Y (a pantheon has no holy city).
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Religion format version |
+| int32 | 4 bytes | Religion type |
+| int32 | 4 bytes | Founder player |
+| int32 | 4 bytes | Holy city X |
+| int32 | 4 bytes | Holy city Y |
+| int32 | 4 bytes | Turn founded |
+| uint8 | 1 byte | Pantheon (bool, only if religion format version >= 2) |
+| uint8 | 1 byte | Enhanced (bool, only if religion format version >= 4) |
+| byte[128] | 128 bytes | Custom name: fixed-size null-terminated buffer (only if religion format version >= 3) |
+| ReligionBeliefs | var bytes | Beliefs |
+
+#### Religion Beliefs Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Beliefs format version |
+| int32[22] | 88 bytes | Modifiers: faith from dying units, river happiness, plot culture cost, city-range strike, combat vs. enemy cities, combat vs. friendly cities, friendly heal change, city-state friendship, land barbarian conversion percent, spread strength, spread distance, prophet strength, prophet cost, missionary strength, missionary cost, friendly city-state spread, great person expended faith, city-state minimum influence, city-state influence, other-religion pressure erosion, spy pressure, inquisitor pressure retention |
+| int32 | 4 bytes | Faith building tourism (only if beliefs format version >= 2) |
+| int32 | 4 bytes | Obsolete era |
+| int32 | 4 bytes | Resource revealed |
+| int32 | 4 bytes | Spread modifier doubling tech |
+| uint32 | 4 bytes | Belief array count |
+| uint32[] | (count * 4) bytes | Belief hashes (hash of each chosen belief's type string) |
+| uint32 | 4 bytes | Building class override array count (a ruleset-wide constant - GC.getNumBuildingClassInfos() - not a per-religion value) |
+| (uint32,int32)[] | var bytes | Building class overrides: (type hash, value); value present only when hash is non-zero |
+
+### Game Culture
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Culture format version |
+| uint32 | 4 bytes | Current great work array count |
+| GreatWork[] | var bytes | Current great works |
+| uint8 | 1 byte | Reported someone influential (bool, only if culture format version >= 2) |
+
+#### Great Work Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Great work format version |
+| varstring | var bytes | Legacy great work name, discarded (only if great work format version == 1) |
+| varstring | var bytes | Great person name |
+| int32 | 4 bytes | Great work type |
+| int32 | 4 bytes | Great work class (only if great work format version >= 3): e.g. 1=Art, 3=Literature, 4=Music |
+| int32 | 4 bytes | Turn founded |
+| int32 | 4 bytes | Era |
+| int32 | 4 bytes | Player |
+
+### Game Leagues
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Leagues format version |
+| int32 | 4 bytes | Generated ID count (only if leagues format version >= 4) |
+| uint32 | 4 bytes | Active league array count |
+| League[] | var bytes | Active leagues (0 or 1 - one World Congress/United Nations per game) |
+| int32 | 4 bytes | Num leagues ever founded (only if leagues format version >= 2) |
+| int32 | 4 bytes | Diplomatic victor player (only if leagues format version >= 3, else NO_PLAYER/-1) |
+| int32 | 4 bytes | Last era trigger (only if leagues format version >= 5, else NO_ERA/-1) |
+
+#### League Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | League format version |
+| int32 | 4 bytes | League ID |
+| uint8 | 1 byte | United Nations (bool, only if league format version >= 4) |
+| uint8 | 1 byte | In session (bool, only if league format version >= 2) |
+| int32 | 4 bytes | Turns until next session |
+| int32 | 4 bytes | Num resolutions ever enacted |
+| uint32 | 4 bytes | Enact proposal array count |
+| Resolution[] | var bytes | Enact proposals (Resolution + format version, no extra fields) |
+| uint32 | 4 bytes | Repeal proposal array count |
+| (Resolution,int32,VoterDecision)[] | var bytes | Repeal proposals: (Resolution, format version, target resolution ID, repeal decision) |
+| uint32 | 4 bytes | Active resolution array count |
+| (Resolution,uint32,int32)[] | var bytes | Active resolutions: (Resolution, format version, [legacy discarded int32 only if version < 2], turn enacted) |
+| uint32 | 4 bytes | Member array count |
+| LeagueMember[] | var bytes | Members |
+| int32 | 4 bytes | Host player (only if league format version >= 3) |
+| uint32 | 4 bytes | Project array count (only if league format version >= 5) |
+| LeagueProject[] | var bytes | Projects (only if league format version >= 5) |
+| int32 | 4 bytes | Consecutive hosted sessions (only if league format version >= 7) |
+| int32 | 4 bytes | Assigned name (only if league format version >= 7) |
+| byte[128] | 128 bytes | Custom name: fixed-size null-terminated buffer (only if league format version >= 7) |
+| int32 | 4 bytes | Last special session (only if league format version >= 8) |
+| int32 | 4 bytes | Current special session (only if league format version >= 8) |
+| uint32 | 4 bytes | Enact-proposals-on-hold array count (only if league format version >= 8) |
+| Resolution[] | var bytes | Enact proposals on hold (only if league format version >= 8) |
+| uint32 | 4 bytes | Repeal-proposals-on-hold array count (only if league format version >= 8) |
+| (Resolution,int32,VoterDecision)[] | var bytes | Repeal proposals on hold (only if league format version >= 8) |
+
+#### League Member Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Player |
+| int32 | 4 bytes | Extra votes (only if league format version >= 9) |
+| varstring | var bytes | Vote sources: human-readable breakdown text, e.g. "[NEWLINE][ICON_BULLET]4 from membership..." (only if league format version >= 10) |
+| uint8 | 1 byte | May propose (bool) |
+| int32 | 4 bytes | Proposals made (only if league format version >= 12) |
+| int32 | 4 bytes | Votes |
+| int32 | 4 bytes | Abstained votes (only if league format version >= 13) |
+| uint8 | 1 byte | Ever been host (bool, only if league format version >= 14) |
+| uint8 | 1 byte | Always been host (bool, only if league format version >= 14, real default true when absent) |
+
+#### League Project Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Project type |
+| uint32 | 4 bytes | Production list length |
+| int32[] | var bytes | Per-member production contribution |
+| uint8 | 1 byte | Complete (bool, only if league format version >= 6) |
+| uint8 | 1 byte | Progress warning sent (bool, only if league format version >= 11) |
+
+#### Resolution Element
+
+Shared base for an enact proposal, a repeal proposal's target, and an already-active resolution.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Resolution format version |
+| int32 | 4 bytes | Resolution ID (only if resolution format version >= 2, else generated fresh at load, not read) |
+| int32 | 4 bytes | Resolution type |
+| int32 | 4 bytes | League ID |
+| ResolutionEffects | var bytes | Effects |
+| VoterDecision | var bytes | Voter decision (every member's cast vote) |
+| ProposerDecision | var bytes | Proposer decision (the proposing player's own vote) |
+
+An enact/repeal proposal adds its own format version (uint32) plus, for a repeal proposal, a target resolution ID (int32) and a repeal VoterDecision. An active resolution adds its own format version (uint32), a legacy discarded int32 (only if that version < 2), and a turn-enacted int32.
+
+#### Resolution Effects Element
+
+The full set of possible resolution effects; only the fields relevant to the resolution's type are meaningful, the rest sit at zero.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Effects format version |
+| uint8 | 1 byte | Diplomatic victory (bool) |
+| uint8 | 1 byte | Change league host (bool, only if effects format version >= 2) |
+| int32 | 4 bytes | One-time gold |
+| int32 | 4 bytes | One-time gold percent |
+| uint8 | 1 byte | Raise city-state influence to neutral (bool) |
+| int32 | 4 bytes | League project enabled (only if effects format version >= 3) |
+| int32 | 4 bytes | Gold per turn |
+| int32 | 4 bytes | Resource quantity |
+| uint8 | 1 byte | Embargo city-states (bool) |
+| uint8 | 1 byte | Embargo player (bool) |
+| uint8 | 1 byte | No resource happiness (bool) |
+| int32 | 4 bytes | Unit maintenance gold percent |
+| int32 | 4 bytes | Member discovered tech mod |
+| int32 | 4 bytes | Culture per wonder (only if effects format version >= 4) |
+| int32 | 4 bytes | Culture per natural wonder (only if effects format version >= 4) |
+| uint8 | 1 byte | No training nuclear weapons (bool, only if effects format version >= 5) |
+| int32 | 4 bytes | Votes for following religion (only if effects format version >= 6) |
+| int32 | 4 bytes | Holy city tourism (only if effects format version >= 6) |
+| int32 | 4 bytes | Religion spread strength mod (only if effects format version >= 9) |
+| int32 | 4 bytes | Votes for following ideology (only if effects format version >= 6) |
+| int32 | 4 bytes | Other ideology rebellion mod (only if effects format version >= 6) |
+| int32 | 4 bytes | Artsy great person rate mod (only if effects format version >= 7) |
+| int32 | 4 bytes | Sciencey great person rate mod (only if effects format version >= 7) |
+| int32 | 4 bytes | Great person tile improvement culture (only if effects format version >= 8) |
+| int32 | 4 bytes | Landmark culture (only if effects format version >= 8) |
+
+#### Voter/Proposer Decision Elements
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Decision format version |
+| int32 | 4 bytes | Decision type |
+
+A ProposerDecision adds its own format version (uint32) and a single PlayerVote (the proposer's own vote). A VoterDecision adds its own format version (uint32), a count (uint32), then that many PlayerVote entries - one per player who cast a vote.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | PlayerVote format version |
+| int32 | 4 bytes | Player |
+| int32 | 4 bytes | Num votes |
+| int32 | 4 bytes | Choice |
+
+### Game Trade
+
+The last of the game's whole-object sections - every active trade route (land or sea, international or internal) in the game, plus a running tech-difference matrix used to gate trade route yields.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Trade format version |
+| uint32 | 4 bytes | Trade connection array count |
+| TradeConnection[] | var bytes | Trade connections |
+| int32[22][22] | 1936 bytes | Tech difference matrix, MAX_MAJOR_CIVS x MAX_MAJOR_CIVS (only if trade format version >= 3, else all zero) |
+| int32 | 4 bytes | Next trade connection ID |
+
+#### Trade Connection Element
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| int32 | 4 bytes | Connection ID (only if trade format version >= 1, else MAX_INT - not read from the stream) |
+| int32 | 4 bytes | Origin X |
+| int32 | 4 bytes | Origin Y |
+| int32 | 4 bytes | Destination X |
+| int32 | 4 bytes | Destination Y |
+| int32 | 4 bytes | Origin owner (player) |
+| int32 | 4 bytes | Destination owner (player) |
+| int32 | 4 bytes | Domain (land/sea) |
+| int32 | 4 bytes | Connection type (international/internal food/internal production/etc.) |
+| int32 | 4 bytes | Trade unit location index (position along the route's path) |
+| uint8 | 1 byte | Trade unit moving forward (bool) |
+| int32 | 4 bytes | Trade unit's unit ID |
+| int32 | 4 bytes | Circuits completed |
+| int32 | 4 bytes | Circuits to complete |
+| int32 | 4 bytes | Turn route was completed (only if trade format version >= 2) |
+| uint32 | 4 bytes | Plot list length (the route's tile path) |
+| (int32,int32)[] | var bytes | Plot list: (x, y) per tile |
+| int32[6] | 24 bytes | Origin yields per yield type (food/production/gold/science/culture/faith) |
+| int32[6] | 24 bytes | Destination yields per yield type, same order |
+
+### Embedded Database
+
+This is a size-prefixed embedded SQLite database blob (`Civ5SavedGameDatabase.db`) - a fixed, byte-identical compiled-in schema/template, not per-game data. SQLite version `3.7.17`, page size 1024, 3 pages total. The schema page defines exactly one generic key-value table:
+
+```sql
+CREATE TABLE SimpleValues(Name TEXT Primary Key, Value VARIANT)
+```
+
+plus its auto-generated unique index (`sqlite_autoindex_SimpleValues_1`). The table is defined but never populated in a normal single-player game.
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Blob size (typically 3072) |
+| byte[] | var bytes | Raw blob content, starting with the literal SQLite file header `"SQLite format 3\0"` |
+
+### Map Header
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Map format version (typically 1) |
+| int32 | 4 bytes | Grid width |
+| int32 | 4 bytes | Grid height |
+| int32 | 4 bytes | Land plot count |
+| int32 | 4 bytes | Owned plot count |
+| int32 | 4 bytes | Num natural wonders |
+| int32 | 4 bytes | Top latitude |
+| int32 | 4 bytes | Bottom latitude |
+| uint8 | 1 byte | Wrap X (bool) |
+| uint8 | 1 byte | Wrap Y (bool) |
+| byte[16] | 16 bytes | Map GUID: Data1(4)+Data2(2)+Data3(2)+Data4(8), standard GUID layout - unique per map |
+| uint32 | 4 bytes | Resource count array length |
+| (uint32,int32)[] | var bytes | Total resource counts across the whole map: (type hash, count); count present only when hash is non-zero |
+| uint32 | 4 bytes | Resource-on-land count array length |
+| (uint32,int32)[] | var bytes | Resource counts restricted to land tiles only, same shape |
