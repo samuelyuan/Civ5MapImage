@@ -524,7 +524,7 @@ func readGameReligions(reader *io.SectionReader) GameReligions {
 type GreatWork struct {
 	GreatPersonName string
 	GWType          int32
-	ClassType       int32 // only if version >= 3; GreatWorkClass, e.g. 1=Art, 3=Literature, 4=Music
+	ClassType       int32 // only if version >= 3; GreatWorkClass: 1=Art, 2=Artifact, 3=Literature, 4=Music
 	TurnFounded     int32
 	Era             int32
 	Player          int32

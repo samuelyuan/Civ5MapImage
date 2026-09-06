@@ -945,13 +945,13 @@ Same format as replay events in the shared Replay File Format section - the save
 | Type | Size | Description |
 | ---- | ---- | ----------- |
 | uint32 | 4 bytes | Traded item format version |
-| int32 | 4 bytes | Item type |
+| int32 | 4 bytes | Item type (TradeableItems: -1=NONE, 0=GOLD, 1=GOLD_PER_TURN, 2=MAPS, 3=RESOURCES, 4=CITIES, 5=UNITS, 6=OPEN_BORDERS, 7=DEFENSIVE_PACT, 8=RESEARCH_AGREEMENT, 9=TRADE_AGREEMENT, 10=PERMANENT_ALLIANCE, 11=SURRENDER, 12=TRUCE, 13=PEACE_TREATY, 14=THIRD_PARTY_PEACE, 15=THIRD_PARTY_WAR, 16=THIRD_PARTY_EMBARGO, 17=ALLOW_EMBASSY, 18=DECLARATION_OF_FRIENDSHIP, 19=VOTE_COMMITMENT) |
 | int32 | 4 bytes | Duration |
 | int32 | 4 bytes | Final turn |
-| int32 | 4 bytes | Data 1 |
-| int32 | 4 bytes | Data 2 |
-| int32 | 4 bytes | Data 3 (only if traded item format version >= 2) |
-| uint8 | 1 byte | Flag 1 (bool, only if traded item format version >= 2) |
+| int32 | 4 bytes | Data 1 (meaning depends on item type: GOLD/GOLD_PER_TURN=amount, RESOURCES=ResourceTypes index, CITIES=city's X coordinate, THIRD_PARTY_PEACE/THIRD_PARTY_WAR=TeamTypes (not a player index), VOTE_COMMITMENT=ResolutionID, other types unused/0) |
+| int32 | 4 bytes | Data 2 (RESOURCES=amount, CITIES=city's Y coordinate, VOTE_COMMITMENT=VoteChoice, otherwise unused/0) |
+| int32 | 4 bytes | Data 3 (only if traded item format version >= 2; VOTE_COMMITMENT=NumVotes, otherwise unused/0) |
+| uint8 | 1 byte | Flag 1 (bool, only if traded item format version >= 2; VOTE_COMMITMENT=is this a repeal vote, otherwise always false) |
 | int32 | 4 bytes | From player |
 | uint8 | 1 byte | From renewed (bool) |
 | uint8 | 1 byte | To renewed (bool) |
@@ -1014,8 +1014,8 @@ A pantheon has its own entry too: religion type 0 (RELIGION_PANTHEON), pantheon 
 | uint32 | 4 bytes | Great work format version |
 | varstring | var bytes | Legacy great work name, discarded (only if great work format version == 1) |
 | varstring | var bytes | Great person name |
-| int32 | 4 bytes | Great work type |
-| int32 | 4 bytes | Great work class (only if great work format version >= 3): e.g. 1=Art, 3=Literature, 4=Music |
+| int32 | 4 bytes | Great work type: 1-indexed, names the specific work (a named painting/book/song for Art/Literature/Music classes, or an era+site description like "ancient era ancient ruin" for the Artifact class) |
+| int32 | 4 bytes | Great work class (only if great work format version >= 3): 1=Art, 2=Artifact, 3=Literature, 4=Music |
 | int32 | 4 bytes | Turn founded |
 | int32 | 4 bytes | Era |
 | int32 | 4 bytes | Player |
@@ -1168,15 +1168,15 @@ The last of the game's whole-object sections - every active trade route (land or
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| int32 | 4 bytes | Connection ID (only if trade format version >= 1, else MAX_INT - not read from the stream) |
-| int32 | 4 bytes | Origin X |
-| int32 | 4 bytes | Origin Y |
-| int32 | 4 bytes | Destination X |
-| int32 | 4 bytes | Destination Y |
-| int32 | 4 bytes | Origin owner (player) |
-| int32 | 4 bytes | Destination owner (player) |
-| int32 | 4 bytes | Domain (land/sea) |
-| int32 | 4 bytes | Connection type (international/internal food/internal production/etc.) |
+| int32 | 4 bytes | Connection ID (only if trade format version >= 1, else MAX_INT - not read from the stream; -1 when empty) |
+| int32 | 4 bytes | Origin X (-1 when empty) |
+| int32 | 4 bytes | Origin Y (-1 when empty) |
+| int32 | 4 bytes | Destination X (-1 when empty) |
+| int32 | 4 bytes | Destination Y (-1 when empty) |
+| int32 | 4 bytes | Origin owner (player; -1/NO_PLAYER when empty) |
+| int32 | 4 bytes | Destination owner (player; -1/NO_PLAYER when empty) |
+| int32 | 4 bytes | Domain (DomainTypes: 0=SEA, 1=AIR, 2=LAND, 3=IMMOBILE, 4=HOVER; -1=NO_DOMAIN when empty) |
+| int32 | 4 bytes | Connection type (TradeConnectionType: 0=INTERNATIONAL, 1=FOOD, 2=PRODUCTION; 3 when empty - a count sentinel reused as "none") |
 | int32 | 4 bytes | Trade unit location index (position along the route's path) |
 | uint8 | 1 byte | Trade unit moving forward (bool) |
 | int32 | 4 bytes | Trade unit's unit ID |

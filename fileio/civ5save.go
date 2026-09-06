@@ -715,7 +715,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress file: %w", err)
 	}
-	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize)
+	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize, allCivs)
 
 	return &Civ5SaveData{
 		PlayerCiv:       playerCiv,
@@ -903,7 +903,7 @@ func readVersionDependentUnitData(streamReader *io.SectionReader, saveFileVersio
 	}
 }
 
-func readDecompressed(reader *bytes.Reader, decompressedFileLength int) []Civ5ReplayEvent {
+func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs []Civ5ReplayCiv) []Civ5ReplayEvent {
 	streamReader := io.NewSectionReader(reader, int64(0), int64(decompressedFileLength))
 
 	saveFileVersion := readDecompressedHeader(streamReader)
@@ -915,10 +915,7 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int) []Civ5Re
 	readRandomAndReplayMessageVersion(streamReader)
 
 	allReplayEvents := readEvents(streamReader)
-	fmt.Printf("Read %d replay events\n", len(allReplayEvents))
-	for i, e := range allReplayEvents {
-		fmt.Printf("  replayEvent[%d]: turn=%d type=%d civ=%d tiles=%v text=%q\n", i, e.Turn, e.TypeId, e.CivId, e.Tiles, e.Text)
-	}
+	printReplayEvents(allReplayEvents)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{VariableType: "int32", VariableName: "numSessions"},
@@ -939,48 +936,19 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int) []Civ5Re
 	})
 
 	gameDeals := readGameDeals(streamReader)
-	fmt.Printf("gameDeals: %d proposed, %d current, %d historical\n", len(gameDeals.ProposedDeals), len(gameDeals.CurrentDeals), len(gameDeals.HistoricalDeals))
-	printDealList := func(label string, deals []Deal) {
-		for i, d := range deals {
-			fmt.Printf("  %s[%d]: from=%d to=%d items=%d startTurn=%d finalTurn=%d duration=%d dealCancelled=%v\n",
-				label, i, d.FromPlayer, d.ToPlayer, len(d.TradedItems), d.StartTurn, d.FinalTurn, d.Duration, d.DealCancelled)
-		}
-	}
-	printDealList("proposedDeals", gameDeals.ProposedDeals)
-	printDealList("currentDeals", gameDeals.CurrentDeals)
-	printDealList("historicalDeals", gameDeals.HistoricalDeals)
+	printGameDeals(allCivs, gameDeals)
 
 	gameReligions := readGameReligions(streamReader)
-	fmt.Printf("gameReligions: minFaithNextPantheon=%d, %d religions\n", gameReligions.MinimumFaithNextPantheon, len(gameReligions.CurrentReligions))
-	for i, r := range gameReligions.CurrentReligions {
-		fmt.Printf("  religion[%d]: type=%d founder=%d holyCity=(%d,%d) turnFounded=%d pantheon=%v enhanced=%v customName=%q\n",
-			i, r.ReligionType, r.Founder, r.HolyCityX, r.HolyCityY, r.TurnFounded, r.Pantheon, r.Enhanced, r.CustomName)
-	}
+	printGameReligions(gameReligions)
 
 	gameCulture := readGameCulture(streamReader)
-	fmt.Printf("gameCulture: %d great works, reportedSomeoneInfluential=%v\n", len(gameCulture.CurrentGreatWorks), gameCulture.ReportedSomeoneInfluential)
-	for i, gw := range gameCulture.CurrentGreatWorks {
-		fmt.Printf("  greatWork[%d]: name=%q type=%d class=%d turnFounded=%d era=%d player=%d\n",
-			i, gw.GreatPersonName, gw.GWType, gw.ClassType, gw.TurnFounded, gw.Era, gw.Player)
-	}
+	printGameCulture(allCivs, gameCulture)
 
 	gameLeagues := readGameLeagues(streamReader)
-	fmt.Printf("gameLeagues: %d active leagues, numLeaguesEverFounded=%d, diplomaticVictor=%d\n", len(gameLeagues.ActiveLeagues), gameLeagues.NumLeaguesEverFounded, gameLeagues.DiplomaticVictor)
-	for i, l := range gameLeagues.ActiveLeagues {
-		fmt.Printf("  league[%d]: id=%d host=%d inSession=%v turnsUntilSession=%d numResolutionsEverEnacted=%d members=%d enactProposals=%d repealProposals=%d activeResolutions=%d customName=%q\n",
-			i, l.ID, l.Host, l.InSession, l.TurnsUntilSession, l.NumResolutionsEverEnacted, len(l.Members), len(l.EnactProposals), len(l.RepealProposals), len(l.ActiveResolutions), l.CustomName)
-		for j, m := range l.Members {
-			fmt.Printf("    member[%d]: player=%d votes=%d abstainedVotes=%d mayPropose=%v everBeenHost=%v voteSources=%q\n",
-				j, m.Player, m.Votes, m.AbstainedVotes, m.MayPropose, m.EverBeenHost, m.VoteSources)
-		}
-	}
+	printGameLeagues(gameLeagues)
 
 	gameTrade := readGameTrade(streamReader)
-	fmt.Printf("gameTrade: %d trade connections, nextID=%d\n", len(gameTrade.TradeConnections), gameTrade.NextID)
-	for i, tc := range gameTrade.TradeConnections {
-		fmt.Printf("  tradeConnection[%d]: id=%d origin=(%d,%d) dest=(%d,%d) originOwner=%d destOwner=%d domain=%d connType=%d circuitsCompleted=%d circuitsToComplete=%d\n",
-			i, tc.ID, tc.OriginX, tc.OriginY, tc.DestX, tc.DestY, tc.OriginOwner, tc.DestOwner, tc.Domain, tc.ConnectionType, tc.CircuitsCompleted, tc.CircuitsToComplete)
-	}
+	printGameTrade(allCivs, allReplayEvents, gameTrade)
 
 	embeddedDatabase := readEmbeddedDatabase(streamReader)
 	fmt.Printf("embeddedDatabase: %d bytes, magic=%q\n", len(embeddedDatabase), string(embeddedDatabase[:min(16, len(embeddedDatabase))]))
