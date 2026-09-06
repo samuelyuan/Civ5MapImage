@@ -14,15 +14,29 @@ import (
 
 const (
 	GIF_DELAY = 100
+
+	// replayNoTileSentinel (0xFFFF) is the (X, Y) value a locationless event carries instead of a
+	// real tile - see replayEventCanBeLocationless.
+	replayNoTileSentinel = 65535
 )
 
-// Replay event type ids, as encoded in Civ5ReplayEvent.TypeId
+// Replay event type ids, as encoded in Civ5ReplayEvent.TypeId. applyReplayEvent below only acts on
+// CityFounded/TilesClaimed/CityTransferred/TilesRazed; the rest are left unhandled.
 const (
+	ReplayEventNotification    = 0
 	ReplayEventCityFounded     = 1
 	ReplayEventTilesClaimed    = 2
 	ReplayEventCityTransferred = 3
 	ReplayEventTilesRazed      = 4
+	ReplayEventReligionFounded = 5 // "X has founded the new religion Y in the holy city of Z." - real tile (Z).
+	ReplayEventPantheonFounded = 6 // "X has started worshipping a pantheon of gods..." - civ-level, no tile.
 )
+
+// replayEventCanBeLocationless reports whether typeId can carry replayNoTileSentinel instead of a
+// real tile. Every other TypeId always has a real, in-bounds tile.
+func replayEventCanBeLocationless(typeId int) bool {
+	return typeId == ReplayEventNotification || typeId == ReplayEventPantheonFounded
+}
 
 // Helper function to setup civ player data from replay
 func setupCivPlayerData(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData) {
@@ -90,28 +104,59 @@ func ValidateReplayCompatibility(mapData *fileio.Civ5MapData, replayData *fileio
 	mapHeight := len(mapData.MapTileImprovements)
 	mapWidth := len(mapData.MapTileImprovements[0])
 
-	// The .civ5replay format embeds the dimensions of the map it was recorded on. When present,
-	// this is the most precise and cheapest way to catch a mismatched map/replay pair: it
-	// doesn't require scanning every event, and it reports the mismatch in full rather than just
-	// the first tile that happens to fall outside the bounds. It's 0 for replays that don't carry
-	// this information (e.g. one converted from a .civ5save file), so the check is skipped then.
+	// 0 for replays that don't carry their own dimensions (e.g. one converted from a .civ5save).
 	if replayData.MapWidth > 0 && replayData.MapHeight > 0 {
 		if replayData.MapWidth != mapWidth || replayData.MapHeight != mapHeight {
-			return fmt.Errorf("replay was recorded on a %dx%d map, but the provided map is %dx%d; make sure -input points to the matching .Civ5Map file",
+			return fmt.Errorf("replay was recorded on a %dx%d map, but the provided map is %dx%d; make sure -map points to the matching .Civ5Map file",
 				replayData.MapWidth, replayData.MapHeight, mapWidth, mapHeight)
 		}
 	}
 
+	fmt.Println("\n=== Validating replay events ===")
+	eventTypeCounts := map[int]int{}
+	for _, event := range replayData.AllReplayEvents {
+		eventTypeCounts[event.TypeId]++
+	}
+	fmt.Printf("Validated %d/%d replay events\n", len(replayData.AllReplayEvents), len(replayData.AllReplayEvents))
+	for _, typeId := range fileio.GetSortedKeys(eventTypeCounts) {
+		fmt.Printf("  %d of TypeId %d (%s)\n", eventTypeCounts[typeId], typeId, replayEventTypeName(typeId))
+	}
+
 	for _, event := range replayData.AllReplayEvents {
 		for _, tile := range event.Tiles {
+			if replayEventCanBeLocationless(event.TypeId) && tile.X == replayNoTileSentinel && tile.Y == replayNoTileSentinel {
+				continue
+			}
 			if tile.Y < 0 || tile.Y >= mapHeight || tile.X < 0 || tile.X >= mapWidth {
-				return fmt.Errorf("replay event on turn %d references tile (%d, %d), which is outside the map bounds (%dx%d); the replay may not match this map",
-					event.Turn, tile.X, tile.Y, mapWidth, mapHeight)
+				return fmt.Errorf("replay event on turn %d (TypeId %d) references tile (%d, %d), which is outside the map bounds (%dx%d); the replay may not match this map",
+					event.Turn, event.TypeId, tile.X, tile.Y, mapWidth, mapHeight)
 			}
 		}
 	}
+	fmt.Println()
 
 	return nil
+}
+
+func replayEventTypeName(typeId int) string {
+	switch typeId {
+	case ReplayEventNotification:
+		return "notification"
+	case ReplayEventCityFounded:
+		return "CityFounded"
+	case ReplayEventTilesClaimed:
+		return "TilesClaimed"
+	case ReplayEventCityTransferred:
+		return "CityTransferred"
+	case ReplayEventTilesRazed:
+		return "TilesRazed"
+	case ReplayEventReligionFounded:
+		return "ReligionFounded"
+	case ReplayEventPantheonFounded:
+		return "PantheonFounded"
+	default:
+		return "unhandled"
+	}
 }
 
 // applyReplayEvent applies a single replay event's effect to the map tile improvements,

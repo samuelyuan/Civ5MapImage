@@ -16,19 +16,21 @@ You have the option of generating a physical map or a political map. The physica
 
 ## Command-Line Usage
 
-The input filename can either be a .civ5map or .json file. To start using this application, you can use any of the map files in the maps/ folder or you can load a .civ5map in your game directory.
+The map filename can either be a .civ5map or .json file. To start using this application, you can use any of the map files in the maps/ folder or you can load a .civ5map in your game directory.
 
-If you generated the map image and want to modify the map, you can export the .civ5map as a .json by providing an output filename with the file extension .json and reuse the exported json as the input filename.
+If you generated the map image and want to modify the map, you can export the .civ5map as a .json by providing an output filename with the file extension .json and reuse the exported json as the map filename.
 
 ```
-./Civ5MapImage.exe -input=[input filename] -mode=[drawing mode (optional)] -output=[output filename (default is output.png)]
+./Civ5MapImage.exe -map=[map filename] -mode=[drawing mode (optional)] -output=[output filename (default is output.png)]
 ```
+
+`-input` is also accepted as an older alias for `-map`.
 
 ### Generate Physical Map Image
 
 The default map mode is physical, which shows the different types of terrain.
 ```
-./Civ5MapImage.exe -input=earth.Civ5Map -output=earth.png
+./Civ5MapImage.exe -map=earth.Civ5Map -output=earth.png
 ```
 
 <div style="display:inline-block;">
@@ -39,7 +41,7 @@ The default map mode is physical, which shows the different types of terrain.
 
 To generate a political map with the civilization and city state borders, you must pass in -mode=political to specify the drawing mode.
 ```
-./Civ5MapImage.exe -input=maps/europe1939.json -mode=political -output=europe1939.png
+./Civ5MapImage.exe -map=maps/europe1939.json -mode=political -output=europe1939.png
 ```
 
 <div style="display:inline-block;">
@@ -48,32 +50,36 @@ To generate a political map with the civilization and city state borders, you mu
 
 ### Generate Replay
 
-To generate a replay, you will need to provide the base map and the replay file of a game.
+To generate a replay, provide the base map and the replay file of a game. Passing `-replay` alone implies `-mode=replay` and defaults `-output` to `output.gif`:
 ```
-./Civ5MapImage.exe -mode=replay -input=[map filename] -replay=[replay filename] -output=[gif filename]
+./Civ5MapImage.exe -map=[map filename] -replay=[replay filename]
+```
+which is shorthand for the fully explicit form:
+```
+./Civ5MapImage.exe -mode=replay -map=[map filename] -replay=[replay filename] -output=[gif filename]
 ```
 
 | Flag | Expected extension(s) | Notes |
 |------|------------------------|-------|
-| `-input` | `.civ5map` or `.json` | The base map. Use the same map the replay was recorded on — a mismatched map/replay pair (different dimensions) will fail with a validation error rather than a crash. |
+| `-map` | `.civ5map` or `.json` | The base map. Use the same map the replay was recorded on. |
 | `-replay` | `.civ5replay` or `.json` | The replay event log. A `.json` here must be a replay previously exported with `-mode=exportjson` (either directly from a `.civ5replay`, or converted from a `.civ5save` — see [Extract Replay From Save File](#extract-replay-from-save-file) below). |
-| `-output` | `.gif` | The animation is always encoded as a GIF regardless of the extension you provide, so name it `.gif` to avoid confusion. |
+| `-output` | `.gif` | Replays are always GIF-encoded; any other extension is rejected before rendering. |
 
-Any other extension on `-input` or `-replay` is rejected immediately. If the map and replay are both readable but incompatible (e.g. wrong map for that replay, or a map exported without game/city data), replay generation fails fast with a descriptive error before any frames are rendered, instead of panicking partway through.
+Any other extension on `-map` or `-replay` is also rejected immediately. Before rendering, the map and replay are cross-checked: grid dimensions, tile-by-tile geography, and whether `-map`'s filename matches the one the replay recorded (a mismatch there is only a warning). A geography mismatch fails fast with a descriptive error instead of rendering a wrong or partial animation.
 
 ### Extract Replay From Save File
 
 To extract a replay from a save file, you will need to convert the save file into a json and use the new json as a replay file.
 
 ```
-./Civ5MapImage.exe -mode=exportjson -input=[save filename] -output=[json filename]
+./Civ5MapImage.exe -mode=exportjson -map=[save filename] -output=[json filename]
 ```
 
 ### Convert .civ5map to .json
 
 Set -mode=exportjson and output to have a filename ending in .json. No image will be generated.
 ```
-./Civ5MapImage.exe -mode=exportjson -input=earth.Civ5Map -output=earth.json
+./Civ5MapImage.exe -mode=exportjson -map=earth.Civ5Map -output=earth.json
 ```
 
 ## Examples

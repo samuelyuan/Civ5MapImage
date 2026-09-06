@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
+	"strings"
 )
 
 type Civ5ReplayFileConfigEntry struct {
@@ -510,6 +512,15 @@ type Civ5ReplayDataEntry struct {
 	Value int
 }
 
+// Civ5ReplayTile is one tile's physical-geography snapshot. PlotType is hardcoded:
+// 0=PLOT_MOUNTAIN, 1=PLOT_HILLS, 2=PLOT_LAND, 3=PLOT_OCEAN.
+type Civ5ReplayTile struct {
+	PlotType    int8
+	TerrainType int8
+	Feature     int8
+	RiverBits   int8
+}
+
 type Civ5ReplayData struct {
 	PlayerCiv       string
 	IsReplayFile    bool
@@ -517,11 +528,13 @@ type Civ5ReplayData struct {
 	AllReplayEvents []Civ5ReplayEvent
 	DatasetNames    []string
 	DatasetValues   []Civ5ReplayCivDataset
-	// MapWidth and MapHeight are the dimensions of the map this replay was recorded on, as
-	// embedded in the .civ5replay file itself. They are 0 when unknown (e.g. a replay
-	// converted from a .civ5save file, which doesn't carry this information).
+	MapFileStem string // empty when unknown (e.g. converted from a .civ5save)
+	// MapWidth/MapHeight are the map's dimensions, as embedded in the .civ5replay. 0 when unknown.
 	MapWidth  int
 	MapHeight int
+	// Tiles is the per-plot geography snapshot, row-major: index = y*MapWidth+x. Empty when
+	// MapWidth/MapHeight are 0.
+	Tiles []Civ5ReplayTile
 
 	WorldSize       string
 	Climate         string
@@ -531,6 +544,13 @@ type Civ5ReplayData struct {
 	VictoryTypes    []string
 	VictoryAchieved string
 	GameOptions     []string
+}
+
+// mapFilenameStem extracts the map name from a full file path, removing the directory and extension
+func mapFilenameStem(rawPath string) string {
+	normalized := strings.ReplaceAll(rawPath, `\`, "/")
+	base := path.Base(normalized)
+	return strings.TrimSuffix(base, path.Ext(base))
 }
 
 func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
@@ -758,11 +778,15 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 			VariableType: "varstring",
 			VariableName: "worldSize",
 		},
-		{
-			VariableType: "varstring",
-			VariableName: "mapFilename",
-		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read difficulty/era/gameSpeed/worldSize config: %w", err)
+	}
+
+	mapFilename, err := readVarString(streamReader, "mapFilename")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read mapFilename: %w", err)
+	}
 
 	readArray(streamReader, "dlc", []Civ5ReplayFileConfigEntry{
 		{
@@ -904,32 +928,18 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	mapHeight := unsafeReadUint32(streamReader)
 	fmt.Println("Map width:", mapWidth, ", height:", mapHeight)
 
-	readArray(streamReader, "tiles", []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "mapEntryCount",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "turnKey",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "plotTypeIndex",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "terrainIndex",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "featureIndex",
-		},
-		{
-			VariableType: "uint8",
-			VariableName: "riverBits",
-		},
-	})
+	tileCount := unsafeReadUint32(streamReader)
+	tiles := make([]Civ5ReplayTile, tileCount)
+	for i := range tiles {
+		unsafeReadUint32(streamReader) // mapEntryCount, always 1
+		unsafeReadUint32(streamReader) // turnKey, always equals this file's own "End turn"
+		tiles[i] = Civ5ReplayTile{
+			PlotType:    int8(unsafeReadByte(streamReader)),
+			TerrainType: int8(unsafeReadByte(streamReader)),
+			Feature:     int8(unsafeReadByte(streamReader)),
+			RiverBits:   int8(unsafeReadByte(streamReader)),
+		}
+	}
 
 	replayData := Civ5ReplayData{
 		PlayerCiv:       playerCiv,
@@ -938,8 +948,10 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		AllReplayEvents: allReplayEvents,
 		DatasetNames:    datasetNames,
 		DatasetValues:   datasetValues,
+		MapFileStem:     mapFilenameStem(mapFilename),
 		MapWidth:        int(mapWidth),
 		MapHeight:       int(mapHeight),
+		Tiles:           tiles,
 		WorldSize:       worldSizeName,
 		Climate:         climateName,
 		SeaLevel:        seaLevelName,

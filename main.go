@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
 	"log"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,54 @@ const (
 	ModeReplay     DrawingMode = "replay"
 	ModeExportJSON DrawingMode = "exportjson"
 )
+
+// cliArgs holds the resolved command-line configuration, after applying parseArgs' defaults.
+type cliArgs struct {
+	inputFilename  string
+	outputFilename string
+	replayFilename string
+	mode           string
+}
+
+// parseArgs parses the command line and resolves defaults: -map (preferred) or -input (alias);
+// -replay alone implies -mode=replay; replay mode defaults -output to "output.gif".
+func parseArgs() cliArgs {
+	inputPtr := flag.String("input", "", "Map filename (.civ5map or .json) - alias for -map")
+	mapPtr := flag.String("map", "", "Map filename (.civ5map or .json)")
+	outputPtr := flag.String("output", "output.png", "Output filename")
+	replayFilePtr := flag.String("replay", "", "Replay filename (.civ5replay or .json). Passing -replay without -mode generates a replay gif directly.")
+	modePtr := flag.String("mode", "physical", "Drawing mode")
+
+	flag.Parse()
+
+	// Tracks explicit flags, to tell a default value apart from a real choice below.
+	modeSet, outputSet := false, false
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "mode":
+			modeSet = true
+		case "output":
+			outputSet = true
+		}
+	})
+
+	args := cliArgs{
+		inputFilename:  *inputPtr,
+		outputFilename: *outputPtr,
+		replayFilename: *replayFilePtr,
+		mode:           *modePtr,
+	}
+	if *mapPtr != "" {
+		args.inputFilename = *mapPtr
+	}
+	if !modeSet && args.replayFilename != "" {
+		args.mode = string(ModeReplay)
+	}
+	if args.mode == string(ModeReplay) && !outputSet {
+		args.outputFilename = "output.gif"
+	}
+	return args
+}
 
 func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 	mapFileExtension := filepath.Ext(filename)
@@ -46,51 +95,74 @@ func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 	return nil
 }
 
-func main() {
-	inputPtr := flag.String("input", "", "Input filename")
-	outputPtr := flag.String("output", "output.png", "Output filename")
-	replayFilePtr := flag.String("replay", "", "Replay filename for replay mode")
-	modePtr := flag.String("mode", "physical", "Drawing mode")
+// renderMap runs a physical/political render+save, differing only in which MapRenderer method
+// produces the image (passed as a method expression, e.g. (*graphics.MapRenderer).DrawPhysicalMap).
+func renderMap(mapData *fileio.Civ5MapData, outputFilename string, draw func(*graphics.MapRenderer, graphics.Canvas, *fileio.Civ5MapData) image.Image) {
+	config := graphics.DefaultDrawingConfig()
+	renderer := graphics.NewMapRenderer(config)
+	canvas := graphics.NewDrawingContext(800, 600)
+	draw(renderer, canvas, mapData)
+	if err := renderer.SaveImage(canvas, outputFilename); err != nil {
+		log.Fatal("Failed to save image: ", err)
+	}
+}
 
-	flag.Parse()
-
-	inputFilename := *inputPtr
-	outputFilename := *outputPtr
-	mode := *modePtr
-	fmt.Println("Input filename: ", inputFilename)
-	fmt.Println("Output filename: ", outputFilename)
-	fmt.Println("Mode: ", mode)
-
-	if mode == string(ModeExportJSON) {
-		fileio.ExportFileToJson(inputFilename, outputFilename)
-		return
+// runReplayMode validates the map/replay pair and, if compatible, draws the replay gif.
+func runReplayMode(args cliArgs) {
+	if args.replayFilename == "" {
+		log.Fatal("replay mode requires -replay <file.civ5replay>")
+	}
+	if err := fileio.ValidateFileExtension(args.outputFilename, ".gif"); err != nil {
+		log.Fatalf("Invalid replay output filename: %v. Replays are always saved as an animated GIF, so -output must end in .gif.", err)
 	}
 
-	mapData := loadMapDataFromFile(inputFilename)
+	mapData := loadMapDataFromFile(args.inputFilename)
+	replayData := fileio.LoadReplayDataFromFile(args.replayFilename)
 
-	switch mode {
-	case string(ModePhysical):
-		config := graphics.DefaultDrawingConfig()
-		renderer := graphics.NewMapRenderer(config)
-		canvas := graphics.NewDrawingContext(800, 600)
-		renderer.DrawPhysicalMap(canvas, mapData)
-		renderer.SaveImage(canvas, outputFilename)
-		return
-	case string(ModePolitical):
-		config := graphics.DefaultDrawingConfig()
-		renderer := graphics.NewMapRenderer(config)
-		canvas := graphics.NewDrawingContext(800, 600)
-		renderer.DrawPoliticalMap(canvas, mapData)
-		renderer.SaveImage(canvas, outputFilename)
-		return
-	case string(ModeReplay):
-		replayFilename := *replayFilePtr
-		replayData := fileio.LoadReplayDataFromFile(replayFilename)
-		if err := graphics.DrawReplay(mapData, replayData, outputFilename); err != nil {
-			log.Fatal("Failed to draw replay: ", err)
+	validateMapReplayCompatibility(args.inputFilename, mapData, replayData)
+
+	if err := graphics.DrawReplay(mapData, replayData, args.outputFilename); err != nil {
+		log.Fatal("Failed to draw replay: ", err)
+	}
+}
+
+// validateMapReplayCompatibility prints the map/replay compatibility report. Only a geography
+// mismatch (compatErr) aborts; a filename mismatch is always just a warning.
+func validateMapReplayCompatibility(inputFilename string, mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData) {
+	fmt.Println("\n=== Validating map and replay compatibility ===")
+	compatResults, compatErr := fileio.ValidateMapReplayCompatible(mapData, replayData)
+	if len(compatResults) > 0 {
+		fileio.PrintValidationResults(compatResults)
+	}
+	if filenameResult := fileio.ValidateMapFilenameMatch(inputFilename, replayData); filenameResult != nil {
+		fmt.Println(filenameResult)
+		if filenameResult.Passed != filenameResult.Total {
+			fmt.Printf("WARNING: %s\n", filenameResult.Notes)
 		}
-		return
+	}
+	fmt.Println()
+	if compatErr != nil {
+		log.Fatalf("Map and replay are not compatible: %v", compatErr)
+	}
+}
+
+func main() {
+	args := parseArgs()
+
+	fmt.Println("Input filename: ", args.inputFilename)
+	fmt.Println("Output filename: ", args.outputFilename)
+	fmt.Println("Mode: ", args.mode)
+
+	switch args.mode {
+	case string(ModeExportJSON):
+		fileio.ExportFileToJson(args.inputFilename, args.outputFilename)
+	case string(ModePhysical):
+		renderMap(loadMapDataFromFile(args.inputFilename), args.outputFilename, (*graphics.MapRenderer).DrawPhysicalMap)
+	case string(ModePolitical):
+		renderMap(loadMapDataFromFile(args.inputFilename), args.outputFilename, (*graphics.MapRenderer).DrawPoliticalMap)
+	case string(ModeReplay):
+		runReplayMode(args)
 	default:
-		log.Fatal("Invalid drawing mode: " + mode + ". Mode must be in this list [physical, political, replay, exportjson].")
+		log.Fatal("Invalid drawing mode: " + args.mode + ". Mode must be in this list [physical, political, replay, exportjson].")
 	}
 }

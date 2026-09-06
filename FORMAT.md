@@ -1014,7 +1014,7 @@ A pantheon has its own entry too: religion type 0 (RELIGION_PANTHEON), pantheon 
 | uint32 | 4 bytes | Great work format version |
 | varstring | var bytes | Legacy great work name, discarded (only if great work format version == 1) |
 | varstring | var bytes | Great person name |
-| int32 | 4 bytes | Great work type: 1-indexed, names the specific work (a named painting/book/song for Art/Literature/Music classes, or an era+site description like "ancient era ancient ruin" for the Artifact class) |
+| int32 | 4 bytes | Great work type: 1-indexed, names the specific work |
 | int32 | 4 bytes | Great work class (only if great work format version >= 3): 1=Art, 2=Artifact, 3=Literature, 4=Music |
 | int32 | 4 bytes | Turn founded |
 | int32 | 4 bytes | Era |
