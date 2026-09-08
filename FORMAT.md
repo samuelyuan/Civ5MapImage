@@ -1190,17 +1190,19 @@ The last of the game's whole-object sections - every active trade route (land or
 
 ### Embedded Database
 
-This is a size-prefixed embedded SQLite database blob (`Civ5SavedGameDatabase.db`) - a fixed, byte-identical compiled-in schema/template, not per-game data. SQLite version `3.7.17`, page size 1024, 3 pages total. The schema page defines exactly one generic key-value table:
+This is a size-prefixed embedded SQLite database blob (`Civ5SavedGameDatabase.db`). Its schema is fixed - exactly one generic key-value table:
 
 ```sql
 CREATE TABLE SimpleValues(Name TEXT Primary Key, Value VARIANT)
 ```
 
-plus its auto-generated unique index (`sqlite_autoindex_SimpleValues_1`). The table is defined but never populated in a normal single-player game.
+plus its auto-generated unique index (`sqlite_autoindex_SimpleValues_1`).
+
+For a vanilla game this table is empty (SQLite version `3.7.17`, page size 1024, 3 pages, 3072 bytes total). Mods can read and write arbitrary rows into it through the modding API, so the blob size and contents vary by mod.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Blob size (typically 3072) |
+| uint32 | 4 bytes | Blob size |
 | byte[] | var bytes | Raw blob content, starting with the literal SQLite file header `"SQLite format 3\0"` |
 
 ### Map Header
