@@ -1031,20 +1031,26 @@ func readPostEventData(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, 
 		})
 	}
 
-	gameDeals := readGameDeals(streamReader)
+	gameDeals := readGameDeals(streamReader, saveFileVersion)
 	printGameDeals(allCivs, gameDeals)
 
-	gameReligions := readGameReligions(streamReader)
-	printGameReligions(gameReligions)
+	// Religions don't exist in saves before G&K expansion
+	if !isPreVersioningDealFormat(saveFileVersion) {
+		gameReligions := readGameReligions(streamReader)
+		printGameReligions(gameReligions)
+	}
 
-	gameCulture := readGameCulture(streamReader)
-	printGameCulture(allCivs, gameCulture)
+	// Culture/Leagues/Trade are BNW-only
+	if saveFileVersion == 1 {
+		gameCulture := readGameCulture(streamReader)
+		printGameCulture(allCivs, gameCulture)
 
-	gameLeagues := readGameLeagues(streamReader)
-	printGameLeagues(gameLeagues)
+		gameLeagues := readGameLeagues(streamReader)
+		printGameLeagues(gameLeagues)
 
-	gameTrade := readGameTrade(streamReader)
-	printGameTrade(allCivs, allReplayEvents, gameTrade)
+		gameTrade := readGameTrade(streamReader)
+		printGameTrade(allCivs, allReplayEvents, gameTrade)
+	}
 
 	embeddedDatabase := readEmbeddedDatabase(streamReader)
 	fmt.Printf("embeddedDatabase: %d bytes, magic=%q\n", len(embeddedDatabase), string(embeddedDatabase[:min(16, len(embeddedDatabase))]))

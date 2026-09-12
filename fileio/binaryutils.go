@@ -355,6 +355,20 @@ func readTradedItem(reader *io.SectionReader) TradedItem {
 	}
 }
 
+// readTradedItemOld is the pre-versioning shape: no leading version, no FromRenewed/ToRenewed.
+func readTradedItemOld(reader *io.SectionReader) TradedItem {
+	itemType := int32(unsafeReadUint32(reader))
+	duration := int32(unsafeReadUint32(reader))
+	finalTurn := int32(unsafeReadUint32(reader))
+	data1 := int32(unsafeReadUint32(reader))
+	data2 := int32(unsafeReadUint32(reader))
+	fromPlayer := int32(unsafeReadUint32(reader))
+	return TradedItem{
+		ItemType: itemType, Duration: duration, FinalTurn: finalTurn,
+		Data1: data1, Data2: data2, FromPlayer: fromPlayer,
+	}
+}
+
 // Diplomatic deal (proposed, active, or historical).
 type Deal struct {
 	FromPlayer            int32
@@ -390,9 +404,6 @@ func readDeal(reader *io.SectionReader) Deal {
 	demandingPlayer := int32(unsafeReadUint32(reader))
 	requestingPlayer := int32(unsafeReadUint32(reader))
 	entriesToRead := unsafeReadUint32(reader)
-	if version < 2 {
-		panic(fmt.Sprintf("readDeal: version %d (pre-version-2 traded item format) not supported", version))
-	}
 	tradedItems := boundedMakeSlice[TradedItem](entriesToRead, "deal.tradedItems")
 	for i := range tradedItems {
 		tradedItems[i] = readTradedItem(reader)
@@ -407,6 +418,31 @@ func readDeal(reader *io.SectionReader) Deal {
 	}
 }
 
+// readDealOld is the pre-versioning shape: no leading version, no ConsideringForRenewal/DealCancelled.
+func readDealOld(reader *io.SectionReader) Deal {
+	fromPlayer := int32(unsafeReadUint32(reader))
+	toPlayer := int32(unsafeReadUint32(reader))
+	finalTurn := int32(unsafeReadUint32(reader))
+	duration := int32(unsafeReadUint32(reader))
+	startTurn := int32(unsafeReadUint32(reader))
+	peaceTreatyType := int32(unsafeReadUint32(reader))
+	surrenderingPlayer := int32(unsafeReadUint32(reader))
+	demandingPlayer := int32(unsafeReadUint32(reader))
+	requestingPlayer := int32(unsafeReadUint32(reader))
+	entriesToRead := unsafeReadUint32(reader)
+	tradedItems := boundedMakeSlice[TradedItem](entriesToRead, "deal.tradedItems")
+	for i := range tradedItems {
+		tradedItems[i] = readTradedItemOld(reader)
+	}
+	return Deal{
+		FromPlayer: fromPlayer, ToPlayer: toPlayer, FinalTurn: finalTurn,
+		Duration: duration, StartTurn: startTurn,
+		PeaceTreatyType: peaceTreatyType, SurrenderingPlayer: surrenderingPlayer,
+		DemandingPlayer: demandingPlayer, RequestingPlayer: requestingPlayer,
+		TradedItems: tradedItems,
+	}
+}
+
 // Proposed, active, and historical deals.
 type GameDeals struct {
 	ProposedDeals   []Deal
@@ -414,14 +450,27 @@ type GameDeals struct {
 	HistoricalDeals []Deal
 }
 
-func readGameDeals(reader *io.SectionReader) GameDeals {
-	unsafeReadUint32(reader) // version - not needed
+// isPreVersioningDealFormat is true for save versions with no leading version on GameDeals/Deal;
+// G&K(13)/BNW(1) both added versioning.
+func isPreVersioningDealFormat(saveFileVersion uint32) bool {
+	return saveFileVersion == 9 || saveFileVersion == 11
+}
+
+func readGameDeals(reader *io.SectionReader, saveFileVersion uint32) GameDeals {
+	oldFormat := isPreVersioningDealFormat(saveFileVersion)
+	if !oldFormat {
+		unsafeReadUint32(reader) // version - not needed
+	}
 
 	readDealArray := func() []Deal {
 		count := unsafeReadUint32(reader)
 		deals := boundedMakeSlice[Deal](count, "deals")
 		for i := range deals {
-			deals[i] = readDeal(reader)
+			if oldFormat {
+				deals[i] = readDealOld(reader)
+			} else {
+				deals[i] = readDeal(reader)
+			}
 		}
 		return deals
 	}
@@ -433,19 +482,69 @@ func readGameDeals(reader *io.SectionReader) GameDeals {
 	}
 }
 
+// ReligionBeliefsModifiers holds the per-religion int modifiers. G&K never gained the last four
+// fields below CityStateMinimumInfluence, or FaithBuildingTourism elsewhere in the struct -
+// always zero for G&K.
+type ReligionBeliefsModifiers struct {
+	FaithFromDyingUnits             int32
+	RiverHappiness                  int32
+	PlotCultureCostModifier         int32
+	CityRangeStrikeModifier         int32
+	CombatModifierEnemyCities       int32
+	CombatModifierFriendlyCities    int32
+	FriendlyHealChange              int32
+	CityStateFriendshipModifier     int32
+	LandBarbarianConversionPercent  int32
+	SpreadStrengthModifier          int32
+	SpreadDistanceModifier          int32
+	ProphetStrengthModifier         int32
+	ProphetCostModifier             int32
+	MissionaryStrengthModifier      int32
+	MissionaryCostModifier          int32
+	FriendlyCityStateSpreadModifier int32
+	GreatPersonExpendedFaith        int32
+	CityStateMinimumInfluence       int32
+	CityStateInfluenceModifier      int32 // BNW only; 0 for G&K
+	OtherReligionPressureErosion    int32 // BNW only; 0 for G&K
+	SpyPressure                     int32 // BNW only; 0 for G&K
+	InquisitorPressureRetention     int32 // BNW only; 0 for G&K
+}
+
+func readReligionBeliefsModifiers(reader *io.SectionReader, isGK bool) ReligionBeliefsModifiers {
+	m := ReligionBeliefsModifiers{
+		FaithFromDyingUnits:             int32(unsafeReadUint32(reader)),
+		RiverHappiness:                  int32(unsafeReadUint32(reader)),
+		PlotCultureCostModifier:         int32(unsafeReadUint32(reader)),
+		CityRangeStrikeModifier:         int32(unsafeReadUint32(reader)),
+		CombatModifierEnemyCities:       int32(unsafeReadUint32(reader)),
+		CombatModifierFriendlyCities:    int32(unsafeReadUint32(reader)),
+		FriendlyHealChange:              int32(unsafeReadUint32(reader)),
+		CityStateFriendshipModifier:     int32(unsafeReadUint32(reader)),
+		LandBarbarianConversionPercent:  int32(unsafeReadUint32(reader)),
+		SpreadStrengthModifier:          int32(unsafeReadUint32(reader)),
+		SpreadDistanceModifier:          int32(unsafeReadUint32(reader)),
+		ProphetStrengthModifier:         int32(unsafeReadUint32(reader)),
+		ProphetCostModifier:             int32(unsafeReadUint32(reader)),
+		MissionaryStrengthModifier:      int32(unsafeReadUint32(reader)),
+		MissionaryCostModifier:          int32(unsafeReadUint32(reader)),
+		FriendlyCityStateSpreadModifier: int32(unsafeReadUint32(reader)),
+		GreatPersonExpendedFaith:        int32(unsafeReadUint32(reader)),
+		CityStateMinimumInfluence:       int32(unsafeReadUint32(reader)),
+	}
+	if !isGK {
+		m.CityStateInfluenceModifier = int32(unsafeReadUint32(reader))
+		m.OtherReligionPressureErosion = int32(unsafeReadUint32(reader))
+		m.SpyPressure = int32(unsafeReadUint32(reader))
+		m.InquisitorPressureRetention = int32(unsafeReadUint32(reader))
+	}
+	return m
+}
+
 // The effects granted by a religion (or pantheon), plus which beliefs were chosen and
 // which building classes they enable.
 type ReligionBeliefs struct {
-	// 22 individually-named int modifiers, in file order:
-	// FaithFromDyingUnits, RiverHappiness, PlotCultureCostModifier, CityRangeStrikeModifier,
-	// CombatModifierEnemyCities, CombatModifierFriendlyCities, FriendlyHealChange,
-	// CityStateFriendshipModifier, LandBarbarianConversionPercent, SpreadStrengthModifier,
-	// SpreadDistanceModifier, ProphetStrengthModifier, ProphetCostModifier,
-	// MissionaryStrengthModifier, MissionaryCostModifier, FriendlyCityStateSpreadModifier,
-	// GreatPersonExpendedFaith, CityStateMinimumInfluence, CityStateInfluenceModifier,
-	// OtherReligionPressureErosion, SpyPressure, InquisitorPressureRetention
-	Modifiers                  []int32
-	FaithBuildingTourism       int32 // only if version >= 2
+	Modifiers                  ReligionBeliefsModifiers
+	FaithBuildingTourism       int32 // BNW only; 0 for G&K
 	ObsoleteEra                int32
 	ResourceRevealed           int32
 	SpreadModifierDoublingTech int32
@@ -455,10 +554,12 @@ type ReligionBeliefs struct {
 
 func readReligionBeliefs(reader *io.SectionReader) ReligionBeliefs {
 	version := unsafeReadUint32(reader)
-	modifiers := unsafeReadFixedInt32Array(reader, 22)
+	isGK := version == 10
+
+	modifiers := readReligionBeliefsModifiers(reader, isGK)
 
 	var faithBuildingTourism int32
-	if version >= 2 {
+	if !isGK && version >= 2 {
 		faithBuildingTourism = int32(unsafeReadUint32(reader))
 	}
 
@@ -473,7 +574,16 @@ func readReligionBeliefs(reader *io.SectionReader) ReligionBeliefs {
 	}
 
 	buildingClassCount := unsafeReadUint32(reader)
-	buildingClassOverrides := readHashValuePairs(reader, int(buildingClassCount))
+	var buildingClassOverrides []HashValuePair
+	if isGK {
+		named := readNamedValuePairs(reader, int(buildingClassCount))
+		buildingClassOverrides = make([]HashValuePair, len(named))
+		for i, p := range named {
+			buildingClassOverrides[i] = HashValuePair{Hash: civ5StringHash(p.Name), Value: p.Value}
+		}
+	} else {
+		buildingClassOverrides = readHashValuePairs(reader, int(buildingClassCount))
+	}
 
 	return ReligionBeliefs{
 		Modifiers: modifiers, FaithBuildingTourism: faithBuildingTourism,

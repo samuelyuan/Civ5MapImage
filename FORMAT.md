@@ -965,7 +965,7 @@ Same format as replay events in the shared Replay File Format section - the save
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Deals format version |
+| uint32 | 4 bytes | Deals format version (G&K or BNW only) |
 | uint32 | 4 bytes | Proposed deal array count |
 | Deal[] | var bytes | Proposed deals (in-progress negotiations; typically empty) |
 | uint32 | 4 bytes | Current deal array count |
@@ -977,15 +977,15 @@ Same format as replay events in the shared Replay File Format section - the save
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Deal format version |
+| uint32 | 4 bytes | Deal format version (G&K or BNW only) |
 | int32 | 4 bytes | From player |
 | int32 | 4 bytes | To player |
 | int32 | 4 bytes | Final turn |
 | int32 | 4 bytes | Duration |
 | int32 | 4 bytes | Start turn |
-| uint8 | 1 byte | Considering for renewal (bool) |
-| uint8 | 1 byte | Checked for renewal (bool, only if deal format version >= 3) |
-| uint8 | 1 byte | Deal cancelled (bool) |
+| uint8 | 1 byte | Considering for renewal (bool; G&K or BNW only) |
+| uint8 | 1 byte | Checked for renewal (bool; G&K or BNW only, and deal format version >= 3) |
+| uint8 | 1 byte | Deal cancelled (bool; G&K or BNW only) |
 | int32 | 4 bytes | Peace treaty type |
 | int32 | 4 bytes | Surrendering player |
 | int32 | 4 bytes | Demanding player |
@@ -997,19 +997,21 @@ Same format as replay events in the shared Replay File Format section - the save
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Traded item format version |
+| uint32 | 4 bytes | Traded item format version (G&K or BNW only) |
 | int32 | 4 bytes | Item type (TradeableItems: -1=NONE, 0=GOLD, 1=GOLD_PER_TURN, 2=MAPS, 3=RESOURCES, 4=CITIES, 5=UNITS, 6=OPEN_BORDERS, 7=DEFENSIVE_PACT, 8=RESEARCH_AGREEMENT, 9=TRADE_AGREEMENT, 10=PERMANENT_ALLIANCE, 11=SURRENDER, 12=TRUCE, 13=PEACE_TREATY, 14=THIRD_PARTY_PEACE, 15=THIRD_PARTY_WAR, 16=THIRD_PARTY_EMBARGO, 17=ALLOW_EMBASSY, 18=DECLARATION_OF_FRIENDSHIP, 19=VOTE_COMMITMENT) |
 | int32 | 4 bytes | Duration |
 | int32 | 4 bytes | Final turn |
 | int32 | 4 bytes | Data 1 (meaning depends on item type: GOLD/GOLD_PER_TURN=amount, RESOURCES=ResourceTypes index, CITIES=city's X coordinate, THIRD_PARTY_PEACE/THIRD_PARTY_WAR=TeamTypes (not a player index), VOTE_COMMITMENT=ResolutionID, other types unused/0) |
 | int32 | 4 bytes | Data 2 (RESOURCES=amount, CITIES=city's Y coordinate, VOTE_COMMITMENT=VoteChoice, otherwise unused/0) |
-| int32 | 4 bytes | Data 3 (only if traded item format version >= 2; VOTE_COMMITMENT=NumVotes, otherwise unused/0) |
-| uint8 | 1 byte | Flag 1 (bool, only if traded item format version >= 2; VOTE_COMMITMENT=is this a repeal vote, otherwise always false) |
+| int32 | 4 bytes | Data 3 (G&K or BNW only, and traded item format version >= 2; VOTE_COMMITMENT=NumVotes, otherwise unused/0) |
+| uint8 | 1 byte | Flag 1 (bool; G&K or BNW only, and traded item format version >= 2; VOTE_COMMITMENT=is this a repeal vote, otherwise always false) |
 | int32 | 4 bytes | From player |
-| uint8 | 1 byte | From renewed (bool) |
-| uint8 | 1 byte | To renewed (bool) |
+| uint8 | 1 byte | From renewed (bool; G&K or BNW only) |
+| uint8 | 1 byte | To renewed (bool; G&K or BNW only) |
 
 ### Game Religions
+
+Religion is G&K/BNW only.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -1038,20 +1040,46 @@ A pantheon has its own entry too: religion type 0 (RELIGION_PANTHEON), pantheon 
 
 #### Religion Beliefs Element
 
+G&K (format version 10) lacks the last four modifiers and Faith building tourism, and uses
+name-based (not hash-based) building class overrides.
+
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Beliefs format version |
-| int32[22] | 88 bytes | Modifiers: faith from dying units, river happiness, plot culture cost, city-range strike, combat vs. enemy cities, combat vs. friendly cities, friendly heal change, city-state friendship, land barbarian conversion percent, spread strength, spread distance, prophet strength, prophet cost, missionary strength, missionary cost, friendly city-state spread, great person expended faith, city-state minimum influence, city-state influence, other-religion pressure erosion, spy pressure, inquisitor pressure retention |
-| int32 | 4 bytes | Faith building tourism (only if beliefs format version >= 2) |
+| uint32 | 4 bytes | Beliefs format version (10=G&K, 2=BNW) |
+| int32 | 4 bytes | Faith from dying units |
+| int32 | 4 bytes | River happiness |
+| int32 | 4 bytes | Plot culture cost modifier |
+| int32 | 4 bytes | City-range strike modifier |
+| int32 | 4 bytes | Combat modifier vs. enemy cities |
+| int32 | 4 bytes | Combat modifier vs. friendly cities |
+| int32 | 4 bytes | Friendly heal change |
+| int32 | 4 bytes | City-state friendship modifier |
+| int32 | 4 bytes | Land barbarian conversion percent |
+| int32 | 4 bytes | Spread strength modifier |
+| int32 | 4 bytes | Spread distance modifier |
+| int32 | 4 bytes | Prophet strength modifier |
+| int32 | 4 bytes | Prophet cost modifier |
+| int32 | 4 bytes | Missionary strength modifier |
+| int32 | 4 bytes | Missionary cost modifier |
+| int32 | 4 bytes | Friendly city-state spread modifier |
+| int32 | 4 bytes | Great person expended faith |
+| int32 | 4 bytes | City-state minimum influence |
+| int32 | 4 bytes | City-state influence modifier (BNW only) |
+| int32 | 4 bytes | Other-religion pressure erosion (BNW only) |
+| int32 | 4 bytes | Spy pressure (BNW only) |
+| int32 | 4 bytes | Inquisitor pressure retention (BNW only) |
+| int32 | 4 bytes | Faith building tourism (BNW only) |
 | int32 | 4 bytes | Obsolete era |
 | int32 | 4 bytes | Resource revealed |
 | int32 | 4 bytes | Spread modifier doubling tech |
 | uint32 | 4 bytes | Belief array count |
 | uint32[] | (count * 4) bytes | Belief hashes (hash of each chosen belief's type string) |
 | uint32 | 4 bytes | Building class override array count (a ruleset-wide constant, not a per-religion value) |
-| (uint32,int32)[] | var bytes | Building class overrides: (type hash, value); value present only when hash is non-zero |
+| (uint32,int32)[] or (varstring,int32)[] | var bytes | Building class overrides: BNW is (hash, value) with a value only when hash is non-zero; G&K is (name, value), with "NO_BUILDINGCLASS" as the not-overridden sentinel (no value follows) |
 
 ### Game Culture
+
+Great Works/Tourism are BNW only.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
