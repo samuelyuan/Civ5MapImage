@@ -9,11 +9,22 @@ import (
 	"strings"
 )
 
-// Constants for binary reading operations
 const (
-	MaxArrayLength  = 100000  // Maximum reasonable array length to prevent memory issues
-	MaxStringLength = 1000000 // Maximum reasonable varstring length to prevent memory issues
+	MaxArrayLength            = 100000
+	MaxStringLength           = 1000000
+	MaxEmbeddedDatabaseLength = 100 * 1024 * 1024 // 100 MB
 )
+
+func checkArrayLength(count uint32, name string) {
+	if count > MaxArrayLength {
+		panic(fmt.Sprintf("array length may be too long for %s: %d", name, count))
+	}
+}
+
+func boundedMakeSlice[T any](count uint32, name string) []T {
+	checkArrayLength(count, name)
+	return make([]T, count)
+}
 
 // readVarString reads a variable-length string from the binary stream
 // Format: [length:uint32][string:bytes]
@@ -131,8 +142,11 @@ func unsafeReadUint16(reader *io.SectionReader) uint16 {
 	return unsignedIntValue
 }
 
-// unsafeReadFixedInt32Array reads a fixed-length array of int32 values with no length prefix
+// unsafeReadFixedInt32Array reads a fixed-length array of int32 values with no length prefix.
 func unsafeReadFixedInt32Array(reader *io.SectionReader, count int) []int32 {
+	if count > MaxArrayLength {
+		panic(fmt.Sprintf("int32 array length may be too long: %d", count))
+	}
 	values := make([]int32, count)
 	for i := 0; i < count; i++ {
 		values[i] = int32(unsafeReadUint32(reader))
@@ -164,7 +178,7 @@ type HashValuePair struct {
 }
 
 func readHashValuePairs(reader *io.SectionReader, count int) []HashValuePair {
-	pairs := make([]HashValuePair, count)
+	pairs := boundedMakeSlice[HashValuePair](uint32(count), "hashValuePairs")
 	for i := 0; i < count; i++ {
 		hash := unsafeReadUint32(reader)
 		var value int32
@@ -183,7 +197,7 @@ type NamedValuePair struct {
 }
 
 func readNamedValuePairs(reader *io.SectionReader, count int) []NamedValuePair {
-	pairs := make([]NamedValuePair, count)
+	pairs := boundedMakeSlice[NamedValuePair](uint32(count), "namedValuePairs")
 	for i := 0; i < count; i++ {
 		name, err := readVarString(reader, "namedValuePairName")
 		if err != nil {
@@ -205,7 +219,7 @@ type HashBoolPair struct {
 }
 
 func readHashBoolPairs(reader *io.SectionReader, count int) []HashBoolPair {
-	pairs := make([]HashBoolPair, count)
+	pairs := boundedMakeSlice[HashBoolPair](uint32(count), "hashBoolPairs")
 	for i := 0; i < count; i++ {
 		hash := unsafeReadUint32(reader)
 		var value bool
@@ -223,7 +237,7 @@ type HashIntArrayPair struct {
 }
 
 func readHashIntArrayPairs(reader *io.SectionReader, count int, subArraySize int) []HashIntArrayPair {
-	pairs := make([]HashIntArrayPair, count)
+	pairs := boundedMakeSlice[HashIntArrayPair](uint32(count), "hashIntArrayPairs")
 	for i := 0; i < count; i++ {
 		hash := unsafeReadUint32(reader)
 		var values []int32
@@ -294,7 +308,7 @@ type PlotExtraYield struct {
 
 func readPlotExtraYields(reader *io.SectionReader) []PlotExtraYield {
 	count := unsafeReadUint32(reader)
-	yields := make([]PlotExtraYield, count)
+	yields := boundedMakeSlice[PlotExtraYield](count, "plotExtraYields")
 	for i := 0; i < int(count); i++ {
 		x := int32(unsafeReadUint32(reader))
 		y := int32(unsafeReadUint32(reader))
@@ -379,7 +393,7 @@ func readDeal(reader *io.SectionReader) Deal {
 	if version < 2 {
 		panic(fmt.Sprintf("readDeal: version %d (pre-version-2 traded item format) not supported", version))
 	}
-	tradedItems := make([]TradedItem, entriesToRead)
+	tradedItems := boundedMakeSlice[TradedItem](entriesToRead, "deal.tradedItems")
 	for i := range tradedItems {
 		tradedItems[i] = readTradedItem(reader)
 	}
@@ -405,7 +419,7 @@ func readGameDeals(reader *io.SectionReader) GameDeals {
 
 	readDealArray := func() []Deal {
 		count := unsafeReadUint32(reader)
-		deals := make([]Deal, count)
+		deals := boundedMakeSlice[Deal](count, "deals")
 		for i := range deals {
 			deals[i] = readDeal(reader)
 		}
@@ -453,7 +467,7 @@ func readReligionBeliefs(reader *io.SectionReader) ReligionBeliefs {
 	spreadModifierDoublingTech := int32(unsafeReadUint32(reader))
 
 	beliefCount := unsafeReadUint32(reader)
-	beliefHashes := make([]uint32, beliefCount)
+	beliefHashes := boundedMakeSlice[uint32](beliefCount, "religionBeliefs.beliefHashes")
 	for i := range beliefHashes {
 		beliefHashes[i] = unsafeReadUint32(reader)
 	}
@@ -538,7 +552,7 @@ func readGameReligions(reader *io.SectionReader) GameReligions {
 	var religions []Religion
 	if version >= 2 {
 		count := unsafeReadUint32(reader)
-		religions = make([]Religion, count)
+		religions = boundedMakeSlice[Religion](count, "religions")
 		for i := range religions {
 			religions[i] = readReligion(reader)
 		}
@@ -592,7 +606,7 @@ func readGameCulture(reader *io.SectionReader) GameCulture {
 	version := unsafeReadUint32(reader)
 
 	count := unsafeReadUint32(reader)
-	greatWorks := make([]GreatWork, count)
+	greatWorks := boundedMakeSlice[GreatWork](count, "greatWorks")
 	for i := range greatWorks {
 		greatWorks[i] = readGreatWork(reader)
 	}
@@ -654,7 +668,7 @@ func readVoterDecision(reader *io.SectionReader) VoterDecision {
 	decision := readResolutionDecision(reader)
 	unsafeReadUint32(reader) // version, always 1, no version-gated fields
 	count := unsafeReadUint32(reader)
-	votes := make([]PlayerVote, count)
+	votes := boundedMakeSlice[PlayerVote](count, "voterDecision.votes")
 	for i := range votes {
 		votes[i] = readPlayerVote(reader)
 	}
@@ -922,25 +936,25 @@ func readLeague(reader *io.SectionReader) League {
 	l.NumResolutionsEverEnacted = int32(unsafeReadUint32(reader))
 
 	enactCount := unsafeReadUint32(reader)
-	l.EnactProposals = make([]EnactProposal, enactCount)
+	l.EnactProposals = boundedMakeSlice[EnactProposal](enactCount, "league.enactProposals")
 	for i := range l.EnactProposals {
 		l.EnactProposals[i] = readEnactProposal(reader)
 	}
 
 	repealCount := unsafeReadUint32(reader)
-	l.RepealProposals = make([]RepealProposal, repealCount)
+	l.RepealProposals = boundedMakeSlice[RepealProposal](repealCount, "league.repealProposals")
 	for i := range l.RepealProposals {
 		l.RepealProposals[i] = readRepealProposal(reader)
 	}
 
 	activeCount := unsafeReadUint32(reader)
-	l.ActiveResolutions = make([]ActiveResolution, activeCount)
+	l.ActiveResolutions = boundedMakeSlice[ActiveResolution](activeCount, "league.activeResolutions")
 	for i := range l.ActiveResolutions {
 		l.ActiveResolutions[i] = readActiveResolution(reader)
 	}
 
 	memberCount := unsafeReadUint32(reader)
-	l.Members = make([]LeagueMember, memberCount)
+	l.Members = boundedMakeSlice[LeagueMember](memberCount, "league.members")
 	for i := range l.Members {
 		l.Members[i] = readLeagueMember(reader, version)
 	}
@@ -951,7 +965,7 @@ func readLeague(reader *io.SectionReader) League {
 
 	if version >= 5 {
 		projectCount := unsafeReadUint32(reader)
-		l.Projects = make([]LeagueProject, projectCount)
+		l.Projects = boundedMakeSlice[LeagueProject](projectCount, "league.projects")
 		for i := range l.Projects {
 			l.Projects[i] = readLeagueProject(reader, version)
 		}
@@ -976,13 +990,13 @@ func readLeague(reader *io.SectionReader) League {
 		l.CurrentSpecialSession = int32(unsafeReadUint32(reader))
 
 		enactOnHoldCount := unsafeReadUint32(reader)
-		l.EnactProposalsOnHold = make([]EnactProposal, enactOnHoldCount)
+		l.EnactProposalsOnHold = boundedMakeSlice[EnactProposal](enactOnHoldCount, "league.enactProposalsOnHold")
 		for i := range l.EnactProposalsOnHold {
 			l.EnactProposalsOnHold[i] = readEnactProposal(reader)
 		}
 
 		repealOnHoldCount := unsafeReadUint32(reader)
-		l.RepealProposalsOnHold = make([]RepealProposal, repealOnHoldCount)
+		l.RepealProposalsOnHold = boundedMakeSlice[RepealProposal](repealOnHoldCount, "league.repealProposalsOnHold")
 		for i := range l.RepealProposalsOnHold {
 			l.RepealProposalsOnHold[i] = readRepealProposal(reader)
 		}
@@ -1007,7 +1021,7 @@ func readGameLeagues(reader *io.SectionReader) GameLeagues {
 		g.GeneratedIDCount = int32(unsafeReadUint32(reader))
 	}
 	leagueCount := unsafeReadUint32(reader)
-	g.ActiveLeagues = make([]League, leagueCount)
+	g.ActiveLeagues = boundedMakeSlice[League](leagueCount, "gameLeagues.activeLeagues")
 	for i := range g.ActiveLeagues {
 		g.ActiveLeagues[i] = readLeague(reader)
 	}
@@ -1077,7 +1091,7 @@ func readTradeConnection(reader *io.SectionReader, version uint32) TradeConnecti
 	}
 
 	plotCount := unsafeReadUint32(reader)
-	c.PlotList = make([]TradeConnectionPlot, plotCount)
+	c.PlotList = boundedMakeSlice[TradeConnectionPlot](plotCount, "tradeConnection.plotList")
 	for i := range c.PlotList {
 		c.PlotList[i] = TradeConnectionPlot{
 			X: int32(unsafeReadUint32(reader)),
@@ -1107,7 +1121,7 @@ func readGameTrade(reader *io.SectionReader) GameTrade {
 	version := unsafeReadUint32(reader)
 
 	connectionCount := unsafeReadUint32(reader)
-	connections := make([]TradeConnection, connectionCount)
+	connections := boundedMakeSlice[TradeConnection](connectionCount, "gameTrade.tradeConnections")
 	for i := range connections {
 		connections[i] = readTradeConnection(reader, version)
 	}
@@ -1129,11 +1143,13 @@ func readGameTrade(reader *io.SectionReader) GameTrade {
 }
 
 // readEmbeddedDatabase reads the size-prefixed embedded SQLite database blob
-// (Civ5SavedGameDatabase.db) - a uint32 byte count, then that many raw bytes. It's a fixed,
-// byte-identical compiled-in schema/template, not live per-game data, so it's returned as raw
-// bytes rather than parsed.
+// (Civ5SavedGameDatabase.db) - a uint32 byte count, then that many raw bytes. Its schema is fixed,
+// but mods can grow its contents arbitrarily, so it's returned as raw bytes rather than parsed.
 func readEmbeddedDatabase(reader *io.SectionReader) []byte {
 	size := unsafeReadUint32(reader)
+	if size > MaxEmbeddedDatabaseLength {
+		panic(fmt.Sprintf("embedded database size may be too long: %d", size))
+	}
 	return unsafeReadFixedBytes(reader, int(size))
 }
 

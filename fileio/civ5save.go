@@ -210,10 +210,8 @@ func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, ou
 }
 
 // readVarStringArrayOrPanic reads a count-prefixed array of variable-length strings.
-// Matches the file's existing convention of treating a malformed stream at this point
-// as unrecoverable, rather than threading an error back through every caller.
 func readVarStringArrayOrPanic(reader *io.SectionReader, count uint32, varStringLabel, panicPhrase string) []string {
-	values := make([]string, count)
+	values := boundedMakeSlice[string](count, panicPhrase)
 	for i := 0; i < int(count); i++ {
 		value, err := readVarString(reader, varStringLabel)
 		if err != nil {
