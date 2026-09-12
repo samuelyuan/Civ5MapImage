@@ -11,9 +11,6 @@ import (
 
 // Save file format markers
 const (
-	// Save file version that includes unit/unit-class/building-class name arrays
-	SaveVersionWithUnitClassData = 0x0B
-
 	NumVictoryPointAwards = 5
 
 	MaxPlayers = 64
@@ -116,13 +113,13 @@ func readTurnSpeedData(streamReader *io.SectionReader) {
 	})
 }
 
-func readWorldSizeData(streamReader *io.SectionReader) {
+func readWorldSizeData(streamReader *io.SectionReader, preGameFormatMarker uint32) {
 	worldInfoVersion := unsafeReadUint32(streamReader)
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{VariableType: "uint32", VariableName: "worldInfoId"},
 	})
 
-	if worldInfoVersion == 2 {
+	if preGameFormatMarker >= 3 && worldInfoVersion < 5 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{VariableType: "uint32", VariableName: "worldInfoCivilopedia"},
 		})
@@ -131,8 +128,8 @@ func readWorldSizeData(streamReader *io.SectionReader) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{VariableType: "varstring", VariableName: "worldSizeDisplayName"},
 		{VariableType: "varstring", VariableName: "worldSizeHelp"},
-		{VariableType: "uint32", VariableName: "worldSizeDisabledHelp"},
-		{VariableType: "uint32", VariableName: "worldSizeStrategy"},
+		{VariableType: "varstring", VariableName: "worldSizeDisabledHelp"},
+		{VariableType: "varstring", VariableName: "worldSizeStrategy"},
 		{VariableType: "varstring", VariableName: "worldSizeType"},
 		{VariableType: "varstring", VariableName: "worldSizeTextKey"},
 		{VariableType: "varstring", VariableName: "worldSizeDisplayName2"},
@@ -152,7 +149,7 @@ func readWorldSizeData(streamReader *io.SectionReader) {
 		{VariableType: "uint32", VariableName: "gridHeight"},
 	})
 
-	if worldInfoVersion == 2 {
+	if preGameFormatMarker >= 3 && worldInfoVersion < 5 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{VariableType: "uint32", VariableName: "maxActiveReligions"},
 		})
@@ -165,10 +162,15 @@ func readWorldSizeData(streamReader *io.SectionReader) {
 		{VariableType: "uint32", VariableName: "advancedStartPointsMod"},
 		{VariableType: "uint32", VariableName: "numCitiesUnhappinessPercent"},
 		{VariableType: "uint32", VariableName: "numCitiesPolicyCostMod"},
-		{VariableType: "uint32", VariableName: "numCitiesTechCostMod"},
 	})
 
-	if worldInfoVersion == 2 {
+	if worldInfoVersion >= 2 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{VariableType: "uint32", VariableName: "numCitiesTechCostMod"},
+		})
+	}
+
+	if preGameFormatMarker >= 3 && worldInfoVersion < 5 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{VariableType: "uint32", VariableName: "worldSizeEnum"},
 		})
@@ -192,7 +194,7 @@ func buildReaderForDecompressedFile(compressedStreamReader *io.SectionReader, ou
 	decompressedContents, err := io.ReadAll(decompressedFileReader)
 	if err != nil {
 		if err == io.ErrUnexpectedEOF {
-			fmt.Println("Read file into memory and still succeeded, err:", err)
+			fmt.Println("Zlib stream ended without a final block marker (expected), continuing with decompressed contents:", err)
 		} else if err != nil {
 			fmt.Println("Error when decompressing zlib, still attempt to continue:", err)
 		}
@@ -220,18 +222,6 @@ func readVarStringArrayOrPanic(reader *io.SectionReader, count uint32, varString
 		values[i] = value
 	}
 	return values
-}
-
-// readDynamicPaddingBlock reads a size-prefixed padding block whose length is derived from a
-// marker value read just before it, matching the file's "(marker+1) groups of 4 bytes" pattern.
-// A marker of 0 means the block is absent.
-func readDynamicPaddingBlock(reader *io.SectionReader, marker uint32, blockName string) {
-	if marker == 0 {
-		return
-	}
-	readFileConfig(reader, []Civ5ReplayFileConfigEntry{
-		{VariableType: fmt.Sprintf("bytearray:%d", (marker+1)*4), VariableName: blockName},
-	})
 }
 
 // openSaveFileReader opens a save file and returns a section reader spanning its entire contents
@@ -307,8 +297,8 @@ func readPlayerAndMapInfo(streamReader *io.SectionReader) uint32 {
 	slotHintsVersion := unsafeReadUint32(streamReader)
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{VariableType: "uint32", VariableName: "unknownId3-3"},
-		{VariableType: "uint32", VariableName: "unknownId3-4"},
+		{VariableType: "uint32", VariableName: "gameSpeedEnum"},
+		{VariableType: "uint32", VariableName: "worldSizeEnum"},
 		{VariableType: "varstring", VariableName: "mapFilename2"},
 	})
 
@@ -365,42 +355,62 @@ func readLeadersAndCivArrays(streamReader *io.SectionReader, slotHintsVersion ui
 	fmt.Println("preGameFormatMarker:", preGameFormatMarker)
 	if preGameFormatMarker != 0 {
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{VariableType: "bytearray:12", VariableName: "unknownBlock5"},
+			{VariableType: "int32", VariableName: "activePlayer"},
+			{VariableType: "varstring", VariableName: "adminPassword"},
+			{VariableType: "int32", VariableName: "advancedStartPoints"},
 		})
 	}
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{VariableType: "varstring", VariableName: "computerUsername1"},
+		{VariableType: "varstring", VariableName: "alias"},
 	})
 
-	readArray(streamReader, "unknownBlock6-1", []Civ5ReplayFileConfigEntry{
-		{VariableType: "int32", VariableName: "unknownBlock6-1"},
+	readArray(streamReader, "artStyleArr", []Civ5ReplayFileConfigEntry{
+		{VariableType: "int32", VariableName: "artStyle"},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{VariableType: "uint8", VariableName: "autorun"},
+		{VariableType: "float32", VariableName: "autorunTurnDelay"},
+		{VariableType: "int32", VariableName: "autorunTurnLimit"},
+		{VariableType: "uint32", VariableName: "bandwidthEnum"},
+		{VariableType: "uint32", VariableName: "calendarEnum"},
+		{VariableType: "uint32", VariableName: "calendarInfoId"},
+		{VariableType: "uint32", VariableName: "calendarInfoCivilopedia"},
 	})
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{VariableType: "bytearray:53", VariableName: "unknownBlock6-2"},
+		{VariableType: "varstring", VariableName: "calendarDisplayName"},
+	})
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{VariableType: "uint32", VariableName: "calendarHelp"},
+		{VariableType: "uint32", VariableName: "calendarDisabledHelp"},
+		{VariableType: "uint32", VariableName: "calendarStrategy"},
+	})
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{VariableType: "varstring", VariableName: "calendarType"},
+		{VariableType: "varstring", VariableName: "calendarTextKey"},
+		{VariableType: "varstring", VariableName: "calendarDisplayName2"},
 	})
 
-	readArray(streamReader, "unknownArray1", []Civ5ReplayFileConfigEntry{
-		{VariableType: "uint32", VariableName: "unknownArray1Var"},
+	readArray(streamReader, "civAdjectiveArr", []Civ5ReplayFileConfigEntry{
+		{VariableType: "varstring", VariableName: "civAdjective"},
+	})
+	readArray(streamReader, "civDescriptionArr", []Civ5ReplayFileConfigEntry{
+		{VariableType: "varstring", VariableName: "civDescription"},
 	})
 
-	readArray(streamReader, "civArray1", []Civ5ReplayFileConfigEntry{
-		{VariableType: "varstring", VariableName: "civName"},
-	})
-
-	readArray(streamReader, "unknownArray2", []Civ5ReplayFileConfigEntry{
-		{VariableType: "uint32", VariableName: "unknownArray2Var"},
-	})
-
-	readArray(streamReader, "civArray2", []Civ5ReplayFileConfigEntry{
-		{VariableType: "varstring", VariableName: "civArray2String"},
-	})
-
-	if slotHintsVersion < 3 {
-		readArray(streamReader, "extraArrBeforeClimate", []Civ5ReplayFileConfigEntry{
-			{VariableType: "uint32", VariableName: "extraArrBeforeClimateVar"},
+	if preGameFormatMarker <= 2 {
+		readArray(streamReader, "legacyCivilizationArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "int32", VariableName: "legacyCivilizationIndex"},
 		})
 	}
+
+	readArray(streamReader, "civPasswordArr", []Civ5ReplayFileConfigEntry{
+		{VariableType: "varstring", VariableName: "civPassword"},
+	})
+	readArray(streamReader, "civShortDescriptionArr", []Civ5ReplayFileConfigEntry{
+		{VariableType: "varstring", VariableName: "civShortDescription"},
+	})
 
 	return preGameFormatMarker
 }
@@ -471,31 +481,36 @@ func readGameNameAndTurnInfo(streamReader *io.SectionReader, preGameFormatMarker
 		{VariableType: "uint32", VariableName: "handicap"},
 	})
 
-	if preGameFormatMarker != 4 {
-		readArray(streamReader, "trackedPlayerHandicapArr", []Civ5ReplayFileConfigEntry{
-			{VariableType: "int32", VariableName: "trackedPlayerHandicap"},
-		})
-		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{VariableType: "bytearray:2", VariableName: "unknownBlock10"},
-		})
-	} else {
-		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-			{VariableType: "bytearray:2", VariableName: "reservedBytesWhenHandicapArrAbsent"},
+	if preGameFormatMarker >= 6 {
+		readArray(streamReader, "lastHumanHandicapArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "int32", VariableName: "lastHumanHandicap"},
 		})
 	}
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+		{VariableType: "uint8", VariableName: "isEarthMap"},
+		{VariableType: "uint8", VariableName: "isInternetGame"},
+	})
 }
 
-func readLeaderArray2AndPlayerSetup(streamReader *io.SectionReader) {
+func readLeaderArray2AndPlayerSetup(streamReader *io.SectionReader, preGameFormatMarker uint32) {
+	if preGameFormatMarker < 2 {
+		readArray(streamReader, "leaderHeadArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "int32", VariableName: "leaderHead"},
+		})
+	}
+
 	readArray(streamReader, "leaderNameArr", []Civ5ReplayFileConfigEntry{
 		{VariableType: "varstring", VariableName: "leaderName"},
 	})
 
-	unknownBlock11Number := unsafeReadUint32(streamReader)
-	readDynamicPaddingBlock(streamReader, unknownBlock11Number, "unknownBlock11")
-
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{VariableType: "varstring", VariableName: "computerUsername2"},
-		{VariableType: "bytearray:7", VariableName: "unknownId4"},
+		{VariableType: "varstring", VariableName: "loadFileName"},
+		{VariableType: "varstring", VariableName: "localPlayerEmailAddress"},
+		{VariableType: "uint8", VariableName: "mapNoPlayers"},
+		{VariableType: "uint32", VariableName: "mapRandomSeed"},
+		{VariableType: "uint8", VariableName: "loadWBScenario"},
+		{VariableType: "uint8", VariableName: "overrideScenarioHandicap"},
 		{VariableType: "varstring", VariableName: "mapFilename3"},
 		{VariableType: "uint32", VariableName: "maxCityElimination"},
 		{VariableType: "uint32", VariableName: "maxTurns"},
@@ -504,15 +519,21 @@ func readLeaderArray2AndPlayerSetup(streamReader *io.SectionReader) {
 }
 
 // readMinorCivNames reads the minor civ (city-state) names and patches matching entries in the civ roster
-func readMinorCivNames(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv) {
-	minorCivNamesLength := unsafeReadUint32(streamReader)
-	minorCivNameArr := readVarStringArrayOrPanic(streamReader, minorCivNamesLength, "minorCivName", "minor civ name")
-	for i, minorCivName := range minorCivNameArr {
-		if strings.Contains(minorCivName, "MINOR_CIV") {
-			allCivs[i].Name = minorCivName
+func readMinorCivNames(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, preGameFormatMarker uint32) {
+	if preGameFormatMarker < 2 {
+		readArray(streamReader, "minorCivTypeArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "int32", VariableName: "minorCivType"},
+		})
+	} else {
+		minorCivNamesLength := unsafeReadUint32(streamReader)
+		minorCivNameArr := readVarStringArrayOrPanic(streamReader, minorCivNamesLength, "minorCivName", "minor civ name")
+		for i, minorCivName := range minorCivNameArr {
+			if strings.Contains(minorCivName, "MINOR_CIV") {
+				allCivs[i].Name = minorCivName
+			}
 		}
+		fmt.Println("minorCivArray:", minorCivNameArr) // read via a DB lookup (MinorCivilizations table) - variable count, not MAX_PLAYERS
 	}
-	fmt.Println("minorCivArray:", minorCivNameArr) // read via a DB lookup (MinorCivilizations table) - variable count, not MAX_PLAYERS
 
 	readArray(streamReader, "minorNationCivsArr", []Civ5ReplayFileConfigEntry{
 		{
@@ -535,7 +556,7 @@ func readMinorCivNames(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv) 
 }
 
 // readPlayerArraysAndColors reads several player-related arrays and patches the civ roster with player colors
-func readPlayerArraysAndColors(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv) {
+func readPlayerArraysAndColors(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, preGameFormatMarker uint32) {
 	readArray(streamReader, "netIdArr", []Civ5ReplayFileConfigEntry{
 		{
 			VariableType: "int32",
@@ -568,12 +589,18 @@ func readPlayerArraysAndColors(streamReader *io.SectionReader, allCivs []Civ5Rep
 		},
 	})
 
-	playerColorLength := unsafeReadUint32(streamReader)
-	playerColorArr := readVarStringArrayOrPanic(streamReader, playerColorLength, "playerColorName", "player color name")
-	for i, playerColorName := range playerColorArr {
-		allCivs[i].LongName = playerColorName
+	if preGameFormatMarker < 2 {
+		readArray(streamReader, "playerColorArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "int32", VariableName: "playerColor"},
+		})
+	} else {
+		playerColorLength := unsafeReadUint32(streamReader)
+		playerColorArr := readVarStringArrayOrPanic(streamReader, playerColorLength, "playerColorName", "player color name")
+		for i, playerColorName := range playerColorArr {
+			allCivs[i].LongName = playerColorName
+		}
+		fmt.Println("playerColorArr:", playerColorArr) // read via a DB lookup (PlayerColors table) - variable count, not MAX_PLAYERS
 	}
-	fmt.Println("playerColorArr:", playerColorArr) // read via a DB lookup (PlayerColors table) - variable count, not MAX_PLAYERS
 
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{
@@ -611,7 +638,7 @@ func readPlayerArraysAndColors(streamReader *io.SectionReader, allCivs []Civ5Rep
 	})
 }
 
-func readWorldSettings(streamReader *io.SectionReader) {
+func readWorldSettings(streamReader *io.SectionReader, preGameFormatMarker uint32) {
 	readArray(streamReader, "slotClaimArr2", []Civ5ReplayFileConfigEntry{
 		{VariableType: "uint32", VariableName: "slotClaim"},
 	})
@@ -638,7 +665,7 @@ func readWorldSettings(streamReader *io.SectionReader) {
 	readArray(streamReader, "whiteFlagArr", []Civ5ReplayFileConfigEntry{
 		{VariableType: "uint8", VariableName: "whiteFlag"},
 	})
-	readWorldSizeData(streamReader)
+	readWorldSizeData(streamReader, preGameFormatMarker)
 	readGameOptions(streamReader)
 
 	readArray(streamReader, "mapOptionArr", []Civ5ReplayFileConfigEntry{
@@ -649,24 +676,27 @@ func readWorldSettings(streamReader *io.SectionReader) {
 		{VariableType: "varstring", VariableName: "gameVersion2"},
 	})
 
-	readArray(streamReader, "shouldNotifySteamInviteArr", []Civ5ReplayFileConfigEntry{
-		{VariableType: "uint8", VariableName: "shouldNotifySteamInvite"},
-	})
+	if preGameFormatMarker > 3 {
+		readArray(streamReader, "shouldNotifySteamInviteArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "uint8", VariableName: "shouldNotifySteamInvite"},
+		})
 
-	readArray(streamReader, "shouldNotifyEmailArr", []Civ5ReplayFileConfigEntry{
-		{VariableType: "uint8", VariableName: "shouldNotifyEmail"},
-	})
+		readArray(streamReader, "shouldNotifyEmailArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "uint8", VariableName: "shouldNotifyEmail"},
+		})
 
-	readArray(streamReader, "turnNotifyEmailAddressArr", []Civ5ReplayFileConfigEntry{
-		{VariableType: "varstring", VariableName: "turnNotifyEmailAddress"},
-	})
+		readArray(streamReader, "turnNotifyEmailAddressArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "varstring", VariableName: "turnNotifyEmailAddress"},
+		})
+	}
 }
 
 // locateCompressedBlock skips the padding before the compressed block and returns a reader
 // positioned at its start
 func locateCompressedBlock(streamReader *io.SectionReader, inputFile *os.File, saveFileLength int64) (*io.SectionReader, error) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{VariableType: "bytearray:8", VariableName: "paddingBeforeCompressedBlock"}, // value is always [2 0 0 0 0 0 1 0]
+		{VariableType: "uint32", VariableName: "compressionStreamFormatId"},  // usually 2; older builds use 1
+		{VariableType: "uint32", VariableName: "compressionStreamChunkSize"}, // always 65536 (0x10000)
 	})
 
 	// Header of compressed block should begin with 0x789C
@@ -700,11 +730,11 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	preGameFormatMarker := readLeadersAndCivArrays(streamReader, slotHintsVersion)
 	readClimateSection(streamReader)
 	readGameNameAndTurnInfo(streamReader, preGameFormatMarker)
-	readLeaderArray2AndPlayerSetup(streamReader)
-	readMinorCivNames(streamReader, allCivs)
-	readPlayerArraysAndColors(streamReader, allCivs)
+	readLeaderArray2AndPlayerSetup(streamReader, preGameFormatMarker)
+	readMinorCivNames(streamReader, allCivs, preGameFormatMarker)
+	readPlayerArraysAndColors(streamReader, allCivs, preGameFormatMarker)
 	readSeaLevel(streamReader)
-	readWorldSettings(streamReader)
+	readWorldSettings(streamReader, preGameFormatMarker)
 
 	compressedStreamReader, err := locateCompressedBlock(streamReader, inputFile, saveFileLength)
 	if err != nil {
@@ -715,7 +745,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress file: %w", err)
 	}
-	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize, allCivs)
+	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize, allCivs, preGameFormatMarker)
 
 	return &Civ5SaveData{
 		PlayerCiv:       playerCiv,
@@ -725,7 +755,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	}, nil
 }
 
-func readDecompressedHeader(streamReader *io.SectionReader) uint32 {
+func readDecompressedHeader(streamReader *io.SectionReader, preGameFormatMarker uint32) uint32 {
 	saveFileVersion := unsafeReadUint32(streamReader)
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{VariableType: "uint32", VariableName: "endTurnMessagesSent"},
@@ -769,9 +799,13 @@ func readDecompressedHeader(streamReader *io.SectionReader) uint32 {
 		{VariableType: "bytearray:1", VariableName: "everRightClickMoved"},
 	})
 
-	readArray(streamReader, "advisorMessagesViewed", []Civ5ReplayFileConfigEntry{
-		{VariableType: "varstring", VariableName: "advisorMessageId"},
-	})
+	if saveFileVersion == 9 {
+		unsafeReadFixedBytes(streamReader, 8)
+	} else {
+		readArray(streamReader, "advisorMessagesViewed", []Civ5ReplayFileConfigEntry{
+			{VariableType: "varstring", VariableName: "advisorMessageId"},
+		})
+	}
 
 	handicap := unsafeReadUint32(streamReader)
 	fmt.Println("Handicap:", typeName(handicapNames, int(handicap)))
@@ -791,6 +825,9 @@ func readDecompressedHeader(streamReader *io.SectionReader) uint32 {
 		{VariableType: "int32", VariableName: "bestGreatPeoplePlayer"},
 		{VariableType: "int32", VariableName: "religionTech"},
 		{VariableType: "int32", VariableName: "industrialRoute"},
+	})
+
+	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{VariableType: "varstring", VariableName: "scriptData"},
 	})
 
@@ -823,6 +860,20 @@ func readCreatedCountHashArrays(streamReader *io.SectionReader) {
 	fmt.Println("Unit created count entries:", len(unitCreatedCount))
 	fmt.Println("Unit class created count entries:", len(unitClassCreatedCount))
 	fmt.Println("Building class created count entries:", len(buildingClassCreatedCount))
+}
+
+func readOldBuildCreatedCountArrays(streamReader *io.SectionReader) {
+	unitCreatedCountLen := unsafeReadUint32(streamReader)
+	unitCreatedCount := readNamedValuePairs(streamReader, int(unitCreatedCountLen))
+
+	unitClassCreatedCount := unsafeReadFixedInt32Array(streamReader, 60)
+
+	buildingClassCreatedCountLen := unsafeReadUint32(streamReader)
+	buildingClassCreatedCount := readNamedValuePairs(streamReader, int(buildingClassCreatedCountLen))
+
+	fmt.Println("Unit created count entries (named):", len(unitCreatedCount))
+	fmt.Println("Unit class created count entries (fixed array):", len(unitClassCreatedCount))
+	fmt.Println("Building class created count entries (named):", len(buildingClassCreatedCount))
 }
 
 func readWorldCongressVotingState(streamReader *io.SectionReader) {
@@ -876,7 +927,7 @@ func readRandomAndReplayMessageVersion(streamReader *io.SectionReader) {
 }
 
 func readVersionDependentUnitData(streamReader *io.SectionReader, saveFileVersion uint32) {
-	if saveFileVersion == SaveVersionWithUnitClassData {
+	if saveFileVersion == 11 {
 		readArray(streamReader, "unitNameArr", []Civ5ReplayFileConfigEntry{
 			{VariableType: "varstring", VariableName: "unitName"},
 			{VariableType: "uint32", VariableName: "unitCreatedCount"},
@@ -894,6 +945,29 @@ func readVersionDependentUnitData(streamReader *io.SectionReader, saveFileVersio
 		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 			{VariableType: "bytearray:2366", VariableName: "unknownPadding"}, // for RED WW2 save files, likely different for other mods
 		})
+	} else if saveFileVersion == 13 {
+		unitCreatedCountLen := unsafeReadUint32(streamReader)
+		readNamedValuePairs(streamReader, int(unitCreatedCountLen))
+		unitClassCreatedCountLen := unsafeReadUint32(streamReader)
+		readNamedValuePairs(streamReader, int(unitClassCreatedCountLen))
+		buildingClassCreatedCountLen := unsafeReadUint32(streamReader)
+		readNamedValuePairs(streamReader, int(buildingClassCreatedCountLen))
+
+		// TODO: find padding
+		unsafeReadFixedBytes(streamReader, 920)
+
+		readArray(streamReader, "destroyedCitiesArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "varstring", VariableName: "destroyedCityName"},
+		})
+	} else if saveFileVersion == 9 {
+		readOldBuildCreatedCountArrays(streamReader)
+
+		// TODO: find padding
+		unsafeReadFixedBytes(streamReader, 668)
+
+		readArray(streamReader, "destroyedCitiesArr", []Civ5ReplayFileConfigEntry{
+			{VariableType: "varstring", VariableName: "destroyedCityName"},
+		})
 	} else {
 		readCreatedCountHashArrays(streamReader)
 		readWorldCongressVotingState(streamReader)
@@ -903,10 +977,10 @@ func readVersionDependentUnitData(streamReader *io.SectionReader, saveFileVersio
 	}
 }
 
-func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs []Civ5ReplayCiv) []Civ5ReplayEvent {
+func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs []Civ5ReplayCiv, preGameFormatMarker uint32) []Civ5ReplayEvent {
 	streamReader := io.NewSectionReader(reader, int64(0), int64(decompressedFileLength))
 
-	saveFileVersion := readDecompressedHeader(streamReader)
+	saveFileVersion := readDecompressedHeader(streamReader, preGameFormatMarker)
 	readVersionDependentUnitData(streamReader, saveFileVersion)
 	readArray(streamReader, "greatPersonArr", []Civ5ReplayFileConfigEntry{
 		{VariableType: "varstring", VariableName: "greatPersonName"},
@@ -930,10 +1004,17 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs 
 		{VariableType: "int32", VariableName: "plotExtraCost"},
 	})
 
-	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{VariableType: "uint8", VariableName: "archaeologyTriggered"},
-		{VariableType: "int32", VariableName: "earliestBarbarianReleaseTurn"},
-	})
+	if saveFileVersion == 1 {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{VariableType: "uint8", VariableName: "archaeologyTriggered"},
+			{VariableType: "int32", VariableName: "earliestBarbarianReleaseTurn"},
+		})
+	} else {
+		readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
+			{VariableType: "int32", VariableName: "numCultureVictoryCities"},
+			{VariableType: "int32", VariableName: "earliestBarbarianReleaseTurn"},
+		})
+	}
 
 	gameDeals := readGameDeals(streamReader)
 	printGameDeals(allCivs, gameDeals)

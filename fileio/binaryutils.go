@@ -11,7 +11,8 @@ import (
 
 // Constants for binary reading operations
 const (
-	MaxArrayLength = 100000 // Maximum reasonable array length to prevent memory issues
+	MaxArrayLength  = 100000  // Maximum reasonable array length to prevent memory issues
+	MaxStringLength = 1000000 // Maximum reasonable varstring length to prevent memory issues
 )
 
 // readVarString reads a variable-length string from the binary stream
@@ -20,6 +21,9 @@ func readVarString(reader *io.SectionReader, varName string) (string, error) {
 	variableLength := uint32(0)
 	if err := binary.Read(reader, binary.LittleEndian, &variableLength); err != nil {
 		return "", fmt.Errorf("failed to load variable length for %s: %w", varName, err)
+	}
+	if variableLength > MaxStringLength {
+		return "", fmt.Errorf("string length may be too long for %s: %d", varName, variableLength)
 	}
 
 	stringValue := make([]byte, variableLength)
@@ -168,6 +172,29 @@ func readHashValuePairs(reader *io.SectionReader, count int) []HashValuePair {
 			value = int32(unsafeReadUint32(reader))
 		}
 		pairs[i] = HashValuePair{Hash: hash, Value: value}
+	}
+	return pairs
+}
+
+type NamedValuePair struct {
+	Name     string
+	Value    int32
+	HasValue bool
+}
+
+func readNamedValuePairs(reader *io.SectionReader, count int) []NamedValuePair {
+	pairs := make([]NamedValuePair, count)
+	for i := 0; i < count; i++ {
+		name, err := readVarString(reader, "namedValuePairName")
+		if err != nil {
+			panic(fmt.Sprintf("failed to load name for named value pair %d: %v", i, err))
+		}
+		if strings.HasPrefix(name, "NO_") {
+			pairs[i] = NamedValuePair{Name: name}
+			continue
+		}
+		value := int32(unsafeReadUint32(reader))
+		pairs[i] = NamedValuePair{Name: name, Value: value, HasValue: true}
 	}
 	return pairs
 }

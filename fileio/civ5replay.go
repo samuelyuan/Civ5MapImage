@@ -528,7 +528,7 @@ type Civ5ReplayData struct {
 	AllReplayEvents []Civ5ReplayEvent
 	DatasetNames    []string
 	DatasetValues   []Civ5ReplayCivDataset
-	MapFileStem string // empty when unknown (e.g. converted from a .civ5save)
+	MapFileStem     string // empty when unknown (e.g. converted from a .civ5save)
 	// MapWidth/MapHeight are the map's dimensions, as embedded in the .civ5replay. 0 when unknown.
 	MapWidth  int
 	MapHeight int
@@ -597,6 +597,9 @@ func readCivs(reader *io.SectionReader) []Civ5ReplayCiv {
 
 func readEvents(reader *io.SectionReader) []Civ5ReplayEvent {
 	eventsLength := unsafeReadUint32(reader)
+	if eventsLength > MaxArrayLength {
+		panic(fmt.Sprintf("events array length may be too long: %d", eventsLength))
+	}
 	allReplayEvents := make([]Civ5ReplayEvent, eventsLength)
 
 	for i := 0; i < int(eventsLength); i++ {

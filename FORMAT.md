@@ -450,7 +450,7 @@ Tile data contains information about the physical map.
 
 ## Save File Format
 
-Most of the save file is compressed and the header begins with 0x789C, which is a ZLIB header.
+Most of the save file is compressed and the header begins with 0x789C, which is a ZLIB header. The stream has no end-of-stream marker, so a strict zlib reader may report an EOF/truncation error even on a complete file.
 
 ### Player & Map Info
 
@@ -463,9 +463,9 @@ Most of the save file is compressed and the header begins with 0x789C, which is 
 | varstring | var bytes | Version |
 | byte[16] | 16 bytes | UnknownBytes2 |
 | uint32 | 4 bytes | UnknownUint1 |
-| uint32 | 4 bytes | Slot hints version (loadSlotHints/loadSlotsHelper's own uiVersion) |
-| uint32 | 4 bytes | UnknownUint3 |
-| uint32 | 4 bytes | UnknownUint4 |
+| uint32 | 4 bytes | Slot hints version |
+| uint32 | 4 bytes | Game speed enum (GameSpeedTypes index, distinct from the human-readable GAMESPEED_STANDARD-style string read earlier) |
+| uint32 | 4 bytes | World size enum (WorldSizeTypes index) |
 | varstring | var bytes | Map filename 2 |
 | uint32 | 4 bytes | Civilization index array count |
 | int32[] | (count * 4) bytes | Civilization index per player slot |
@@ -491,29 +491,41 @@ Absent entirely (zero bytes) when slot hints version < 3 - see Player & Map Info
 
 ### Leaders & Civ Arrays
 
-Leader key array is absent entirely (zero bytes) when slot hints version < 3 - see Player & Map Info
-above.
-
 | Type | Size | Description |
 | ---- | ---- | ----------- |
 | uint32 | 4 bytes | Leader key array count (only if slot hints version >= 3) |
 | varstring[] | var bytes | Leader key per player slot (only if slot hints version >= 3) |
-| uint32 | 4 bytes | Pre-game format marker (0 if the block below is absent) |
-| byte[12] | 12 bytes | UnknownBytes1 (only if pre-game format marker != 0) |
-| varstring | var bytes | Computer username |
-| uint32 | 4 bytes | UnknownInt array count |
-| int32[] | (count * 4) bytes | UnknownInt array elements |
-| byte[53] | 53 bytes | UnknownBytes2 |
-| uint32 | 4 bytes | UnknownUint1 array count |
-| uint32[] | (count * 4) bytes | UnknownUint1 array elements |
-| uint32 | 4 bytes | Civ array count |
-| varstring[] | var bytes | Civ names (again) |
-| uint32 | 4 bytes | UnknownUint2 array count |
-| uint32[] | (count * 4) bytes | UnknownUint2 array elements |
-| uint32 | 4 bytes | Civ array 2 count |
-| varstring[] | var bytes | Civ array 2 strings |
-| uint32 | 4 bytes | Extra array count (only if slot hints version < 3) |
-| uint32[] | (count * 4) bytes | Extra array elements (only if slot hints version < 3) |
+| uint32 | 4 bytes | Pre-game format marker (this section's own version) |
+| int32 | 4 bytes | Active player (only present if pre-game format marker != 0) |
+| varstring | var bytes | Admin password (only present if pre-game format marker != 0) |
+| int32 | 4 bytes | Advanced start points (only present if pre-game format marker != 0) |
+| varstring | var bytes | Alias - the local player's alias |
+| uint32 | 4 bytes | Art style array count (MAX_PLAYERS) |
+| int32[] | (count * 4) bytes | Art style per player slot (ArtStyleTypes index) |
+| uint8 | 1 byte | Autorun (bool) |
+| float32 | 4 bytes | Autorun turn delay |
+| int32 | 4 bytes | Autorun turn limit |
+| uint32 | 4 bytes | Bandwidth enum |
+| uint32 | 4 bytes | Calendar enum |
+| uint32 | 4 bytes | Calendar info id |
+| uint32 | 4 bytes | Calendar info civilopedia |
+| varstring | var bytes | Calendar display name |
+| uint32 | 4 bytes | Calendar help |
+| uint32 | 4 bytes | Calendar disabled help |
+| uint32 | 4 bytes | Calendar strategy |
+| varstring | var bytes | Calendar type |
+| varstring | var bytes | Calendar text key |
+| varstring | var bytes | Calendar display name 2 |
+| uint32 | 4 bytes | Civ adjective array count (MAX_PLAYERS) |
+| varstring[] | var bytes | Civ adjective per player slot |
+| uint32 | 4 bytes | Civ description array count (MAX_PLAYERS) |
+| varstring[] | var bytes | Civ description per player slot |
+| uint32 | 4 bytes | Legacy civilization index array count (only if pre-game format marker <= 2) |
+| int32[] | (count * 4) bytes | Legacy civilization index per player slot (only if pre-game format marker <= 2 - newer files carry civilization keys in the header instead, see Civ Roster) |
+| uint32 | 4 bytes | Civ password array count (MAX_PLAYERS) |
+| varstring[] | var bytes | Civ password per player slot |
+| uint32 | 4 bytes | Civ short description array count (MAX_PLAYERS) |
+| varstring[] | var bytes | Civ short description per player slot |
 
 ### Climate Section
 
@@ -558,7 +570,7 @@ above.
 | uint32 | 4 bytes | Game speed enum |
 | uint8 | 1 byte | Game started (bool) |
 | uint32 | 4 bytes | Current turn number |
-| int32 | 4 bytes | Legacy game-type dummy int (unused, uiVersion==0 branch) |
+| int32 | 4 bytes | Legacy game-type dummy int (unused) |
 | uint8 | 1 byte | Network multiplayer game (bool) |
 | uint32 | 4 bytes | Game update time |
 | uint32 | 4 bytes | Handicap array count (MAX_PLAYERS) |
@@ -566,21 +578,25 @@ above.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Tracked-player handicap array count (only if pre-game format marker != 4) |
-| int32[] | (count * 4) bytes | Tracked-player handicap array elements (only if pre-game format marker != 4) |
-| byte[2] | 2 bytes | UnknownBytes3 (only if pre-game format marker != 4) |
-| byte[2] | 2 bytes | Reserved bytes, present instead of the above 2 rows when pre-game format marker == 4 |
+| uint32 | 4 bytes | Last human handicap array count (MAX_PLAYERS), only if pre-game format marker >= 6 |
+| int32[] | (count * 4) bytes | Last human handicap array elements (HandicapTypes per player, -1 = unset), only if pre-game format marker >= 6 |
+| uint8 | 1 byte | Is Earth map (bool) |
+| uint8 | 1 byte | Is internet game (bool) |
 
 ### Leader Array 2 & Player Setup
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Leader name array count |
+| uint32 | 4 bytes | Leader head array count (MAX_PLAYERS), only if pre-game format marker < 2 - legacy field |
+| int32[] | (count * 4) bytes | Leader head array elements (LeaderHeadTypes per player), only if pre-game format marker < 2 |
+| uint32 | 4 bytes | Leader name array count (MAX_PLAYERS) |
 | varstring[] | var bytes | Leader names |
-| uint32 | 4 bytes | Padding marker |
-| byte[] | (marker + 1) * 4 bytes | UnknownBytes1 (only if marker != 0) |
-| varstring | var bytes | Computer username 2 |
-| byte[7] | 7 bytes | UnknownId4 |
+| varstring | var bytes | Load filename |
+| varstring | var bytes | Local player email address |
+| uint8 | 1 byte | Map has no players |
+| uint32 | 4 bytes | Map random seed |
+| uint8 | 1 byte | Load WorldBuilder scenario |
+| uint8 | 1 byte | Override scenario handicap |
 | varstring | var bytes | Map filename 3 |
 | uint32 | 4 bytes | Max city elimination |
 | uint32 | 4 bytes | Max turns |
@@ -590,8 +606,10 @@ above.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Minor civ names array count (only as many entries as real city-states in the game, not MAX_PLAYERS) |
-| varstring[] | var bytes | Minor civ (city-state) names — patches matching entries into the civ roster |
+| uint32 | 4 bytes | Minor civ type array count (MAX_PLAYERS), only if pre-game format marker < 2 - legacy path, replaces the two rows below entirely |
+| int32[] | (count * 4) bytes | Minor civ type array elements - legacy path only |
+| uint32 | 4 bytes | Minor civ names array count (only as many entries as real city-states in the game, not MAX_PLAYERS) - modern path (pre-game format marker >= 2) only |
+| varstring[] | var bytes | Minor civ (city-state) names — patches matching entries into the civ roster - modern path only |
 | uint32 | 4 bytes | Minor nation civ array count (MAX_PLAYERS) |
 | uint8[] | count bytes | Minor nation civ array elements (bool) |
 | uint8 | 1 byte | Dummy value (bool) |
@@ -599,6 +617,9 @@ above.
 | uint8[] | count bytes | Multiplayer options array elements (bool): 0=SIMULTANEOUS_TURNS, 1=TAKEOVER_AI, 2=SHUFFLE_TEAMS, 3=ANONYMOUS |
 
 ### Player Arrays & Colors
+
+Same old/new format split as Minor Civ Names above: for pre-game format marker < 2, the
+player-color rows below are replaced by a count-prefixed int32 array.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
@@ -610,8 +631,10 @@ above.
 | int32 | 4 bytes | Pitboss turn time |
 | uint32 | 4 bytes | Playable civs array count (MAX_PLAYERS) |
 | uint8[] | count bytes | Playable civs array elements (bool) |
-| uint32 | 4 bytes | Player color array count (only as many entries as real players in the game, not MAX_PLAYERS) |
-| varstring[] | var bytes | Player colors |
+| uint32 | 4 bytes | Player color array count (MAX_PLAYERS), only if pre-game format marker < 2 - legacy path, replaces the two rows below entirely |
+| int32[] | (count * 4) bytes | Player color array elements - legacy path only |
+| uint32 | 4 bytes | Player color array count (only as many entries as real players in the game, not MAX_PLAYERS) - modern path (pre-game format marker >= 2) only |
+| varstring[] | var bytes | Player colors - modern path only |
 | uint8 | 1 byte | Private game (bool) |
 | uint8 | 1 byte | Quick combat (bool) |
 | uint8 | 1 byte | Quick combat default (bool) |
@@ -682,13 +705,13 @@ above.
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| uint32 | 4 bytes | Serialization version (typically 2) |
+| uint32 | 4 bytes | World info version (raw leading int) |
 | uint32 | 4 bytes | World info id |
-| uint32 | 4 bytes | World info civilopedia (v2 only) |
+| uint32 | 4 bytes | World info civilopedia (only if preGameFormatMarker >= 3 and world info version < 5) |
 | varstring | var bytes | World size display name |
 | varstring | var bytes | World size help text |
-| uint32 | 4 bytes | World size disabled help |
-| uint32 | 4 bytes | World size strategy |
+| varstring | var bytes | World size disabled help |
+| varstring | var bytes | World size strategy |
 | varstring | var bytes | World size type (e.g. WORLDSIZE_STANDARD) |
 | varstring | var bytes | World size text key |
 | varstring | var bytes | World size display name 2 |
@@ -703,15 +726,15 @@ above.
 | int32 | 4 bytes | Max conscript modifier |
 | uint32 | 4 bytes | Grid width |
 | uint32 | 4 bytes | Grid height |
-| uint32 | 4 bytes | Max active religions (v2 only) |
+| uint32 | 4 bytes | Max active religions (only if preGameFormatMarker >= 3 and world info version < 5) |
 | int32 | 4 bytes | Terrain grain change |
 | int32 | 4 bytes | Feature grain change |
 | uint32 | 4 bytes | Research percent |
 | uint32 | 4 bytes | Advanced start points mod |
 | uint32 | 4 bytes | Num cities unhappiness percent |
 | uint32 | 4 bytes | Num cities policy cost mod |
-| uint32 | 4 bytes | Num cities tech cost mod |
-| uint32 | 4 bytes | World size enum (v2 only) |
+| uint32 | 4 bytes | Num cities tech cost mod (only if world info version >= 2) |
+| uint32 | 4 bytes | World size enum (only if preGameFormatMarker >= 3 and world info version < 5) |
 
 ### Game Options
 
@@ -724,18 +747,19 @@ above.
 | varstring | var bytes | Map option name (repeated per element) |
 | uint32 | 4 bytes | Map option value (repeated per element) |
 | varstring | var bytes | Game version 2 |
-| uint32 | 4 bytes | Should-notify Steam invite array count |
-| uint8[] | count bytes | Should-notify Steam invite array elements (bool) |
-| uint32 | 4 bytes | Should-notify email array count |
-| uint8[] | count bytes | Should-notify email array elements (bool) |
-| uint32 | 4 bytes | Turn-notify email address array count |
-| varstring[] | var bytes | Turn-notify email address array elements |
+| uint32 | 4 bytes | Should notify Steam invite array count (only if pre-game format marker > 3) |
+| uint8[] | count bytes | Should notify Steam invite array elements (bool) (only if pre-game format marker > 3) |
+| uint32 | 4 bytes | Should notify email array count (only if pre-game format marker > 3) |
+| uint8[] | count bytes | Should notify email array elements (bool) (only if pre-game format marker > 3) |
+| uint32 | 4 bytes | Turn notify email address array count (only if pre-game format marker > 3) |
+| varstring[] | var bytes | Turn notify email address array elements (only if pre-game format marker > 3) |
 
 ### Compressed Block
 
 | Type | Size | Description |
 | ---- | ---- | ----------- |
-| byte[8] | 8 bytes | Padding, always `[2,0,0,0,0,0,1,0]` |
+| uint32 | 4 bytes | Compression stream format id - usually 2; older builds use 1 |
+| uint32 | 4 bytes | Compression stream chunk size - always 65536 (0x10000) |
 
 ZLIB-compressed data follows, starting with the 0x789C signature. Everything below is inside the decompressed contents.
 
@@ -783,8 +807,9 @@ ZLIB-compressed data follows, starting with the 0x789C signature. Everything bel
 | byte | 1 byte | Tutorial ever attacked (bool) |
 | byte | 1 byte | Static tutorial active (bool) |
 | byte | 1 byte | Ever right-click moved (bool) |
-| uint32 | 4 bytes | Advisor messages viewed array count |
-| varstring[] | var bytes | Advisor message IDs (e.g. `RIGHT_CLICK_MOVE`, `CHOOSE_IDEOLOGY`) |
+| byte[8] | 8 bytes | Unknown fixed block (only if save file version == 9; replaces the two rows below) |
+| uint32 | 4 bytes | Advisor messages viewed array count (unless save file version == 9) |
+| varstring[] | var bytes | Advisor message IDs (e.g. `RIGHT_CLICK_MOVE`, `CHOOSE_IDEOLOGY`) (unless save file version == 9) |
 | uint32 | 4 bytes | Handicap: 0=HANDICAP_SETTLER, 1=HANDICAP_CHIEFTAIN, 2=HANDICAP_WARLORD, 3=HANDICAP_PRINCE, 4=HANDICAP_KING, 5=HANDICAP_EMPEROR, 6=HANDICAP_IMMORTAL, 7=HANDICAP_DEITY |
 | int32 | 4 bytes | Pause player (-1 if none) |
 | int32 | 4 bytes | AI auto play return player (-1 if none) |
@@ -819,6 +844,33 @@ If save file version == 0x0B (11):
 | uint32 | 4 bytes | Building class array count |
 | (varstring,uint32)[] | var bytes | Building class array: (building class, count created) per building class |
 | byte[2366] | 2366 bytes | Unknown padding |
+
+If save file version == 9:
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Unit created count array length |
+| (varstring,int32)[] | var bytes | Unit created count: (unit name, count created); count present only when the name doesn't start with "NO_" |
+| int32[60] | 240 bytes | Unit class created count per unit class (no length prefix) |
+| uint32 | 4 bytes | Building class created count array length |
+| (varstring,int32)[] | var bytes | Building class created count: (building class name, count created); count present only when the name doesn't start with "NO_" |
+| byte[668] | 668 bytes | Not yet decoded |
+| uint32 | 4 bytes | Destroyed cities array count |
+| varstring[] | var bytes | Destroyed city names |
+
+If save file version == 13 (Gods & Kings):
+
+| Type | Size | Description |
+| ---- | ---- | ----------- |
+| uint32 | 4 bytes | Unit created count array length |
+| (varstring,int32)[] | var bytes | Unit created count: (unit name, count created); count present only when the name doesn't start with "NO_" |
+| uint32 | 4 bytes | Unit class created count array length |
+| (varstring,int32)[] | var bytes | Unit class created count: (unit class name, count created); count present only when the name doesn't start with "NO_" - no fixed-array fallback here, unlike the version 9 branch |
+| uint32 | 4 bytes | Building class created count array length |
+| (varstring,int32)[] | var bytes | Building class created count: (building class name, count created); count present only when the name doesn't start with "NO_" |
+| byte[920] | 920 bytes | Not yet decoded |
+| uint32 | 4 bytes | Destroyed cities array count |
+| varstring[] | var bytes | Destroyed city names |
 
 Otherwise:
 
@@ -905,7 +957,8 @@ Same format as replay events in the shared Replay File Format section - the save
 | (int32,int32,uint32,int32[])[] | var bytes | Plot extra yield array elements: (x, y, extra-yield count, extra-yield values per yield type) |
 | uint32 | 4 bytes | Plot extra cost array count |
 | (int32,int32,int32)[] | var bytes | Plot extra cost array elements: (x, y, cost) |
-| uint8 | 1 byte | Archaeology triggered (bool) |
+| uint8 | 1 byte | Archaeology triggered (bool) (only if save file version == 1) |
+| int32 | 4 bytes | Num culture victory cities (only if save file version != 1) |
 | int32 | 4 bytes | Earliest barbarian release turn |
 
 ### Game Deals
@@ -995,7 +1048,7 @@ A pantheon has its own entry too: religion type 0 (RELIGION_PANTHEON), pantheon 
 | int32 | 4 bytes | Spread modifier doubling tech |
 | uint32 | 4 bytes | Belief array count |
 | uint32[] | (count * 4) bytes | Belief hashes (hash of each chosen belief's type string) |
-| uint32 | 4 bytes | Building class override array count (a ruleset-wide constant - GC.getNumBuildingClassInfos() - not a per-religion value) |
+| uint32 | 4 bytes | Building class override array count (a ruleset-wide constant, not a per-religion value) |
 | (uint32,int32)[] | var bytes | Building class overrides: (type hash, value); value present only when hash is non-zero |
 
 ### Game Culture
@@ -1058,9 +1111,9 @@ A pantheon has its own entry too: religion type 0 (RELIGION_PANTHEON), pantheon 
 | byte[128] | 128 bytes | Custom name: fixed-size null-terminated buffer (only if league format version >= 7) |
 | int32 | 4 bytes | Last special session (only if league format version >= 8) |
 | int32 | 4 bytes | Current special session (only if league format version >= 8) |
-| uint32 | 4 bytes | Enact-proposals-on-hold array count (only if league format version >= 8) |
+| uint32 | 4 bytes | Enact proposals on hold array count (only if league format version >= 8) |
 | Resolution[] | var bytes | Enact proposals on hold (only if league format version >= 8) |
-| uint32 | 4 bytes | Repeal-proposals-on-hold array count (only if league format version >= 8) |
+| uint32 | 4 bytes | Repeal proposals on hold array count (only if league format version >= 8) |
 | (Resolution,int32,VoterDecision)[] | var bytes | Repeal proposals on hold (only if league format version >= 8) |
 
 #### League Member Element
@@ -1222,5 +1275,5 @@ For a vanilla game this table is empty (SQLite version `3.7.17`, page size 1024,
 | byte[16] | 16 bytes | Map GUID: Data1(4)+Data2(2)+Data3(2)+Data4(8), standard GUID layout - unique per map |
 | uint32 | 4 bytes | Resource count array length |
 | (uint32,int32)[] | var bytes | Total resource counts across the whole map: (type hash, count); count present only when hash is non-zero |
-| uint32 | 4 bytes | Resource-on-land count array length |
+| uint32 | 4 bytes | Resource on land count array length |
 | (uint32,int32)[] | var bytes | Resource counts restricted to land tiles only, same shape |
