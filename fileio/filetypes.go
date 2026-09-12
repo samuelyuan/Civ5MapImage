@@ -46,7 +46,7 @@ func ExportFileToJson(inputFilename string, outputFilename string) {
 		}
 	case string(FileTypeCiv5Save):
 		fmt.Println("Reading civ5save file")
-		saveData, err := ReadCiv5SaveFile(inputFilename, outputFilename+".decomp")
+		saveData, err := ReadCiv5SaveFile(inputFilename, outputFilename+".decomp", false)
 		if err != nil {
 			log.Fatal("Failed to read save data: ", err)
 		}
@@ -60,7 +60,7 @@ func ExportFileToJson(inputFilename string, outputFilename string) {
 	}
 }
 
-// LoadReplayDataFromFile loads replay data from a file (either .civ5replay or .json)
+// LoadReplayDataFromFile loads replay data from a file - .civ5replay, .civ5save, or .json.
 func LoadReplayDataFromFile(replayFilename string) *Civ5ReplayData {
 	replayFileExtension := filepath.Ext(replayFilename)
 
@@ -72,6 +72,13 @@ func LoadReplayDataFromFile(replayFilename string) *Civ5ReplayData {
 			log.Fatal("Failed to read replay data: ", err)
 		}
 		return replayData
+	case string(FileTypeCiv5Save):
+		fmt.Println("Reading replay data from .civ5save file")
+		saveData, err := ReadCiv5SaveFile(replayFilename, replayFilename+".decomp", true)
+		if err != nil {
+			log.Fatal("Failed to read save data: ", err)
+		}
+		return saveData.AsReplayData()
 	case string(FileTypeJSON):
 		fmt.Println("Importing replay data from json")
 		replayData, err := ImportCiv5ReplayFileFromJson(replayFilename)

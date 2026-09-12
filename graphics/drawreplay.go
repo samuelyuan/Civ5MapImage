@@ -232,8 +232,9 @@ func renderReplayFrame(renderer *MapRenderer, canvas Canvas, mapData *fileio.Civ
 
 // DrawReplay renders the given map/replay pair into an animated GIF at outputFilename.
 // It returns an error (rather than panicking) if the map and replay are incompatible, or if
-// the output file cannot be written.
-func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, outputFilename string) error {
+// the output file cannot be written. maxTurns caps how many turns are rendered (0 = all) - use
+// it for a quick preview/test render instead of waiting on a full, possibly long, animation.
+func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, outputFilename string, maxTurns int) error {
 	if err := ValidateReplayCompatibility(mapData, replayData); err != nil {
 		return fmt.Errorf("replay is not compatible with map: %w", err)
 	}
@@ -242,6 +243,10 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 
 	replayTurns := fileio.GroupEventsByTurn(replayData.AllReplayEvents)
 	turnNumbers := fileio.GetSortedKeys(replayTurns)
+	if maxTurns > 0 && maxTurns < len(turnNumbers) {
+		fmt.Printf("Limiting render to the first %d of %d turns (-maxturns)\n", maxTurns, len(turnNumbers))
+		turnNumbers = turnNumbers[:maxTurns]
+	}
 
 	// Setup civ data and player mapping
 	fmt.Println("Player Civ:", replayData.PlayerCiv)

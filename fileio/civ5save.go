@@ -707,7 +707,7 @@ func locateCompressedBlock(streamReader *io.SectionReader, inputFile *os.File, s
 	return io.NewSectionReader(inputFile, offsetToCompressedBlock, saveFileLength-offsetToCompressedBlock), nil
 }
 
-func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, error) {
+func ReadCiv5SaveFile(filename string, outputFilename string, onlyExtractReplay bool) (*Civ5SaveData, error) {
 	inputFile, saveFileLength, streamReader, err := openSaveFileReader(filename)
 	if err != nil {
 		return nil, err
@@ -743,7 +743,7 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress file: %w", err)
 	}
-	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize, allCivs, preGameFormatMarker)
+	allReplayEvents := readDecompressed(decompressedStreamReader, decompressedContentsSize, allCivs, preGameFormatMarker, onlyExtractReplay)
 
 	return &Civ5SaveData{
 		PlayerCiv:       playerCiv,
@@ -751,6 +751,15 @@ func ReadCiv5SaveFile(filename string, outputFilename string) (*Civ5SaveData, er
 		AllCivs:         allCivs,
 		AllReplayEvents: allReplayEvents,
 	}, nil
+}
+
+func (s *Civ5SaveData) AsReplayData() *Civ5ReplayData {
+	return &Civ5ReplayData{
+		PlayerCiv:       s.PlayerCiv,
+		IsReplayFile:    s.IsReplayFile,
+		AllCivs:         s.AllCivs,
+		AllReplayEvents: s.AllReplayEvents,
+	}
 }
 
 func readDecompressedHeader(streamReader *io.SectionReader, preGameFormatMarker uint32) uint32 {
@@ -975,7 +984,7 @@ func readVersionDependentUnitData(streamReader *io.SectionReader, saveFileVersio
 	}
 }
 
-func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs []Civ5ReplayCiv, preGameFormatMarker uint32) []Civ5ReplayEvent {
+func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs []Civ5ReplayCiv, preGameFormatMarker uint32, onlyExtractReplay bool) []Civ5ReplayEvent {
 	streamReader := io.NewSectionReader(reader, int64(0), int64(decompressedFileLength))
 
 	saveFileVersion := readDecompressedHeader(streamReader, preGameFormatMarker)
@@ -989,6 +998,14 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs 
 	allReplayEvents := readEvents(streamReader)
 	printReplayEvents(allReplayEvents)
 
+	if !onlyExtractReplay {
+		readPostEventData(streamReader, allCivs, allReplayEvents, saveFileVersion)
+	}
+
+	return allReplayEvents
+}
+
+func readPostEventData(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, allReplayEvents []Civ5ReplayEvent, saveFileVersion uint32) {
 	readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
 		{VariableType: "int32", VariableName: "numSessions"},
 	})
@@ -1036,6 +1053,4 @@ func readDecompressed(reader *bytes.Reader, decompressedFileLength int, allCivs 
 	fmt.Printf("mapHeader: version=%d grid=%dx%d landPlots=%d ownedPlots=%d naturalWonders=%d latitude=%d/%d wrap=%v/%v resourceTypes=%d/%d\n",
 		mapHeader.Version, mapHeader.GridWidth, mapHeader.GridHeight, mapHeader.LandPlotCount, mapHeader.OwnedPlotCount, mapHeader.NumNaturalWonders,
 		mapHeader.TopLatitude, mapHeader.BottomLatitude, mapHeader.WrapX, mapHeader.WrapY, len(mapHeader.ResourceCounts), len(mapHeader.ResourceCountsOnLand))
-
-	return allReplayEvents
 }

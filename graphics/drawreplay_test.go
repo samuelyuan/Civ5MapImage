@@ -381,7 +381,7 @@ func TestDrawReplayReturnsErrorForIncompatibleData(t *testing.T) {
 	replayData.AllReplayEvents = nil // makes the pair incompatible
 
 	outputPath := filepath.Join(t.TempDir(), "replay.gif")
-	err := DrawReplay(mapData, replayData, outputPath)
+	err := DrawReplay(mapData, replayData, outputPath, 0)
 	if err == nil {
 		t.Fatal("DrawReplay() with incompatible data = nil error, want an error")
 	}
@@ -397,7 +397,7 @@ func TestDrawReplaySucceedsAndWritesFile(t *testing.T) {
 	mapData, replayData := newValidReplayFixtures()
 
 	outputPath := filepath.Join(t.TempDir(), "replay.gif")
-	if err := DrawReplay(mapData, replayData, outputPath); err != nil {
+	if err := DrawReplay(mapData, replayData, outputPath, 0); err != nil {
 		t.Fatalf("DrawReplay() returned error: %v", err)
 	}
 
@@ -416,7 +416,7 @@ func TestDrawReplayHandlesNilCityOwnerIndexMap(t *testing.T) {
 	mapData.CityOwnerIndexMap = nil
 
 	outputPath := filepath.Join(t.TempDir(), "replay.gif")
-	if err := DrawReplay(mapData, replayData, outputPath); err != nil {
+	if err := DrawReplay(mapData, replayData, outputPath, 0); err != nil {
 		t.Fatalf("DrawReplay() with nil CityOwnerIndexMap returned error: %v", err)
 	}
 }

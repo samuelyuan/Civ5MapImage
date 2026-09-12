@@ -28,6 +28,7 @@ type cliArgs struct {
 	outputFilename string
 	replayFilename string
 	mode           string
+	maxTurns       int
 }
 
 // parseArgs parses the command line and resolves defaults: -map (preferred) or -input (alias);
@@ -36,8 +37,9 @@ func parseArgs() cliArgs {
 	inputPtr := flag.String("input", "", "Map filename (.civ5map or .json) - alias for -map")
 	mapPtr := flag.String("map", "", "Map filename (.civ5map or .json)")
 	outputPtr := flag.String("output", "output.png", "Output filename")
-	replayFilePtr := flag.String("replay", "", "Replay filename (.civ5replay or .json). Passing -replay without -mode generates a replay gif directly.")
+	replayFilePtr := flag.String("replay", "", "Replay filename (.civ5replay, .civ5save, or .json). Passing -replay without -mode generates a replay gif directly.")
 	modePtr := flag.String("mode", "physical", "Drawing mode")
+	maxTurnsPtr := flag.Int("maxturns", 0, "Replay mode only: render at most this many turns (0 = all). Useful for a quick preview instead of a full, possibly long, render.")
 
 	flag.Parse()
 
@@ -57,6 +59,7 @@ func parseArgs() cliArgs {
 		outputFilename: *outputPtr,
 		replayFilename: *replayFilePtr,
 		mode:           *modePtr,
+		maxTurns:       *maxTurnsPtr,
 	}
 	if *mapPtr != "" {
 		args.inputFilename = *mapPtr
@@ -121,7 +124,7 @@ func runReplayMode(args cliArgs) {
 
 	validateMapReplayCompatibility(args.inputFilename, mapData, replayData)
 
-	if err := graphics.DrawReplay(mapData, replayData, args.outputFilename); err != nil {
+	if err := graphics.DrawReplay(mapData, replayData, args.outputFilename, args.maxTurns); err != nil {
 		log.Fatal("Failed to draw replay: ", err)
 	}
 }

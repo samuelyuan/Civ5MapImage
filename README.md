@@ -10,9 +10,9 @@
 
 ## Introduction
 
-Most custom maps designed for Civ 5 will usually provide screenshots of the map, but they will either only show a portion of the map in the game or a zoomed out image which shows all of the cities but not the terrain. This program is designed to provide you a detailed view of the entire map in one single image.
+Custom Civ 5 maps are usually shared as screenshots, which either show only part of the map in-game or a zoomed-out view with all the cities but none of the terrain. This program renders the entire map as a single, detailed image instead.
 
-You have the option of generating a physical map or a political map. The physical map focuses on generating the terrain, while the political map shows the civilization boundaries and major cities. This program will convert a Civ 5 map with the file extension .Civ5Map to a PNG image.
+You can generate a physical map, showing terrain, or a political map, showing civilization borders and major cities. Either way, it converts a .Civ5Map file into a PNG image.
 
 ## Command-Line Usage
 
@@ -34,7 +34,7 @@ The default map mode is physical, which shows the different types of terrain.
 ```
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth.png" alt="earth" width="550" height="300" />
+<img src="screenshots/earth.png" alt="earth" width="550" height="300" />
 </div>
 
 ### Generate Political Map Image
@@ -45,7 +45,7 @@ To generate a political map with the civilization and city state borders, you mu
 ```
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe1939.png" alt="europe" width="400" height="300" />
+<img src="screenshots/europe1939.png" alt="europe" width="400" height="300" />
 </div>
 
 ### Generate Replay
@@ -62,56 +62,62 @@ which is shorthand for the fully explicit form:
 | Flag | Expected extension(s) | Notes |
 |------|------------------------|-------|
 | `-map` | `.civ5map` or `.json` | The base map. Use the same map the replay was recorded on. |
-| `-replay` | `.civ5replay` or `.json` | The replay event log. A `.json` here must be a replay previously exported with `-mode=exportjson` (either directly from a `.civ5replay`, or converted from a `.civ5save` — see [Extract Replay From Save File](#extract-replay-from-save-file) below). |
+| `-replay` | `.civ5replay`, `.civ5save`, or `.json` | The replay event log. A `.civ5save` is read and converted on the fly (see [Extract Replay From Save File](#extract-replay-from-save-file) below). A `.json` here must be a replay previously exported with `-mode=exportjson`. |
 | `-output` | `.gif` | Replays are always GIF-encoded; any other extension is rejected before rendering. |
+| `-maxturns` | (integer) | Render at most this many turns instead of the whole replay; omit it (or pass `0`) to render every turn. Useful for a quick preview. |
 
 Any other extension on `-map` or `-replay` is also rejected immediately. Before rendering, the map and replay are cross-checked: grid dimensions, tile-by-tile geography, and whether `-map`'s filename matches the one the replay recorded (a mismatch there is only a warning). A geography mismatch fails fast with a descriptive error instead of rendering a wrong or partial animation.
 
 ### Extract Replay From Save File
 
-To extract a replay from a save file, you will need to convert the save file into a json and use the new json as a replay file.
-
+A `.civ5save` can be passed directly as `-replay`, no conversion needed:
 ```
-./Civ5MapImage.exe -mode=exportjson -map=[save filename] -output=[json filename]
+./Civ5MapImage.exe -map=[map filename] -replay=[save filename]
+```
+
+To instead save the extracted replay events as reusable `.json` (e.g. to avoid re-parsing the save file each render), convert it with `-mode=exportjson` first, then render using the resulting json as `-replay`:
+```
+./Civ5MapImage.exe -mode=exportjson -input=[save filename] -output=[json filename]
+./Civ5MapImage.exe -map=[map filename] -replay=[json filename]
 ```
 
 ### Convert .civ5map to .json
 
 Set -mode=exportjson and output to have a filename ending in .json. No image will be generated.
 ```
-./Civ5MapImage.exe -mode=exportjson -map=earth.Civ5Map -output=earth.json
+./Civ5MapImage.exe -mode=exportjson -input=earth.Civ5Map -output=earth.json
 ```
 
 ## Examples
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe.png" alt="europe" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe1914.png" alt="europe" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe1939.png" alt="europe" width="200" height="150" />
+<img src="screenshots/europe.png" alt="europe" width="200" height="150" />
+<img src="screenshots/europe1914.png" alt="europe" width="200" height="150" />
+<img src="screenshots/europe1939.png" alt="europe" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/europe2014.png" alt="europe" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/world.png" alt="world" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1900.png" alt="earth 1900" width="200" height="150" />
+<img src="screenshots/europe2014.png" alt="europe" width="200" height="150" />
+<img src="screenshots/world.png" alt="world" width="200" height="150" />
+<img src="screenshots/earth1900.png" alt="earth 1900" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1936.png" alt="earth 1936" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1939.png" alt="earth 1939" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth1942.png" alt="earth 1942" width="200" height="150" />
+<img src="screenshots/earth1936.png" alt="earth 1936" width="200" height="150" />
+<img src="screenshots/earth1939.png" alt="earth 1939" width="200" height="150" />
+<img src="screenshots/earth1942.png" alt="earth 1942" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2014a.png" alt="earth 2014 huge 1" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2014b.png" alt="earth 2014 huge 2" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/earth2022.png" alt="earth 2022" width="200" height="150" />
+<img src="screenshots/earth2014a.png" alt="earth 2014 huge 1" width="200" height="150" />
+<img src="screenshots/earth2014b.png" alt="earth 2014 huge 2" width="200" height="150" />
+<img src="screenshots/earth2022.png" alt="earth 2022" width="200" height="150" />
 </div>
 
 <div style="display:inline-block;">
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/mongol.png" alt="mongol" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/india.png" alt="india" width="200" height="150" />
-<img src="https://raw.githubusercontent.com/samuelyuan/Civ5MapImage/master/screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
+<img src="screenshots/mongol.png" alt="mongol" width="200" height="150" />
+<img src="screenshots/india.png" alt="india" width="200" height="150" />
+<img src="screenshots/stalingrad.png" alt="stalingrad" width="200" height="150" />
 </div>
 
 ## Running Tests
