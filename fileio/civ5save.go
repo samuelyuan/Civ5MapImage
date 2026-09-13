@@ -331,7 +331,7 @@ func readCivRoster(streamReader *io.SectionReader, slotHintsVersion uint32) []Ci
 	civilizationKeyArrLength := unsafeReadUint32(streamReader)
 	fmt.Println("CivilizationKeyArrLength:", civilizationKeyArrLength)
 	civilizationKeyArr := readVarStringArrayOrPanic(streamReader, civilizationKeyArrLength, "civilizationKey", "civilization key")
-	fmt.Println("CivilizationKeys:", civilizationKeyArr)
+	printIndexedArray("CivilizationKeys", civilizationKeyArr)
 
 	allCivs := make([]Civ5ReplayCiv, 0, len(civilizationKeyArr))
 	for _, civilizationKey := range civilizationKeyArr {
@@ -532,7 +532,7 @@ func readMinorCivNames(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, 
 				allCivs[i].Name = minorCivName
 			}
 		}
-		fmt.Println("minorCivArray:", minorCivNameArr) // read via a DB lookup (MinorCivilizations table) - variable count, not MAX_PLAYERS
+		printIndexedArray("minorCivArray", minorCivNameArr) // read via a DB lookup (MinorCivilizations table) - variable count, not MAX_PLAYERS
 	}
 
 	readArray(streamReader, "minorNationCivsArr", []Civ5ReplayFileConfigEntry{
@@ -591,7 +591,7 @@ func readPlayerColors(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, p
 		for i, playerColorName := range playerColorArr {
 			allCivs[i].LongName = playerColorName
 		}
-		fmt.Println("playerColorArr:", playerColorArr) // read via a DB lookup (PlayerColors table) - variable count, not MAX_PLAYERS
+		printIndexedArray("playerColorArr", playerColorArr) // read via a DB lookup (PlayerColors table) - variable count, not MAX_PLAYERS
 	}
 }
 
@@ -906,18 +906,20 @@ func readDecompressedHeader(streamReader *io.SectionReader, preGameFormatMarker 
 		{VariableType: "varstring", VariableName: "scriptData"},
 	})
 
-	endTurnMessagesReceived := unsafeReadFixedInt32Array(streamReader, 64)
-	rankPlayer := unsafeReadFixedInt32Array(streamReader, 64)
-	playerRank := unsafeReadFixedInt32Array(streamReader, 64)
-	playerScore := unsafeReadFixedInt32Array(streamReader, 64)
-	rankTeam := unsafeReadFixedInt32Array(streamReader, 64)
-	teamRank := unsafeReadFixedInt32Array(streamReader, 64)
-	teamScore := unsafeReadFixedInt32Array(streamReader, 64)
-	fmt.Println("End turn messages received:", endTurnMessagesReceived)
-	fmt.Println("Rank -> player:", rankPlayer, " player -> rank:", playerRank)
-	fmt.Println("Player score:", playerScore)
-	fmt.Println("Rank -> team:", rankTeam, " team -> rank:", teamRank)
-	fmt.Println("Team score:", teamScore)
+	endTurnMessagesReceivedStart, endTurnMessagesReceived := readFixedInt32ArrayAt(streamReader, 64)
+	rankPlayerStart, rankPlayer := readFixedInt32ArrayAt(streamReader, 64)
+	playerRankStart, playerRank := readFixedInt32ArrayAt(streamReader, 64)
+	playerScoreStart, playerScore := readFixedInt32ArrayAt(streamReader, 64)
+	rankTeamStart, rankTeam := readFixedInt32ArrayAt(streamReader, 64)
+	teamRankStart, teamRank := readFixedInt32ArrayAt(streamReader, 64)
+	teamScoreStart, teamScore := readFixedInt32ArrayAt(streamReader, 64)
+	printIndexedArrayAt("endTurnMessagesReceived", endTurnMessagesReceivedStart, 4, endTurnMessagesReceived)
+	printIndexedArrayAt("rankPlayer", rankPlayerStart, 4, rankPlayer)
+	printIndexedArrayAt("playerRank", playerRankStart, 4, playerRank)
+	printIndexedArrayAt("playerScore", playerScoreStart, 4, playerScore)
+	printIndexedArrayAt("rankTeam", rankTeamStart, 4, rankTeam)
+	printIndexedArrayAt("teamRank", teamRankStart, 4, teamRank)
+	printIndexedArrayAt("teamScore", teamScoreStart, 4, teamScore)
 
 	return saveFileVersion
 }
@@ -967,26 +969,26 @@ func readWorldCongressVotingState(streamReader *io.SectionReader) {
 	diploVoteLen := unsafeReadUint32(streamReader)
 	diploVote := readHashValuePairs(streamReader, int(diploVoteLen))
 
-	fmt.Println("Project created count:", projectCreatedCount)
-	fmt.Println("Vote outcome:", voteOutcome)
-	fmt.Println("Secretary general timer:", secretaryGeneralTimer)
-	fmt.Println("Vote timer:", voteTimer)
-	fmt.Println("Diplo vote:", diploVote)
+	printIndexedArray("projectCreatedCount", projectCreatedCount)
+	printIndexedArray("voteOutcome", voteOutcome)
+	printIndexedArray("secretaryGeneralTimer", secretaryGeneralTimer)
+	printIndexedArray("voteTimer", voteTimer)
+	printIndexedArray("diploVote", diploVote)
 
-	votesCast := unsafeReadFixedInt32Array(streamReader, 63)
-	previousVotesCast := unsafeReadFixedInt32Array(streamReader, 63)
-	numVotesForTeam := unsafeReadFixedInt32Array(streamReader, 63)
-	fmt.Println("Votes cast:", votesCast)
-	fmt.Println("Previous votes cast:", previousVotesCast)
-	fmt.Println("Num votes for team:", numVotesForTeam)
+	votesCastStart, votesCast := readFixedInt32ArrayAt(streamReader, 63)
+	previousVotesCastStart, previousVotesCast := readFixedInt32ArrayAt(streamReader, 63)
+	numVotesForTeamStart, numVotesForTeam := readFixedInt32ArrayAt(streamReader, 63)
+	printIndexedArrayAt("votesCast", votesCastStart, 4, votesCast)
+	printIndexedArrayAt("previousVotesCast", previousVotesCastStart, 4, previousVotesCast)
+	printIndexedArrayAt("numVotesForTeam", numVotesForTeamStart, 4, numVotesForTeam)
 
 	specialUnitValidLen := unsafeReadUint32(streamReader)
 	specialUnitValid := readHashBoolPairs(streamReader, int(specialUnitValidLen))
-	fmt.Println("Special unit valid:", specialUnitValid)
+	printIndexedArray("specialUnitValid", specialUnitValid)
 
 	teamVictoryRankLen := unsafeReadUint32(streamReader)
 	teamVictoryRank := readHashIntArrayPairs(streamReader, int(teamVictoryRankLen), NumVictoryPointAwards)
-	fmt.Println("Team victory rank:", teamVictoryRank)
+	printIndexedArray("teamVictoryRank", teamVictoryRank)
 }
 
 func readVoteSelectionAndTriggeredArrays(streamReader *io.SectionReader) {
@@ -1079,7 +1081,7 @@ func readPostEventData(streamReader *io.SectionReader, allCivs []Civ5ReplayCiv, 
 	})
 
 	plotExtraYields := readPlotExtraYields(streamReader)
-	fmt.Println("plotExtraYields:", plotExtraYields)
+	printIndexedArray("plotExtraYields", plotExtraYields)
 
 	readArray(streamReader, "plotExtraCostArr", []Civ5ReplayFileConfigEntry{
 		{VariableType: "int32", VariableName: "plotExtraCostX"},

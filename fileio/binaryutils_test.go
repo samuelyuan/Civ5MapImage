@@ -111,14 +111,36 @@ func TestReadFileConfig(t *testing.T) {
 	if len(fieldValues) != 3 {
 		t.Fatalf("readFileConfig() returned %d values, want 3", len(fieldValues))
 	}
-	if fieldValues[0] != "name(str):abc" {
-		t.Errorf("fieldValues[0] = %q, want %q", fieldValues[0], "name(str):abc")
+	if fieldValues[0] != `name(str)="abc"` {
+		t.Errorf("fieldValues[0] = %q, want %q", fieldValues[0], `name(str)="abc"`)
 	}
-	if fieldValues[1] != "count(u32):42" {
-		t.Errorf("fieldValues[1] = %q, want %q", fieldValues[1], "count(u32):42")
+	if fieldValues[1] != "count(u32)=42" {
+		t.Errorf("fieldValues[1] = %q, want %q", fieldValues[1], "count(u32)=42")
 	}
-	if fieldValues[2] != "flag(u8):7" {
-		t.Errorf("fieldValues[2] = %q, want %q", fieldValues[2], "flag(u8):7")
+	if fieldValues[2] != "flag(u8)=7" {
+		t.Errorf("fieldValues[2] = %q, want %q", fieldValues[2], "flag(u8)=7")
+	}
+}
+
+func TestReadFileConfigBytearrayAscii(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteString("CIV5")             // printable - should get an ascii= annotation
+	buf.Write([]byte{0x01, 0x00, 0xFF}) // not printable - hex only
+
+	entries := []Civ5ReplayFileConfigEntry{
+		{VariableType: "bytearray:4", VariableName: "magic"},
+		{VariableType: "bytearray:3", VariableName: "flags"},
+	}
+
+	fieldValues, err := readFileConfig(newSectionReader(buf.Bytes()), entries)
+	if err != nil {
+		t.Fatalf("readFileConfig returned error: %v", err)
+	}
+	if want := `magic(bytearray)=43 49 56 35 ascii="CIV5"`; fieldValues[0] != want {
+		t.Errorf("fieldValues[0] = %q, want %q", fieldValues[0], want)
+	}
+	if want := "flags(bytearray)=01 00 FF"; fieldValues[1] != want {
+		t.Errorf("fieldValues[1] = %q, want %q (no ascii annotation for non-printable bytes)", fieldValues[1], want)
 	}
 }
 

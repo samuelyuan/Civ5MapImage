@@ -139,6 +139,19 @@ func printDealDetail(allCivs []Civ5ReplayCiv, label string, i int, d Deal) {
 	}
 }
 
+func printIndexedArray[T any](name string, values []T) {
+	for i, v := range values {
+		fmt.Printf("%s[%d]=%v\n", name, i, v)
+	}
+}
+
+// (start + i*elementSize) - only correct when every element is exactly elementSize bytes.
+func printIndexedArrayAt[T any](name string, start int64, elementSize int, values []T) {
+	for i, v := range values {
+		fmt.Printf("FIELD 0x%X %s[%d]=%v\n", start+int64(i*elementSize), name, i, v)
+	}
+}
+
 // printReplayEvents prints the full decoded replay event list, one line per event.
 func printReplayEvents(events []Civ5ReplayEvent) {
 	fmt.Printf("Read %d replay events\n", len(events))

@@ -26,6 +26,16 @@ func boundedMakeSlice[T any](count uint32, name string) []T {
 	return make([]T, count)
 }
 
+// isPrintableASCII reports whether every byte is a printable ASCII character (space through tilde).
+func isPrintableASCII(b []byte) bool {
+	for _, c := range b {
+		if c < 0x20 || c > 0x7E {
+			return false
+		}
+	}
+	return true
+}
+
 // readVarString reads a variable-length string from the binary stream
 // Format: [length:uint32][string:bytes]
 func readVarString(reader *io.SectionReader, varName string) (string, error) {
@@ -59,47 +69,42 @@ func readArray(reader *io.SectionReader, arrayName string, fileConfigEntries []C
 	return nil
 }
 
-// readFileConfig reads a file configuration entry from the binary stream
 func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFileConfigEntry) ([]string, error) {
-	pos, err := reader.Seek(0, io.SeekCurrent)
-	if err != nil {
-		panic(err)
-	}
-
 	fieldValues := make([]string, 0)
 
 	for i := 0; i < len(fileConfigEntries); i++ {
 		fileConfigEntry := fileConfigEntries[i]
+		fieldPos, _ := reader.Seek(0, io.SeekCurrent)
+
+		var value string
 		if fileConfigEntry.VariableType == "varstring" {
-			value, err := readVarString(reader, "varstring_"+fileConfigEntry.VariableName)
+			strValue, err := readVarString(reader, "varstring_"+fileConfigEntry.VariableName)
 			if err != nil {
 				return nil, err
 			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(str):%v", fileConfigEntry.VariableName, value))
+			value = fmt.Sprintf("%s(str)=%q", fileConfigEntry.VariableName, strValue)
 		} else if fileConfigEntry.VariableType == "float32" {
-			value := float32(0)
-			if err := binary.Read(reader, binary.LittleEndian, &value); err != nil {
+			floatValue := float32(0)
+			if err := binary.Read(reader, binary.LittleEndian, &floatValue); err != nil {
 				return nil, fmt.Errorf("failed to load float32 for %s: %w", fileConfigEntry.VariableName, err)
 			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(f32):%f", fileConfigEntry.VariableName, value))
+			value = fmt.Sprintf("%s(f32)=%f", fileConfigEntry.VariableName, floatValue)
 		} else if fileConfigEntry.VariableType == "uint32" {
-			value := unsafeReadUint32(reader)
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(u32):%d", fileConfigEntry.VariableName, value))
+			value = fmt.Sprintf("%s(u32)=%d", fileConfigEntry.VariableName, unsafeReadUint32(reader))
 		} else if fileConfigEntry.VariableType == "int32" {
 			signedIntValue := int32(0)
 			if err := binary.Read(reader, binary.LittleEndian, &signedIntValue); err != nil {
 				return nil, fmt.Errorf("failed to load int32 for %s: %w", fileConfigEntry.VariableName, err)
 			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(i32):%d", fileConfigEntry.VariableName, signedIntValue))
+			value = fmt.Sprintf("%s(i32)=%d", fileConfigEntry.VariableName, signedIntValue)
 		} else if fileConfigEntry.VariableType == "uint16" {
-			value := unsafeReadUint16(reader)
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(u16):%d", fileConfigEntry.VariableName, value))
+			value = fmt.Sprintf("%s(u16)=%d", fileConfigEntry.VariableName, unsafeReadUint16(reader))
 		} else if fileConfigEntry.VariableType == "uint8" {
 			unsignedIntValue := uint8(0)
 			if err := binary.Read(reader, binary.LittleEndian, &unsignedIntValue); err != nil {
 				return nil, fmt.Errorf("failed to load uint8 for %s: %w", fileConfigEntry.VariableName, err)
 			}
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(u8):%d", fileConfigEntry.VariableName, unsignedIntValue))
+			value = fmt.Sprintf("%s(u8)=%d", fileConfigEntry.VariableName, unsignedIntValue)
 		} else if strings.Contains(fileConfigEntry.VariableType, "bytearray") {
 			byteArrayLength, err := strconv.Atoi(fileConfigEntry.VariableType[len("bytearray:"):])
 			if err != nil {
@@ -111,14 +116,19 @@ func readFileConfig(reader *io.SectionReader, fileConfigEntries []Civ5ReplayFile
 				return nil, fmt.Errorf("invalid byte array data for %s: %w", fileConfigEntry.VariableName, err)
 			}
 
-			fieldValues = append(fieldValues, fmt.Sprintf("%v(bytearray):%v", fileConfigEntry.VariableName, byteBlock))
+			value = fmt.Sprintf("%s(bytearray)=% X", fileConfigEntry.VariableName, byteBlock)
+			if len(byteBlock) > 0 && isPrintableASCII(byteBlock) {
+				value += fmt.Sprintf(" ascii=%q", string(byteBlock))
+			}
 		} else {
 			fmt.Println("Unknown variable type:", fileConfigEntry.VariableType)
+			continue
 		}
+
+		fieldValues = append(fieldValues, value)
+		fmt.Printf("FIELD 0x%X %s\n", fieldPos, value)
 	}
 
-	fmt.Printf("File Pos: 0x%X, ", pos)
-	fmt.Println("Field values:", fieldValues)
 	return fieldValues, nil
 }
 
@@ -152,6 +162,11 @@ func unsafeReadFixedInt32Array(reader *io.SectionReader, count int) []int32 {
 		values[i] = int32(unsafeReadUint32(reader))
 	}
 	return values
+}
+
+func readFixedInt32ArrayAt(reader *io.SectionReader, count int) (start int64, values []int32) {
+	start, _ = reader.Seek(0, io.SeekCurrent)
+	return start, unsafeReadFixedInt32Array(reader, count)
 }
 
 // unsafeReadByte reads a single byte from the binary stream, panicking on error.
