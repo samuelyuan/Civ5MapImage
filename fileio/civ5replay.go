@@ -261,66 +261,47 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	streamReader := io.NewSectionReader(inputFile, int64(0), fileLength)
 	fmt.Println("Loading Civ5Replay...")
 
-	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "bytearray:4",
-			VariableName: "gameName",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "unknownUint1",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "gameVersion",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "gameBuild",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "currentTurnNumber",
-		},
-		{
-			VariableType: "bytearray:1",
-			VariableName: "unknownByte1",
-		},
-	})
+	gameName := unsafeReadFixedBytes(streamReader, 4)
+	unknownUint1 := unsafeReadUint32(streamReader)
+	gameVersion, err := readVarString(streamReader, "gameVersion")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read initial file config: %w", err)
+		return nil, fmt.Errorf("failed to read gameVersion: %w", err)
 	}
+	gameBuild, err := readVarString(streamReader, "gameBuild")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read gameBuild: %w", err)
+	}
+	currentTurnNumber := unsafeReadUint32(streamReader)
+	unknownByte1 := unsafeReadFixedBytes(streamReader, 1)
+	fmt.Printf("gameName=% X unknownUint1=%d gameVersion=%q gameBuild=%q currentTurnNumber=%d unknownByte1=% X\n",
+		gameName, unknownUint1, gameVersion, gameBuild, currentTurnNumber, unknownByte1)
 
 	playerCiv, err := readVarString(streamReader, "playerCiv")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read player civ: %w", err)
 	}
 
-	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "difficulty",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "eraStart",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "eraEnd",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "gameSpeed",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "worldSize",
-		},
-	})
+	difficulty, err := readVarString(streamReader, "difficulty")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read difficulty/era/gameSpeed/worldSize config: %w", err)
+		return nil, fmt.Errorf("failed to read difficulty: %w", err)
 	}
+	eraStart, err := readVarString(streamReader, "eraStart")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read eraStart: %w", err)
+	}
+	eraEnd, err := readVarString(streamReader, "eraEnd")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read eraEnd: %w", err)
+	}
+	gameSpeedLabel, err := readVarString(streamReader, "gameSpeed")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read gameSpeed: %w", err)
+	}
+	worldSizeLabel, err := readVarString(streamReader, "worldSize")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read worldSize: %w", err)
+	}
+	fmt.Printf("difficulty=%q eraStart=%q eraEnd=%q gameSpeed=%q worldSize=%q\n", difficulty, eraStart, eraEnd, gameSpeedLabel, worldSizeLabel)
 
 	mapFilename, err := readVarString(streamReader, "mapFilename")
 	if err != nil {
@@ -357,32 +338,26 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		},
 	})
 
-	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "varstring",
-			VariableName: "civName",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "leaderName",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "playerColor",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "replayVersion",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "activePlayerIndex",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "mapFilename2",
-		},
-	})
+	civName, err := readVarString(streamReader, "civName")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read civName: %w", err)
+	}
+	leaderName, err := readVarString(streamReader, "leaderName")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read leaderName: %w", err)
+	}
+	playerColor, err := readVarString(streamReader, "playerColor")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read playerColor: %w", err)
+	}
+	replayVersion := unsafeReadUint32(streamReader)
+	activePlayerIndex := unsafeReadUint32(streamReader)
+	mapFilename2, err := readVarString(streamReader, "mapFilename2")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read mapFilename2: %w", err)
+	}
+	fmt.Printf("civName=%q leaderName=%q playerColor=%q replayVersion=%d activePlayerIndex=%d mapFilename2=%q\n",
+		civName, leaderName, playerColor, replayVersion, activePlayerIndex, mapFilename2)
 
 	worldSizeIndex := unsafeReadUint32(streamReader)
 	worldSizeName := typeName(worldSizeNames, int(worldSizeIndex))
@@ -426,32 +401,17 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 		return nil, fmt.Errorf("failed to read block: %w", err)
 	}
 
-	_, err = readFileConfig(streamReader, []Civ5ReplayFileConfigEntry{
-		{
-			VariableType: "uint32",
-			VariableName: "startTurn",
-		},
-		{
-			VariableType: "int32", // startYear can be negative, e.g. 4000 BC
-			VariableName: "startYear",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "endTurn",
-		},
-		{
-			VariableType: "varstring",
-			VariableName: "endYear",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "zeroStartYear",
-		},
-		{
-			VariableType: "uint32",
-			VariableName: "zeroEndYear",
-		},
-	})
+	startTurn := unsafeReadUint32(streamReader)
+	startYear := int32(unsafeReadUint32(streamReader)) // can be negative, e.g. 4000 BC
+	endTurn := unsafeReadUint32(streamReader)
+	endYear, err := readVarString(streamReader, "endYear")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read endYear: %w", err)
+	}
+	zeroStartYear := unsafeReadUint32(streamReader)
+	zeroEndYear := unsafeReadUint32(streamReader)
+	fmt.Printf("startTurn=%d startYear=%d endTurn=%d endYear=%q zeroStartYear=%d zeroEndYear=%d\n",
+		startTurn, startYear, endTurn, endYear, zeroStartYear, zeroEndYear)
 
 	allCivs := readCivs(streamReader)
 
