@@ -87,17 +87,6 @@ const (
 	diplomacyRelationshipTypeCount
 )
 
-// facingDirectionNames maps a unit's raw FacingDirection byte to its editor-displayed name.
-var facingDirectionNames = []string{
-	"Random Direction",
-	"Northeast",
-	"East",
-	"Southeast",
-	"Southwest",
-	"West",
-	"Northwest",
-}
-
 type Civ5MapHeader struct {
 	ScenarioVersion        uint8
 	Width                  uint32
