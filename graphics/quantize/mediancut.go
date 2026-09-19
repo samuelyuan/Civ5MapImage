@@ -1,265 +1,223 @@
-// Copyright 2013 Andrew Bonventre. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
+// Package quantize reduces an opaque RGBA image to a small palette and maps pixels onto it.
+// Alpha is ignored throughout.
 package quantize
 
 import (
-	"container/heap"
 	"image"
 	"image/color"
-	"image/draw"
 	"sort"
 )
 
-const (
-	numDimensions = 3
-)
+// rgb is a color with 16 bits per channel.
+type rgb [3]int
 
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
+// colorCount is a distinct color and the number of pixels that have it.
+type colorCount struct {
+	color rgb
+	count int
 }
 
-func max(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
+// colorBox is a set of distinct colors plus the bounding box of their values.
+type colorBox struct {
+	colors   []colorCount
+	min, max rgb
 }
 
-type point [numDimensions]int
-
-type block struct {
-	minCorner, maxCorner point
-	points               []point
-	// The index is needed by update and is maintained by the heap.Interface methods.
-	index int // The index of the item in the heap.
-}
-
-func newBlock(p []point) *block {
-	return &block{
-		minCorner: point{0x00, 0x00, 0x00},
-		maxCorner: point{0xFF, 0xFF, 0xFF},
-		points:    p,
-	}
-}
-
-func (b *block) longestSideIndex() int {
-	m := b.maxCorner[0] - b.minCorner[0]
-	maxIndex := 0
-	for i := 1; i < numDimensions; i++ {
-		diff := b.maxCorner[i] - b.minCorner[i]
-		if diff > m {
-			m = diff
-			maxIndex = i
-		}
-	}
-	return maxIndex
-}
-
-func (b *block) longestSideLength() int {
-	i := b.longestSideIndex()
-	return b.maxCorner[i] - b.minCorner[i]
-}
-
-func (b *block) shrink() {
-	for j := 0; j < numDimensions; j++ {
-		b.minCorner[j] = b.points[0][j]
-		b.maxCorner[j] = b.points[0][j]
-	}
-	for i := 1; i < len(b.points); i++ {
-		for j := 0; j < numDimensions; j++ {
-			b.minCorner[j] = min(b.minCorner[j], b.points[i][j])
-			b.maxCorner[j] = max(b.maxCorner[j], b.points[i][j])
-		}
-	}
-}
-
-type pointSorter struct {
-	points []point
-	by     func(p1, p2 *point) bool
-}
-
-func (p *pointSorter) Len() int {
-	return len(p.points)
-}
-
-func (p *pointSorter) Swap(i, j int) {
-	p.points[i], p.points[j] = p.points[j], p.points[i]
-}
-
-func (p *pointSorter) Less(i, j int) bool {
-	return p.by(&p.points[i], &p.points[j])
-}
-
-// A priorityQueue implements heap.Interface and holds blocks.
-type priorityQueue []*block
-
-func (pq priorityQueue) Len() int { return len(pq) }
-
-func (pq priorityQueue) Less(i, j int) bool {
-	return pq[i].longestSideLength() > pq[j].longestSideLength()
-}
-
-func (pq priorityQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index = i
-	pq[j].index = j
-}
-
-func (pq *priorityQueue) Push(x interface{}) {
-	n := len(*pq)
-	item := x.(*block)
-	item.index = n
-	*pq = append(*pq, item)
-}
-
-func (pq *priorityQueue) Pop() interface{} {
-	old := *pq
-	n := len(old)
-	item := old[n-1]
-	item.index = -1 // for safety
-	*pq = old[:n-1]
-	return item
-}
-
-func (pq *priorityQueue) top() interface{} {
-	n := len(*pq)
-	if n == 0 {
-		return nil
-	}
-	return (*pq)[n-1]
-}
-
-// clip clips r against each image's bounds (after translating into
-// the destination image's co-ordinate space) and shifts the point
-// sp by the same amount as the change in r.Min.
-func clip(dst draw.Image, r *image.Rectangle, src image.Image, sp *image.Point) {
-	orig := r.Min
-	*r = r.Intersect(dst.Bounds())
-	*r = r.Intersect(src.Bounds().Add(orig.Sub(*sp)))
-	dx := r.Min.X - orig.X
-	dy := r.Min.Y - orig.Y
-	if dx == 0 && dy == 0 {
-		return
-	}
-	(*sp).X += dx
-	(*sp).Y += dy
-}
-
-// MedianCutQuantizer constructs a palette with a maximum of
-// NumColor colors by iteratively splitting clusters of color
-// points mapped on a three-dimensional (RGB) Euclidian space.
-// Once the number of clusters is within the specified bounds,
-// the resulting color is computed by averaging those within
-// each grouping.
-type MedianCutQuantizer struct {
-	NumColor int
-}
-
-func (q *MedianCutQuantizer) medianCut(points []point) color.Palette {
-	if q.NumColor == 0 {
-		return color.Palette{}
-	}
-
-	initialBlock := newBlock(points)
-	initialBlock.shrink()
-	pq := &priorityQueue{}
-	heap.Init(pq)
-	heap.Push(pq, initialBlock)
-
-	for pq.Len() < q.NumColor && len(pq.top().(*block).points) > 1 {
-		longestBlock := heap.Pop(pq).(*block)
-		points := longestBlock.points
-		li := longestBlock.longestSideIndex()
-		// TODO: Instead of sorting the entire slice, finding the median using an
-		// algorithm like introselect would give much better performance.
-		sort.Sort(&pointSorter{
-			points: points,
-			by:     func(p1, p2 *point) bool { return p1[li] < p2[li] },
-		})
-		median := len(points) / 2
-		block1 := newBlock(points[:median])
-		block2 := newBlock(points[median:])
-		block1.shrink()
-		block2.shrink()
-		heap.Push(pq, block1)
-		heap.Push(pq, block2)
-	}
-
-	palette := make(color.Palette, q.NumColor)
-	var n int
-	for n = 0; pq.Len() > 0; n++ {
-		block := heap.Pop(pq).(*block)
-		var sum [numDimensions]int
-		for i := 0; i < len(block.points); i++ {
-			for j := 0; j < numDimensions; j++ {
-				sum[j] += block.points[i][j]
+func newColorBox(colors []colorCount) colorBox {
+	box := colorBox{colors: colors, min: colors[0].color, max: colors[0].color}
+	for _, cc := range colors[1:] {
+		for ch, v := range cc.color {
+			if v < box.min[ch] {
+				box.min[ch] = v
+			}
+			if v > box.max[ch] {
+				box.max[ch] = v
 			}
 		}
-		palette[n] = color.RGBA64{
-			R: uint16(sum[0] / len(block.points)),
-			G: uint16(sum[1] / len(block.points)),
-			B: uint16(sum[2] / len(block.points)),
-			A: 0xFFFF,
-		}
 	}
-	// Trim to only the colors present in the image, which
-	// could be less than NumColor.
-	return palette[:n]
+	return box
 }
 
-func (q *MedianCutQuantizer) Quantize(dst *image.Paletted, r image.Rectangle, src image.Image, sp image.Point) {
-	clip(dst, &r, src, &sp)
-	if r.Empty() {
-		return
+// widestChannel returns the channel with the largest value range, and that range.
+func (b colorBox) widestChannel() (channel, span int) {
+	for ch := range b.min {
+		if s := b.max[ch] - b.min[ch]; ch == 0 || s > span {
+			channel, span = ch, s
+		}
+	}
+	return channel, span
+}
+
+// lessOnChannel orders colors by channel first, then the remaining channels, giving a total order.
+func lessOnChannel(a, b rgb, channel int) bool {
+	for i := range a {
+		ch := (channel + i) % len(a)
+		if a[ch] != b[ch] {
+			return a[ch] < b[ch]
+		}
+	}
+	return false
+}
+
+// split sorts the box along its widest channel and cuts it where the cumulative pixel count reaches
+// half, so heavily used colors (not merely distinct ones) drive the cut.
+func (b colorBox) split() (colorBox, colorBox) {
+	channel, _ := b.widestChannel()
+	colors := b.colors
+	sort.Slice(colors, func(i, j int) bool { return lessOnChannel(colors[i].color, colors[j].color, channel) })
+
+	total := 0
+	for _, cc := range colors {
+		total += cc.count
+	}
+	cut, seen := 1, 0
+	for i, cc := range colors {
+		seen += cc.count
+		if seen*2 >= total {
+			cut = i + 1
+			break
+		}
+	}
+	if cut >= len(colors) {
+		cut = len(colors) - 1
+	}
+	return newColorBox(colors[:cut]), newColorBox(colors[cut:])
+}
+
+// average returns the pixel-weighted mean color of the box.
+func (b colorBox) average() color.Color {
+	var sum rgb
+	pixels := 0
+	for _, cc := range b.colors {
+		for ch, v := range cc.color {
+			sum[ch] += v * cc.count
+		}
+		pixels += cc.count
+	}
+	return opaque(rgb{sum[0] / pixels, sum[1] / pixels, sum[2] / pixels})
+}
+
+func opaque(c rgb) color.RGBA64 {
+	return color.RGBA64{R: uint16(c[0]), G: uint16(c[1]), B: uint16(c[2]), A: 0xFFFF}
+}
+
+// BuildPalette returns at most maxColors colors representing src's pixels in r (clipped to src's
+// bounds). If src has no more distinct colors than that, they are used exactly; otherwise median
+// cut weights each color by its pixel count, so a color covering most of the image isn't spread
+// over many entries. The result is deterministic.
+func BuildPalette(src *image.RGBA, r image.Rectangle, maxColors int) color.Palette {
+	r = r.Intersect(src.Bounds())
+	if r.Empty() || maxColors <= 0 {
+		return color.Palette{}
+	}
+	colors := countColors(src, r)
+	if len(colors) <= maxColors {
+		palette := make(color.Palette, len(colors))
+		for i, cc := range colors {
+			palette[i] = opaque(cc.color)
+		}
+		return palette
 	}
 
-	points := make([]point, r.Dx()*r.Dy())
-	colorSet := make(map[uint32]color.Color, q.NumColor)
-	i := 0
+	boxes := []colorBox{newColorBox(colors)}
+	for len(boxes) < maxColors {
+		widest, widestSpan := -1, -1
+		for i, box := range boxes {
+			if len(box.colors) < 2 {
+				continue
+			}
+			if _, span := box.widestChannel(); span > widestSpan {
+				widest, widestSpan = i, span
+			}
+		}
+		if widest < 0 {
+			break
+		}
+		lo, hi := boxes[widest].split()
+		boxes[widest] = lo
+		boxes = append(boxes, hi)
+	}
+
+	palette := make(color.Palette, len(boxes))
+	for i, box := range boxes {
+		palette[i] = box.average()
+	}
+	return palette
+}
+
+// countColors counts pixels per distinct color in r, sorted for determinism.
+func countColors(src *image.RGBA, r image.Rectangle) []colorCount {
+	counts := make(map[uint32]int)
+	// Neighboring pixels usually match, so tally runs before touching the map.
+	var runKey uint32
+	run := 0
 	for y := r.Min.Y; y < r.Max.Y; y++ {
 		for x := r.Min.X; x < r.Max.X; x++ {
-			c := src.At(x, y)
-			r, g, b, _ := c.RGBA()
-			colorSet[(r>>8)<<16|(g>>8)<<8|b>>8] = c
-			points[i][0] = int(r)
-			points[i][1] = int(g)
-			points[i][2] = int(b)
-			i++
+			key := colorKey(src.RGBAAt(x, y))
+			if run > 0 && key == runKey {
+				run++
+				continue
+			}
+			if run > 0 {
+				counts[runKey] += run
+			}
+			runKey, run = key, 1
 		}
 	}
-	if len(colorSet) <= q.NumColor {
-		// No need to quantize since the total number of colors
-		// fits within the palette.
-		dst.Palette = make(color.Palette, len(colorSet))
-		i := 0
-		for _, c := range colorSet {
-			dst.Palette[i] = c
-			i++
-		}
-	} else {
-		dst.Palette = q.medianCut(points)
+	if run > 0 {
+		counts[runKey] += run
 	}
 
-	for y := 0; y < r.Dy(); y++ {
-		for x := 0; x < r.Dx(); x++ {
-			// TODO: this should be done more efficiently.
-			dst.Set(sp.X+x, sp.Y+y, src.At(r.Min.X+x, r.Min.Y+y))
-		}
+	colors := make([]colorCount, 0, len(counts))
+	for key, n := range counts {
+		// An 8-bit channel v widens to 16 bits as v*0x101.
+		colors = append(colors, colorCount{
+			color: rgb{int(key>>16&0xFF) * 0x101, int(key>>8&0xFF) * 0x101, int(key&0xFF) * 0x101},
+			count: n,
+		})
 	}
+	sort.Slice(colors, func(i, j int) bool { return lessOnChannel(colors[i].color, colors[j].color, 0) })
+	return colors
 }
 
-func (q *MedianCutQuantizer) UseExistingPalette(dst *image.Paletted, r image.Rectangle, src image.Image, sp image.Point, palette color.Palette) {
-	dst.Palette = palette
+// colorKey packs a pixel's RGB into 24 bits.
+func colorKey(p color.RGBA) uint32 {
+	return uint32(p.R)<<16 | uint32(p.G)<<8 | uint32(p.B)
+}
 
-	for y := 0; y < r.Dy(); y++ {
-		for x := 0; x < r.Dx(); x++ {
-			// TODO: this should be done more efficiently.
-			dst.Set(sp.X+x, sp.Y+y, src.At(r.Min.X+x, r.Min.Y+y))
+// PaletteMapper resolves pixels to indices of a fixed palette, remembering each color's index
+// across Fill calls. Not safe for concurrent use.
+type PaletteMapper struct {
+	palette color.Palette
+	cache   map[uint32]uint8
+}
+
+func NewPaletteMapper(palette color.Palette) *PaletteMapper {
+	return &PaletteMapper{palette: palette, cache: make(map[uint32]uint8)}
+}
+
+func (m *PaletteMapper) Palette() color.Palette { return m.palette }
+
+// Fill sets dst.Palette and copies src's pixels in r into dst starting at sp, as palette indices.
+// r must lie within src's bounds.
+func (m *PaletteMapper) Fill(dst *image.Paletted, r image.Rectangle, src *image.RGBA, sp image.Point) {
+	dst.Palette = m.palette
+	// Neighboring pixels are usually the same color, so remember the last lookup. Keys are 24-bit,
+	// so all-ones never matches a real color.
+	lastKey, lastIndex := ^uint32(0), uint8(0)
+	for dy := 0; dy < r.Dy(); dy++ {
+		for dx := 0; dx < r.Dx(); dx++ {
+			p := src.RGBAAt(r.Min.X+dx, r.Min.Y+dy)
+			key := colorKey(p)
+			if key != lastKey {
+				index, ok := m.cache[key]
+				if !ok {
+					index = uint8(m.palette.Index(p))
+					m.cache[key] = index
+				}
+				lastKey, lastIndex = key, index
+			}
+			dst.SetColorIndex(sp.X+dx, sp.Y+dy, lastIndex)
 		}
 	}
 }

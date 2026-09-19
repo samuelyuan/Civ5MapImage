@@ -253,7 +253,11 @@ type ColoredText struct {
 
 // cityNameText returns tile (row, col)'s display city name, trimmed at the first null byte.
 func cityNameText(mapData *fileio.Civ5MapData, row, col int) string {
-	return strings.Split(mapData.MapTileImprovements[row][col].CityName, "\x00")[0]
+	name := mapData.MapTileImprovements[row][col].CityName
+	if i := strings.IndexByte(name, 0); i >= 0 {
+		name = name[:i]
+	}
+	return name
 }
 
 // cityLabelPosition returns the anchor point for a tile's city name label: the tile's screen

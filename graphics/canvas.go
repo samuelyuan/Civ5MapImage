@@ -3,6 +3,7 @@ package graphics
 import (
 	"fmt"
 	"image"
+	"image/draw"
 
 	"github.com/fogleman/gg"
 )
@@ -25,12 +26,19 @@ type Canvas interface {
 
 	// Transformations
 	InvertY()
+	// TranslatedInvertY is InvertY with an explicit (tx, ty), for a scratch canvas shifted into a larger canvas's space.
+	TranslatedInvertY(tx, ty float64)
 
 	// Canvas management
 	Resize(width, height int)
 
 	// Text operations
 	DrawString(text string, x, y float64)
+	// MeasureString returns the (w, h) DrawString(text, ...) would occupy.
+	MeasureString(text string) (w, h float64)
+
+	// PasteRegion copies rect from src (read from srcPoint) without alpha-blending.
+	PasteRegion(src image.Image, rect image.Rectangle, srcPoint image.Point)
 
 	// Final output
 	Image() image.Image
@@ -82,12 +90,25 @@ func (d *DrawingContext) InvertY() {
 	d.dc.InvertY()
 }
 
+func (d *DrawingContext) TranslatedInvertY(tx, ty float64) {
+	d.dc.Translate(tx, ty)
+	d.dc.Scale(1, -1)
+}
+
 func (d *DrawingContext) Resize(width, height int) {
 	d.dc = gg.NewContext(width, height)
 }
 
 func (d *DrawingContext) DrawString(text string, x, y float64) {
 	d.dc.DrawString(text, x, y)
+}
+
+func (d *DrawingContext) MeasureString(text string) (w, h float64) {
+	return d.dc.MeasureString(text)
+}
+
+func (d *DrawingContext) PasteRegion(src image.Image, rect image.Rectangle, srcPoint image.Point) {
+	draw.Draw(d.dc.Image().(*image.RGBA), rect, src, srcPoint, draw.Src)
 }
 
 func (d *DrawingContext) Image() image.Image {
@@ -149,6 +170,10 @@ func (m *MockCanvas) InvertY() {
 	m.operations = append(m.operations, "InvertY()")
 }
 
+func (m *MockCanvas) TranslatedInvertY(tx, ty float64) {
+	m.operations = append(m.operations, fmt.Sprintf("TranslatedInvertY(%.2f, %.2f)", tx, ty))
+}
+
 func (m *MockCanvas) Resize(width, height int) {
 	m.operations = append(m.operations,
 		fmt.Sprintf("Resize(%d, %d)", width, height))
@@ -159,6 +184,16 @@ func (m *MockCanvas) Resize(width, height int) {
 func (m *MockCanvas) DrawString(text string, x, y float64) {
 	m.operations = append(m.operations,
 		fmt.Sprintf("DrawString(\"%s\", %.2f, %.2f)", text, x, y))
+}
+
+// MeasureString approximates gg's default font (basicfont.Face7x13: 7px advance, 13px tall).
+func (m *MockCanvas) MeasureString(text string) (w, h float64) {
+	return float64(len(text)) * 7, 13
+}
+
+func (m *MockCanvas) PasteRegion(src image.Image, rect image.Rectangle, srcPoint image.Point) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("PasteRegion(%v, src@%v)", rect, srcPoint))
 }
 
 func (m *MockCanvas) Image() image.Image {

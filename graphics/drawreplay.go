@@ -207,27 +207,123 @@ func resetCityOwnerIndexMap(mapData *fileio.Civ5MapData, replayData *fileio.Civ5
 	}
 }
 
-// renderReplayFrame draws the current state of mapData as a political map and quantizes it
-// into a paletted image suitable for a GIF frame. The first call (palette == nil) computes a
-// fresh color palette from the frame; later calls should pass that palette back in so every
-// frame is quantized against the same colors, keeping the animation from flickering between
-// slightly different palettes turn to turn. It returns the frame and the palette to reuse on
-// the next call.
-func renderReplayFrame(renderer *MapRenderer, canvas Canvas, mapData *fileio.Civ5MapData, palette color.Palette) (*image.Paletted, color.Palette) {
-	mapImage := renderer.DrawPoliticalMap(canvas, mapData)
+// dirtyTilesForEvent returns the (row, col) tiles applyReplayEvent mutates for event; keep in sync with its switch.
+func dirtyTilesForEvent(event fileio.Civ5ReplayEvent) []tileCoord {
+	switch event.TypeId {
+	case ReplayEventCityFounded, ReplayEventTilesClaimed, ReplayEventCityTransferred, ReplayEventTilesRazed:
+		tiles := make([]tileCoord, len(event.Tiles))
+		for i, tile := range event.Tiles {
+			tiles[i] = tileCoord{tile.Y, tile.X}
+		}
+		return tiles
+	default:
+		return nil
+	}
+}
+
+// expandWithNeighbors adds each dirty tile's in-bounds hex neighbors: a tile's border/road depends
+// on its neighbors' state, so they must be repainted too.
+func expandWithNeighbors(dirty tileSet, mapHeight, mapWidth int) tileSet {
+	expanded := make(tileSet, len(dirty)*3)
+	for rc := range dirty {
+		expanded[rc] = true
+		for _, n := range fileio.GetNeighbors(rc.col, rc.row) {
+			nx, ny := n[0], n[1]
+			if nx >= 0 && ny >= 0 && nx < mapWidth && ny < mapHeight {
+				expanded[tileCoord{ny, nx}] = true
+			}
+		}
+	}
+	return expanded
+}
+
+// quantizeCanvasImage quantizes canvas into a paletted GIF frame. Pass nil palette to compute a fresh
+// one; pass the returned palette back on later calls so the animation doesn't flicker between palettes.
+func quantizeCanvasImage(canvas Canvas, palette color.Palette) (*image.Paletted, color.Palette) {
+	mapImage := canvasRGBA(canvas)
 	bounds := mapImage.Bounds()
-
-	palettedImage := image.NewPaletted(bounds, nil)
-	quantizer := quantize.MedianCutQuantizer{NumColor: 256}
-
 	if palette == nil {
-		quantizer.Quantize(palettedImage, bounds, mapImage, image.ZP)
-		palette = palettedImage.Palette
-	} else {
-		quantizer.UseExistingPalette(palettedImage, bounds, mapImage, image.ZP, palette)
+		palette = quantize.BuildPalette(mapImage, bounds, 256)
+	}
+	palettedImage := image.NewPaletted(bounds, palette)
+	quantize.NewPaletteMapper(palette).Fill(palettedImage, bounds, mapImage, bounds.Min)
+	return palettedImage, palette
+}
+
+// canvasRGBA returns the canvas's pixels; the quantizer reads *image.RGBA directly.
+func canvasRGBA(canvas Canvas) *image.RGBA {
+	return canvas.Image().(*image.RGBA)
+}
+
+// clusterGap (pixels): rects closer than this merge in clusterRects - enough to bridge adjacent tiles, not distant clusters.
+const clusterGap = 8
+
+// clusterRects merges rects within clusterGap of each other into disjoint bounding boxes, so
+// scattered dirty tiles don't collapse into one box spanning everything in between.
+func clusterRects(rects []image.Rectangle) []image.Rectangle {
+	clusters := append([]image.Rectangle(nil), rects...)
+	for {
+		merged := false
+		for i := 0; i < len(clusters) && !merged; i++ {
+			for j := i + 1; j < len(clusters); j++ {
+				if clusters[i].Inset(-clusterGap).Overlaps(clusters[j]) {
+					clusters[i] = clusters[i].Union(clusters[j])
+					clusters = append(clusters[:j], clusters[j+1:]...)
+					merged = true
+					break
+				}
+			}
+		}
+		if !merged {
+			return clusters
+		}
+	}
+}
+
+// quantizeRegion quantizes just rect of canvas into a small *image.Paletted positioned at rect -
+// a GIF frame that, with DisposalNone, leaves everything outside rect as earlier frames drew it.
+func quantizeRegion(canvas Canvas, mapper *quantize.PaletteMapper, rect image.Rectangle) *image.Paletted {
+	dst := image.NewPaletted(rect, mapper.Palette())
+	mapper.Fill(dst, rect, canvasRGBA(canvas), rect.Min)
+	return dst
+}
+
+// renderReplayFrame fully redraws mapData (tile-major, matching RedrawDirtyTiles's rendering) and
+// quantizes it. Only the first frame needs this; later frames repaint just what changed.
+func renderReplayFrame(renderer *MapRenderer, canvas Canvas, mapData *fileio.Civ5MapData, palette color.Palette) (*image.Paletted, color.Palette) {
+	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+	return quantizeCanvasImage(canvas, palette)
+}
+
+// appendFirstGifFrame appends turn 0's full-size frame and returns the palette it fixes for all later frames.
+func appendFirstGifFrame(outGif *gif.GIF, renderer *MapRenderer, canvas Canvas, mapData *fileio.Civ5MapData) color.Palette {
+	palettedImage, palette := renderReplayFrame(renderer, canvas, mapData, nil)
+	outGif.Image = append(outGif.Image, palettedImage)
+	outGif.Delay = append(outGif.Delay, GIF_DELAY)
+	outGif.Disposal = append(outGif.Disposal, gif.DisposalNone)
+	return palette
+}
+
+// appendGifFrames repaints dirty's tiles and appends one GIF block per changed region (or one 1x1
+// no-op if nothing changed). All blocks but the last have delay 0, so a turn advances the
+// animation by exactly GIF_DELAY.
+func appendGifFrames(outGif *gif.GIF, renderer *MapRenderer, canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int, mapper *quantize.PaletteMapper, dirty tileSet) {
+	dirtyRects := renderer.RedrawDirtyTiles(canvas, mapData, mapHeight, mapWidth, expandWithNeighbors(dirty, mapHeight, mapWidth))
+
+	regions := []image.Rectangle{image.Rect(0, 0, 1, 1)}
+	if len(dirtyRects) > 0 {
+		regions = clusterRects(dirtyRects)
 	}
 
-	return palettedImage, palette
+	for i, rect := range regions {
+		outGif.Image = append(outGif.Image, quantizeRegion(canvas, mapper, rect))
+		delay := 0
+		if i == len(regions)-1 {
+			delay = GIF_DELAY
+		}
+		outGif.Delay = append(outGif.Delay, delay)
+		outGif.Disposal = append(outGif.Disposal, gif.DisposalNone)
+	}
 }
 
 // DrawReplay renders the given map/replay pair into an animated GIF at outputFilename.
@@ -255,27 +351,36 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 
 	maxCityId := 0
 	var mapPalette color.Palette
+	var paletteMapper *quantize.PaletteMapper
 
 	// Initialize canvas and renderer once outside the loop
 	config := DefaultDrawingConfig()
 	renderer := NewMapRenderer(config)
 	canvas := NewDrawingContext(800, 600) // Will be resized by renderer
 
-	for _, turn := range turnNumbers {
+	mapHeight := len(mapData.MapTiles)
+	mapWidth := len(mapData.MapTiles[0])
+
+	for turnIndex, turn := range turnNumbers {
 		fmt.Printf("Drawing frame for turn %d...\n", turn)
 
+		dirty := tileSet{}
 		for i, event := range replayTurns[turn] {
 			fmt.Println("Replay event", i, ":", event)
 			maxCityId = applyReplayEvent(mapData, event, maxCityId)
+			for _, rc := range dirtyTilesForEvent(event) {
+				dirty[rc] = true
+			}
 		}
 
 		fmt.Println("Drawing map for turn", turn)
 
-		var palettedImage *image.Paletted
-		palettedImage, mapPalette = renderReplayFrame(renderer, canvas, mapData, mapPalette)
-
-		outGif.Image = append(outGif.Image, palettedImage)
-		outGif.Delay = append(outGif.Delay, GIF_DELAY)
+		if turnIndex == 0 {
+			mapPalette = appendFirstGifFrame(outGif, renderer, canvas, mapData)
+			paletteMapper = quantize.NewPaletteMapper(mapPalette)
+			continue
+		}
+		appendGifFrames(outGif, renderer, canvas, mapData, mapHeight, mapWidth, paletteMapper, dirty)
 	}
 
 	outputFile, err := os.OpenFile(outputFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
