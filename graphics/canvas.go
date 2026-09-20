@@ -6,10 +6,17 @@ import (
 	"image/draw"
 
 	"github.com/fogleman/gg"
+
+	"github.com/samuelyuan/Civ5MapImage/graphics/raster"
 )
 
-// Canvas represents an abstract drawing surface
-// This allows us to decouple business logic from specific graphics libraries
+var (
+	_ Canvas          = (*DrawingContext)(nil)
+	_ FlippableCanvas = (*DrawingContext)(nil)
+	_ Canvas          = (*raster.PalettedCanvas)(nil)
+)
+
+// Canvas is an abstract drawing surface, decoupling rendering from any graphics library.
 type Canvas interface {
 	// Basic drawing operations
 	DrawRegularPolygon(sides int, x, y, radius, rotation float64)
@@ -23,11 +30,6 @@ type Canvas interface {
 	// Fill and stroke operations
 	Fill()
 	Stroke()
-
-	// Transformations
-	InvertY()
-	// TranslatedInvertY is InvertY with an explicit (tx, ty), for a scratch canvas shifted into a larger canvas's space.
-	TranslatedInvertY(tx, ty float64)
 
 	// Canvas management
 	Resize(width, height int)
@@ -45,12 +47,18 @@ type Canvas interface {
 	SavePNG(filename string) error
 }
 
-// DrawingContext wraps the gg.Context to implement our Canvas interface
+// FlippableCanvas is a Canvas that can flip its y axis, for the maps drawn in the file's y-up space.
+type FlippableCanvas interface {
+	Canvas
+	InvertY()
+}
+
+// DrawingContext implements Canvas over a gg.Context.
 type DrawingContext struct {
 	dc *gg.Context
 }
 
-// NewDrawingContext creates a new drawing context with the specified dimensions
+// NewDrawingContext returns a width x height drawing context.
 func NewDrawingContext(width, height int) *DrawingContext {
 	return &DrawingContext{
 		dc: gg.NewContext(width, height),
@@ -90,11 +98,6 @@ func (d *DrawingContext) InvertY() {
 	d.dc.InvertY()
 }
 
-func (d *DrawingContext) TranslatedInvertY(tx, ty float64) {
-	d.dc.Translate(tx, ty)
-	d.dc.Scale(1, -1)
-}
-
 func (d *DrawingContext) Resize(width, height int) {
 	d.dc = gg.NewContext(width, height)
 }
@@ -119,7 +122,7 @@ func (d *DrawingContext) SavePNG(filename string) error {
 	return gg.SavePNG(filename, d.dc.Image())
 }
 
-// MockCanvas for testing - implements Canvas interface without actual drawing
+// MockCanvas is a Canvas that records operations instead of drawing, for tests.
 type MockCanvas struct {
 	operations    []string
 	width, height int
@@ -170,10 +173,6 @@ func (m *MockCanvas) InvertY() {
 	m.operations = append(m.operations, "InvertY()")
 }
 
-func (m *MockCanvas) TranslatedInvertY(tx, ty float64) {
-	m.operations = append(m.operations, fmt.Sprintf("TranslatedInvertY(%.2f, %.2f)", tx, ty))
-}
-
 func (m *MockCanvas) Resize(width, height int) {
 	m.operations = append(m.operations,
 		fmt.Sprintf("Resize(%d, %d)", width, height))
@@ -186,7 +185,7 @@ func (m *MockCanvas) DrawString(text string, x, y float64) {
 		fmt.Sprintf("DrawString(\"%s\", %.2f, %.2f)", text, x, y))
 }
 
-// MeasureString approximates gg's default font (basicfont.Face7x13: 7px advance, 13px tall).
+// MeasureString approximates the default font (basicfont.Face7x13: 7px advance, 13px tall).
 func (m *MockCanvas) MeasureString(text string) (w, h float64) {
 	return float64(len(text)) * 7, 13
 }
@@ -207,7 +206,7 @@ func (m *MockCanvas) SavePNG(filename string) error {
 	return nil
 }
 
-// GetOperations returns the list of drawing operations for testing
+// GetOperations returns the recorded operations.
 func (m *MockCanvas) GetOperations() []string {
 	return m.operations
 }

@@ -100,7 +100,7 @@ func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 
 // renderMap runs a physical/political render+save, differing only in which MapRenderer method
 // produces the image (passed as a method expression, e.g. (*graphics.MapRenderer).DrawPhysicalMap).
-func renderMap(mapData *fileio.Civ5MapData, outputFilename string, draw func(*graphics.MapRenderer, graphics.Canvas, *fileio.Civ5MapData) image.Image) {
+func renderMap(mapData *fileio.Civ5MapData, outputFilename string, draw func(*graphics.MapRenderer, graphics.FlippableCanvas, *fileio.Civ5MapData) image.Image) {
 	config := graphics.DefaultDrawingConfig()
 	renderer := graphics.NewMapRenderer(config)
 	canvas := graphics.NewDrawingContext(800, 600)
@@ -124,6 +124,9 @@ func runReplayMode(args cliArgs) {
 
 	validateMapReplayCompatibility(args.inputFilename, mapData, replayData)
 
+	if err := fileio.PrepareReplay(mapData, replayData); err != nil {
+		log.Fatal("Failed to prepare replay: ", err)
+	}
 	if err := graphics.DrawReplay(mapData, replayData, args.outputFilename, args.maxTurns); err != nil {
 		log.Fatal("Failed to draw replay: ", err)
 	}

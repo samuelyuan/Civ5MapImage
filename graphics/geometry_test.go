@@ -2,10 +2,12 @@ package graphics
 
 import (
 	"image/color"
+	"math"
 	"reflect"
 	"testing"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
+	"github.com/samuelyuan/Civ5MapImage/graphics/raster"
 )
 
 func TestInvertedRow(t *testing.T) {
@@ -28,7 +30,7 @@ func TestInvertedRow(t *testing.T) {
 func TestRiverEdgesForTileAllEdges(t *testing.T) {
 	const cx, cy, radius = 100.0, 50.0, 16.0
 	// bit0 = east, bit1 = southeast, bit2 = southwest
-	edges := RiverEdgesForTile(0b111, cx, cy, radius)
+	edges := RiverEdgesForTile(0b111, cx, cy, mapLayout(radius))
 
 	want := []Line{
 		getHexEdge(3, cx, cy, radius), // southwest
@@ -41,7 +43,7 @@ func TestRiverEdgesForTileAllEdges(t *testing.T) {
 }
 
 func TestRiverEdgesForTileNoRiver(t *testing.T) {
-	if edges := RiverEdgesForTile(0, 100, 50, 16); edges != nil {
+	if edges := RiverEdgesForTile(0, 100, 50, mapLayout(16)); edges != nil {
 		t.Errorf("RiverEdgesForTile(0) = %v, want nil", edges)
 	}
 }
@@ -58,7 +60,7 @@ func TestRiverEdgesForTileSingleBits(t *testing.T) {
 		{"east only", 0b001, 5},
 	}
 	for _, tt := range tests {
-		edges := RiverEdgesForTile(tt.riverData, cx, cy, radius)
+		edges := RiverEdgesForTile(tt.riverData, cx, cy, mapLayout(radius))
 		want := []Line{getHexEdge(tt.wantEdge, cx, cy, radius)}
 		if !reflect.DeepEqual(edges, want) {
 			t.Errorf("%s: RiverEdgesForTile(%b) = %v, want %v", tt.name, tt.riverData, edges, want)
@@ -80,7 +82,7 @@ func newRoadGeometryTestMap(routeType0, routeType1 int, cityName1 string) *filei
 
 func TestRoadSegmentsForTileNoRoute(t *testing.T) {
 	mapData := newRoadGeometryTestMap(255, 0, "")
-	if segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, 16.0); segments != nil {
+	if segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, mapLayout(16.0)); segments != nil {
 		t.Errorf("RoadSegmentsForTile() with RouteType 255 = %v, want nil", segments)
 	}
 }
@@ -89,14 +91,14 @@ func TestRoadSegmentsForTileConnectsToNeighborWithRoute(t *testing.T) {
 	const radius = 16.0
 	mapData := newRoadGeometryTestMap(0, 0, "") // both tiles have a road
 
-	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, radius)
+	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, mapLayout(radius))
 	if len(segments) != 1 {
 		t.Fatalf("RoadSegmentsForTile() = %d segments, want 1: %v", len(segments), segments)
 	}
 
 	seg := segments[0]
-	x1, y1 := fileio.GetImagePosition(0, 0, radius)
-	x2, y2 := fileio.GetImagePosition(0, 1, radius)
+	x1, y1 := GetImagePosition(0, 0, radius)
+	x2, y2 := GetImagePosition(0, 1, radius)
 	wantLine := Line{X1: x1, Y1: y1, X2: (x1 + x2) / 2.0, Y2: (y1 + y2) / 2.0}
 	if seg.Line != wantLine {
 		t.Errorf("segment line = %+v, want %+v", seg.Line, wantLine)
@@ -108,7 +110,7 @@ func TestRoadSegmentsForTileConnectsToNeighborWithRoute(t *testing.T) {
 
 func TestRoadSegmentsForTileRailroadStyle(t *testing.T) {
 	mapData := newRoadGeometryTestMap(1, 1, "") // railroad
-	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, 16.0)
+	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, mapLayout(16.0))
 	if len(segments) != 1 {
 		t.Fatalf("RoadSegmentsForTile() = %d segments, want 1", len(segments))
 	}
@@ -121,7 +123,7 @@ func TestRoadSegmentsForTileRailroadStyle(t *testing.T) {
 func TestRoadSegmentsForTileConnectsToCityWithNoRoute(t *testing.T) {
 	// Neighbor has RouteType 255 (no route) but has a city name -- should still connect.
 	mapData := newRoadGeometryTestMap(0, 255, "Rome")
-	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, 16.0)
+	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, mapLayout(16.0))
 	if len(segments) != 1 {
 		t.Fatalf("RoadSegmentsForTile() to city with no route = %d segments, want 1", len(segments))
 	}
@@ -130,7 +132,7 @@ func TestRoadSegmentsForTileConnectsToCityWithNoRoute(t *testing.T) {
 func TestRoadSegmentsForTileSkipsDisconnectedNeighbor(t *testing.T) {
 	// Neighbor has no route and no city -- should not connect.
 	mapData := newRoadGeometryTestMap(0, 255, "")
-	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, 16.0)
+	segments := RoadSegmentsForTile(mapData, 1, 2, 0, 0, mapLayout(16.0))
 	if len(segments) != 0 {
 		t.Errorf("RoadSegmentsForTile() to disconnected neighbor = %d segments, want 0", len(segments))
 	}
@@ -143,7 +145,7 @@ func TestRoadSegmentsForTileSkipsOutOfBoundsNeighbor(t *testing.T) {
 			{{X: 0, Y: 0, RouteType: 0, CityId: -1}},
 		},
 	}
-	segments := RoadSegmentsForTile(mapData, 1, 1, 0, 0, 16.0)
+	segments := RoadSegmentsForTile(mapData, 1, 1, 0, 0, mapLayout(16.0))
 	if len(segments) != 0 {
 		t.Errorf("RoadSegmentsForTile() on 1x1 map = %d segments, want 0", len(segments))
 	}
@@ -189,7 +191,7 @@ func TestBorderSegmentsForTileDifferentOwnerDrawsBorder(t *testing.T) {
 		t.Fatalf("BorderSegmentsForTile() = %d segments, want 1: %v", len(segments), segments)
 	}
 
-	x1, y1 := fileio.GetImagePosition(0, 0, radius)
+	x1, y1 := GetImagePosition(0, 0, radius)
 	renderColor := civColorMap["PLAYERCOLOR_BLACK"]
 	wantLine := getHexEdge(5, x1, y1, radius-1) // neighbor (1,0) is edge index 5 for an even row
 	if segments[0].Line != wantLine {
@@ -234,7 +236,7 @@ func TestPhysicalCityNameLabel(t *testing.T) {
 
 	label := PhysicalCityNameLabel(mapData, mapHeight, mapWidth, 0, 0, radius)
 
-	wantX, wantY := cityLabelPosition(mapHeight, 0, 0, radius, "Rome")
+	wantX, wantY := cityLabelPosition(mapLayout(radius), mapHeight, 0, 0, "Rome")
 	if label.Text != "Rome" || label.X != wantX || label.Y != wantY {
 		t.Errorf("PhysicalCityNameLabel() = %+v, want {Text:Rome X:%v Y:%v}", label, wantX, wantY)
 	}
@@ -255,7 +257,7 @@ func TestPoliticalCityNameLabelKnownColor(t *testing.T) {
 	const radius = 16.0
 	mapData := newLabelGeometryTestMap("Rome", 0, "PLAYERCOLOR_BLACK", "CIVILIZATION_ROME")
 
-	label := PoliticalCityNameLabel(mapData, 1, 1, 0, 0, radius)
+	label := PoliticalCityNameLabel(mapData, 1, 1, 0, 0, mapLayout(radius))
 
 	renderColor := civColorMap["PLAYERCOLOR_BLACK"]
 	wantColor := blendColor(renderColor.InnerColor, color.RGBA{255, 255, 255, 255}, 0.2)
@@ -267,7 +269,7 @@ func TestPoliticalCityNameLabelKnownColor(t *testing.T) {
 
 func TestPoliticalCityNameLabelUnknownColorFallsBackToWhite(t *testing.T) {
 	mapData := newLabelGeometryTestMap("Rome", -1, "", "")
-	label := PoliticalCityNameLabel(mapData, 1, 1, 0, 0, 16.0)
+	label := PoliticalCityNameLabel(mapData, 1, 1, 0, 0, mapLayout(16.0))
 	if label.R != 255 || label.G != 255 || label.B != 255 {
 		t.Errorf("PoliticalCityNameLabel() color = (%d,%d,%d), want white fallback", label.R, label.G, label.B)
 	}
@@ -282,8 +284,8 @@ func TestPhysicalHexTile(t *testing.T) {
 
 	hex := PhysicalHexTile(mapData, 0, 0, radius)
 
-	wantX, wantY := fileio.GetImagePosition(0, 0, radius)
-	oceanColor := fileio.GetPhysicalMapTileColor("TERRAIN_OCEAN")
+	wantX, wantY := GetImagePosition(0, 0, radius)
+	oceanColor := GetPhysicalMapTileColor("TERRAIN_OCEAN")
 	if hex.X != wantX || hex.Y != wantY {
 		t.Errorf("PhysicalHexTile() position = (%v,%v), want (%v,%v)", hex.X, hex.Y, wantX, wantY)
 	}
@@ -294,9 +296,9 @@ func TestPhysicalHexTile(t *testing.T) {
 
 func TestPoliticalHexTileWater(t *testing.T) {
 	mapData := newTerritoryTestMapData(1 /* TERRAIN_OCEAN */, -1, "", "")
-	hex, cityColor := PoliticalHexTile(mapData, 0, 0, 16.0)
+	hex, cityColor := PoliticalHexTile(mapData, 0, 0, mapLayout(16.0))
 
-	oceanColor := fileio.GetPhysicalMapTileColor("TERRAIN_OCEAN")
+	oceanColor := GetPhysicalMapTileColor("TERRAIN_OCEAN")
 	if hex.R != oceanColor.R || hex.G != oceanColor.G || hex.B != oceanColor.B {
 		t.Errorf("PoliticalHexTile() water color = (%d,%d,%d), want ocean color %+v", hex.R, hex.G, hex.B, oceanColor)
 	}
@@ -307,9 +309,9 @@ func TestPoliticalHexTileWater(t *testing.T) {
 
 func TestPoliticalHexTileUnownedLand(t *testing.T) {
 	mapData := newTerritoryTestMapData(0 /* TERRAIN_GRASS */, -1, "", "")
-	hex, _ := PoliticalHexTile(mapData, 0, 0, 16.0)
+	hex, _ := PoliticalHexTile(mapData, 0, 0, mapLayout(16.0))
 
-	grassColor := fileio.GetPhysicalMapTileColor("TERRAIN_GRASS")
+	grassColor := GetPhysicalMapTileColor("TERRAIN_GRASS")
 	if hex.R != grassColor.R || hex.G != grassColor.G || hex.B != grassColor.B {
 		t.Errorf("PoliticalHexTile() unowned color = (%d,%d,%d), want grass color %+v", hex.R, hex.G, hex.B, grassColor)
 	}
@@ -317,7 +319,7 @@ func TestPoliticalHexTileUnownedLand(t *testing.T) {
 
 func TestPoliticalHexTileOwnedKnownColor(t *testing.T) {
 	mapData := newTerritoryTestMapData(0, 0, "PLAYERCOLOR_BLACK", "CIVILIZATION_ROME")
-	hex, cityColor := PoliticalHexTile(mapData, 0, 0, 16.0)
+	hex, cityColor := PoliticalHexTile(mapData, 0, 0, mapLayout(16.0))
 
 	renderColor := civColorMap["PLAYERCOLOR_BLACK"]
 	wantBackground := blendColor(renderColor.OuterColor, color.RGBA{255, 255, 255, 255}, 0.2)
@@ -331,7 +333,7 @@ func TestPoliticalHexTileOwnedKnownColor(t *testing.T) {
 
 func TestPoliticalHexTileOwnedUnknownColor(t *testing.T) {
 	mapData := newTerritoryTestMapData(0, 0, "PLAYERCOLOR_DOES_NOT_EXIST", "CIVILIZATION_ROME")
-	hex, _ := PoliticalHexTile(mapData, 0, 0, 16.0)
+	hex, _ := PoliticalHexTile(mapData, 0, 0, mapLayout(16.0))
 	if hex.R != 0 || hex.G != 0 || hex.B != 0 {
 		t.Errorf("PoliticalHexTile() unknown-owner color = (%d,%d,%d), want black", hex.R, hex.G, hex.B)
 	}
@@ -342,7 +344,7 @@ func TestTileEntitiesMountain(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
 	}
-	entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255})
+	entities := TileEntities(mapData, 0, 0, mapLayout(16.0), color.RGBA{255, 255, 255, 255})
 	if len(entities) != 1 || entities[0].Type != EntityMountain {
 		t.Fatalf("TileEntities() = %+v, want a single EntityMountain", entities)
 	}
@@ -354,7 +356,7 @@ func TestTileEntitiesCity(t *testing.T) {
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
 	}
 	cityColor := color.RGBA{10, 20, 30, 255}
-	entities := TileEntities(mapData, 0, 0, 16.0, cityColor)
+	entities := TileEntities(mapData, 0, 0, mapLayout(16.0), cityColor)
 	if len(entities) != 1 || entities[0].Type != EntityCity {
 		t.Fatalf("TileEntities() = %+v, want a single EntityCity", entities)
 	}
@@ -368,7 +370,7 @@ func TestTileEntitiesMountainAndCity(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
 	}
-	entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255})
+	entities := TileEntities(mapData, 0, 0, mapLayout(16.0), color.RGBA{255, 255, 255, 255})
 	if len(entities) != 2 || entities[0].Type != EntityMountain || entities[1].Type != EntityCity {
 		t.Fatalf("TileEntities() = %+v, want [EntityMountain, EntityCity] in that order", entities)
 	}
@@ -379,7 +381,7 @@ func TestTileEntitiesNone(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
 	}
-	if entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255}); entities != nil {
+	if entities := TileEntities(mapData, 0, 0, mapLayout(16.0), color.RGBA{255, 255, 255, 255}); entities != nil {
 		t.Errorf("TileEntities() = %v, want nil", entities)
 	}
 }
@@ -389,7 +391,112 @@ func TestTileEntitiesNoImprovementDataIsSafe(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{},
 	}
-	if entities := TileEntities(mapData, 0, 0, 16.0, color.RGBA{255, 255, 255, 255}); entities != nil {
+	if entities := TileEntities(mapData, 0, 0, mapLayout(16.0), color.RGBA{255, 255, 255, 255}); entities != nil {
 		t.Errorf("TileEntities() with no improvement data = %v, want nil", entities)
+	}
+}
+
+func TestGetHexEdgeJoinsConsecutiveVertices(t *testing.T) {
+	for i := 0; i < 6; i++ {
+		edge := getHexEdge(i, 5, 7, 16)
+		x1, y1 := hexVertex(i, 5, 7, 16)
+		x2, y2 := hexVertex(i+1, 5, 7, 16)
+		if edge.X1 != x1 || edge.Y1 != y1 || edge.X2 != x2 || edge.Y2 != y2 {
+			t.Errorf("edge %d = %+v, want (%v, %v) to (%v, %v)", i, edge, x1, y1, x2, y2)
+		}
+	}
+}
+
+// The hexagon the canvas draws (rotation pi/2, pointy-top) must be the hexVertex hexagon, so the tile grid,
+// the fills and the edge math all describe one shape.
+func TestHexagonPolygonMatchesHexVertex(t *testing.T) {
+	hex := raster.RegularPolygon(6, 30, 40, 16, math.Pi/2)
+	for i, p := range hex {
+		wantX, wantY := hexVertex(i, 30, 40, 16)
+		if math.Abs(p.X-wantX) > 1e-9 || math.Abs(p.Y-wantY) > 1e-9 {
+			t.Errorf("vertex %d = %v, want (%v, %v)", i, p, wantX, wantY)
+		}
+	}
+}
+
+// The pixel layout is the map layout flipped against the canvas height: positions, hex edges and marks all mirror.
+func TestPixelLayoutMirrorsTheMapLayout(t *testing.T) {
+	const radius, canvasHeight = 16.0, 400
+	up, down := mapLayout(radius), pixelLayout(radius, canvasHeight)
+
+	for _, tile := range [][2]int{{0, 0}, {1, 0}, {3, 4}, {8, 11}} {
+		ux, uy := up.center(tile[0], tile[1])
+		dx, dy := down.center(tile[0], tile[1])
+		if dx != ux || dy != canvasHeight-uy {
+			t.Errorf("tile %v: pixel center (%v, %v), want (%v, %v)", tile, dx, dy, ux, canvasHeight-uy)
+		}
+
+		for edge := 0; edge < 6; edge++ {
+			want := up.hexEdge(edge, ux, uy)
+			got := down.hexEdge(edge, dx, dy)
+			if math.Abs(got.X1-want.X1) > 1e-9 || math.Abs(got.X2-want.X2) > 1e-9 ||
+				math.Abs(got.Y1-(canvasHeight-want.Y1)) > 1e-9 || math.Abs(got.Y2-(canvasHeight-want.Y2)) > 1e-9 {
+				t.Errorf("tile %v edge %d: pixel edge %+v is not the mirror of %+v", tile, edge, got, want)
+			}
+		}
+	}
+}
+
+// A mountain points up and a city icon sits slightly above center in both layouts.
+func TestMarksPointTheSameWayInBothLayouts(t *testing.T) {
+	mr := NewMapRenderer(DefaultDrawingConfig())
+
+	mountain := func(l tileLayout) []string {
+		canvas := NewMockCanvas(100, 100)
+		mr.DrawMountain(canvas, l, 10, 20)
+		return canvas.GetOperations()
+	}
+	if got := mountain(mapLayout(16)); got[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 3.14)" || got[3] != "DrawRegularPolygon(3, 10.00, 28.00, 8.00, 3.14)" {
+		t.Errorf("map layout mountain = %v", got)
+	}
+	if got := mountain(pixelLayout(16, 100)); got[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 0.00)" || got[3] != "DrawRegularPolygon(3, 10.00, 12.00, 8.00, 0.00)" {
+		t.Errorf("pixel layout mountain = %v", got)
+	}
+
+	icon := func(l tileLayout) string {
+		canvas := NewMockCanvas(100, 100)
+		mr.DrawCityIcon(canvas, l, 10, 20, mountainBaseColor)
+		return canvas.GetOperations()[0]
+	}
+	if got, want := icon(mapLayout(16)), "DrawRectangle(6.80, 16.80, 8.00, 8.00)"; got != want {
+		t.Errorf("map layout city icon = %q, want %q", got, want)
+	}
+	if got, want := icon(pixelLayout(16, 100)), "DrawRectangle(6.80, 15.20, 8.00, 8.00)"; got != want {
+		t.Errorf("pixel layout city icon = %q, want %q", got, want)
+	}
+}
+
+// The pixel layout centers a label on its own tile at any map height; the map layout shifts it half a tile sideways when the height is odd.
+func TestPixelLayoutLabelIsCenteredOnItsTile(t *testing.T) {
+	const radius, mapHeight = 16.0, 7
+	l := pixelLayout(radius, 400)
+	for row := 0; row < mapHeight; row++ {
+		x, y := l.center(row, 3)
+		labelX, labelY := cityLabelPosition(l, mapHeight, row, 3, "Rome")
+		if labelX != x-12 || labelY != y-radius/2 {
+			t.Errorf("row %d: label at (%v, %v), want (%v, %v)", row, labelX, labelY, x-12, y-radius/2)
+		}
+	}
+}
+
+func TestGetImagePosition(t *testing.T) {
+	x, y := GetImagePosition(0, 0, 16.0)
+	angle := math.Pi / 6
+	wantX := 16.0 * 1.5
+	wantY := 16.0
+	if math.Abs(x-wantX) > 1e-9 || math.Abs(y-wantY) > 1e-9 {
+		t.Errorf("GetImagePosition(0, 0, 16.0) = (%v, %v), want (%v, %v)", x, y, wantX, wantY)
+	}
+
+	// Odd row should shift x by radius*cos(angle)
+	xOdd, _ := GetImagePosition(1, 0, 16.0)
+	wantXOdd := wantX + 16.0*math.Cos(angle)
+	if math.Abs(xOdd-wantXOdd) > 1e-9 {
+		t.Errorf("GetImagePosition(1, 0, 16.0) x = %v, want %v", xOdd, wantXOdd)
 	}
 }

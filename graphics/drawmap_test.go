@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"reflect"
-	"sort"
 	"testing"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
@@ -41,7 +39,7 @@ func TestDrawMountain(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(100, 100)
 
-	mr.DrawMountain(canvas, 10, 20)
+	mr.DrawMountain(canvas, mapLayout(mr.config.Radius), 10, 20)
 
 	ops := canvas.GetOperations()
 	// Expect base triangle + color + fill, then peak triangle + color + fill = 6 ops
@@ -60,7 +58,7 @@ func TestDrawCityIcon(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(100, 100)
 
-	mr.DrawCityIcon(canvas, 10, 20, color.RGBA{0, 0, 0, 255})
+	mr.DrawCityIcon(canvas, mapLayout(mr.config.Radius), 10, 20, color.RGBA{0, 0, 0, 255})
 
 	ops := canvas.GetOperations()
 	if len(ops) != 3 {
@@ -311,7 +309,7 @@ func TestDrawPoliticalCityNamesKnownColor(t *testing.T) {
 		CityOwnerIndexMap: map[int]int{0: 0},
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, 1, 1)
+	mr.DrawPoliticalCityNames(canvas, mapData, 1, 1, mapLayout(mr.config.Radius))
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 {
@@ -332,7 +330,7 @@ func TestDrawPoliticalCityNamesUnknownColorFallsBackToWhite(t *testing.T) {
 		},
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, 1, 1)
+	mr.DrawPoliticalCityNames(canvas, mapData, 1, 1, mapLayout(mr.config.Radius))
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 || ops[0] != "SetColor(255, 255, 255)" {
@@ -370,7 +368,7 @@ func TestDrawTerritoryTilesWaterTileUsesTerrainColor(t *testing.T) {
 	if len(ops) != 3 {
 		t.Fatalf("DrawTerritoryTiles() water tile recorded %d ops, want 3: %v", len(ops), ops)
 	}
-	oceanColor := fileio.GetPhysicalMapTileColor("TERRAIN_OCEAN")
+	oceanColor := GetPhysicalMapTileColor("TERRAIN_OCEAN")
 	wantColorOp := fmt.Sprintf("SetColor(%d, %d, %d)", oceanColor.R, oceanColor.G, oceanColor.B)
 	if ops[1] != wantColorOp {
 		t.Errorf("DrawTerritoryTiles() water color op = %q, want %q", ops[1], wantColorOp)
@@ -475,77 +473,6 @@ func TestDrawPoliticalMapResizesAndInvertsCanvas(t *testing.T) {
 	ops := canvas.GetOperations()
 	if ops[0][:6] != "Resize" {
 		t.Errorf("DrawPoliticalMap() first op = %q, want a Resize call", ops[0])
-	}
-}
-
-func TestDrawPoliticalMapTileMajorResizesAndInvertsCanvas(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
-	canvas := NewMockCanvas(1, 1)
-	mapData := newFullMapDataForRender()
-
-	img := mr.DrawPoliticalMapTileMajor(canvas, mapData)
-
-	if img == nil {
-		t.Fatal("DrawPoliticalMapTileMajor() returned a nil image")
-	}
-	ops := canvas.GetOperations()
-	if ops[0][:6] != "Resize" {
-		t.Errorf("DrawPoliticalMapTileMajor() first op = %q, want a Resize call", ops[0])
-	}
-	invertCount := 0
-	for _, op := range ops {
-		if op == "InvertY()" {
-			invertCount++
-		}
-	}
-	if invertCount != 2 {
-		t.Errorf("DrawPoliticalMapTileMajor() called InvertY() %d times, want 2 (once each direction)", invertCount)
-	}
-}
-
-// newBorderRiverRoadMapData builds a 1x2 map with a border, a river edge and a road between two owned tiles: every per-tile draw op.
-func newBorderRiverRoadMapData() *fileio.Civ5MapData {
-	return &fileio.Civ5MapData{
-		TerrainList: []string{"TERRAIN_GRASS"},
-		MapTiles: [][]*fileio.Civ5MapTilePhysical{
-			{
-				{X: 0, Y: 0, TerrainType: 0, RiverData: 1}, // East edge (bit 0) has a river.
-				{X: 1, Y: 0, TerrainType: 0},
-			},
-		},
-		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{
-			{
-				{X: 0, Y: 0, Owner: 0, CityId: -1, RouteType: 0},
-				{X: 1, Y: 0, Owner: 1, CityId: -1, RouteType: 0},
-			},
-		},
-		Civ5PlayerData: []*fileio.Civ5PlayerData{
-			{Index: 0, CivType: "CIVILIZATION_ROME", TeamColor: "PLAYERCOLOR_BLACK"},
-			{Index: 1, CivType: "CIVILIZATION_GREECE", TeamColor: "PLAYERCOLOR_BLUE"},
-		},
-		CityOwnerIndexMap: map[int]int{0: 0, 1: 1},
-	}
-}
-
-// TestDrawPoliticalMapTileMajorMatchesOriginalOperationSet checks tile-major draws the same shapes and
-// colors as DrawPoliticalMap, in a different order (catches dropped or duplicated draws a pixel tolerance could miss).
-func TestDrawPoliticalMapTileMajorMatchesOriginalOperationSet(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
-	mapData := newBorderRiverRoadMapData()
-
-	originalCanvas := NewMockCanvas(1, 1)
-	mr.DrawPoliticalMap(originalCanvas, mapData)
-
-	tileMajorCanvas := NewMockCanvas(1, 1)
-	mr.DrawPoliticalMapTileMajor(tileMajorCanvas, mapData)
-
-	original := append([]string(nil), originalCanvas.GetOperations()...)
-	tileMajor := append([]string(nil), tileMajorCanvas.GetOperations()...)
-	sort.Strings(original)
-	sort.Strings(tileMajor)
-
-	if !reflect.DeepEqual(original, tileMajor) {
-		t.Errorf("DrawPoliticalMapTileMajor() operation set differs from DrawPoliticalMap():\noriginal:    %v\ntile-major:  %v", original, tileMajor)
 	}
 }
 

@@ -5,74 +5,94 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"sort"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
 
-// DrawingConfig holds configuration for map drawing
+// DrawingConfig holds map drawing settings.
 type DrawingConfig struct {
 	Radius float64
 }
 
-// DefaultDrawingConfig returns the default drawing configuration
+// DefaultDrawingConfig returns the default settings.
 func DefaultDrawingConfig() *DrawingConfig {
 	return &DrawingConfig{
 		Radius: 16.0,
 	}
 }
 
-// MapRenderer handles the rendering of Civ5 maps using the abstracted canvas
-type MapRenderer struct {
-	config *DrawingConfig
+// Fixed (non-civ) colors the renderer draws with; replayPinnedColors lists them for the GIF palette.
+var (
+	mountainBaseColor = color.RGBA{89, 90, 86, 255}
+	mountainPeakColor = color.RGBA{234, 244, 253, 255}
+	riverColor        = color.RGBA{95, 150, 148, 255}
+	railroadColor     = color.RGBA{76, 51, 0, 255}
+	roadColor         = color.RGBA{51, 51, 51, 255}
+	unknownRouteColor = color.RGBA{0, 0, 0, 255}
+)
+
+// tileOutlineDarken is how far a tile's outline is blended toward black from its fill.
+const tileOutlineDarken = 0.12
+
+// tileOutlineColor returns the outline color for a tile filled with fill.
+func tileOutlineColor(fill color.RGBA) color.RGBA {
+	return blendColor(fill, color.RGBA{0, 0, 0, 255}, tileOutlineDarken)
 }
 
-// NewMapRenderer creates a new map renderer with the given configuration
+// MapRenderer renders Civ5 maps onto a Canvas.
+type MapRenderer struct {
+	config *DrawingConfig
+	grid   *tileGrid // built on first use by tileGridFor
+}
+
+// NewMapRenderer returns a renderer using config.
 func NewMapRenderer(config *DrawingConfig) *MapRenderer {
 	return &MapRenderer{
 		config: config,
 	}
 }
 
-// DrawMountain draws a mountain icon at the specified position
-func (mr *MapRenderer) DrawMountain(canvas Canvas, imageX, imageY float64) {
+// DrawMountain draws a mountain icon at (imageX, imageY).
+func (mr *MapRenderer) DrawMountain(canvas Canvas, l tileLayout, imageX, imageY float64) {
 	// Draw base
-	canvas.DrawRegularPolygon(3, imageX, imageY, mr.config.Radius, math.Pi)
-	canvas.SetColor(89, 90, 86) // gray
+	canvas.DrawRegularPolygon(3, imageX, imageY, l.radius, l.apexUpRotation())
+	canvas.SetColor(mountainBaseColor.R, mountainBaseColor.G, mountainBaseColor.B)
 	canvas.Fill()
 
 	// Draw mountain peak
-	canvas.DrawRegularPolygon(3, imageX, imageY+(mr.config.Radius/2), mr.config.Radius/2, math.Pi)
-	canvas.SetColor(234, 244, 253) // white
+	canvas.DrawRegularPolygon(3, imageX, imageY+l.up(l.radius/2), l.radius/2, l.apexUpRotation())
+	canvas.SetColor(mountainPeakColor.R, mountainPeakColor.G, mountainPeakColor.B)
 	canvas.Fill()
 }
 
-// GetNewCityColor returns a modified city color for better visibility
+// GetNewCityColor returns cityColor lightened for visibility.
 func (mr *MapRenderer) GetNewCityColor(cityColor color.RGBA) color.RGBA {
-	return mr.InterpolateColor(cityColor, color.RGBA{255, 255, 255, 255}, 0.2)
+	return markerColor(cityColor)
 }
 
-// DrawCityIcon draws a city icon at the specified position
-func (mr *MapRenderer) DrawCityIcon(canvas Canvas, imageX, imageY float64, cityColor color.RGBA) {
+// DrawCityIcon draws a city icon at (imageX, imageY).
+func (mr *MapRenderer) DrawCityIcon(canvas Canvas, l tileLayout, imageX, imageY float64, cityColor color.RGBA) {
 	iconColor := mr.GetNewCityColor(cityColor)
-	canvas.DrawRectangle(imageX-(mr.config.Radius/5), imageY-(mr.config.Radius/5),
-		mr.config.Radius/2, mr.config.Radius/2)
+	// The icon reaches 0.3r above the tile's center and 0.2r below it.
+	top := math.Min(imageY+l.up(l.radius*3/10), imageY+l.up(-l.radius/5))
+	canvas.DrawRectangle(imageX-(l.radius/5), top, l.radius/2, l.radius/2)
 	canvas.SetColor(iconColor.R, iconColor.G, iconColor.B)
 	canvas.Fill()
 }
 
-// drawEntity draws a single Entity using the shape appropriate to its Type.
-func (mr *MapRenderer) drawEntity(canvas Canvas, entity Entity) {
+// drawEntity draws entity in the shape for its type.
+func (mr *MapRenderer) drawEntity(canvas Canvas, l tileLayout, entity Entity) {
 	switch entity.Type {
 	case EntityMountain:
-		mr.DrawMountain(canvas, entity.X, entity.Y)
+		mr.DrawMountain(canvas, l, entity.X, entity.Y)
 	case EntityCity:
-		mr.DrawCityIcon(canvas, entity.X, entity.Y, color.RGBA{entity.R, entity.G, entity.B, 255})
+		mr.DrawCityIcon(canvas, l, entity.X, entity.Y, color.RGBA{entity.R, entity.G, entity.B, 255})
 	}
 }
 
-// DrawTerrainTiles draws all terrain tiles for the physical map
+// DrawTerrainTiles draws every terrain tile.
 func (mr *MapRenderer) DrawTerrainTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	l := mapLayout(mr.config.Radius)
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
 			hex := PhysicalHexTile(mapData, i, j, mr.config.Radius)
@@ -80,8 +100,8 @@ func (mr *MapRenderer) DrawTerrainTiles(canvas Canvas, mapData *fileio.Civ5MapDa
 			canvas.SetColor(hex.R, hex.G, hex.B)
 			canvas.Fill()
 
-			for _, entity := range TileEntities(mapData, i, j, mr.config.Radius, color.RGBA{255, 255, 255, 255}) {
-				mr.drawEntity(canvas, entity)
+			for _, entity := range TileEntities(mapData, i, j, l, color.RGBA{255, 255, 255, 255}) {
+				mr.drawEntity(canvas, l, entity)
 			}
 		}
 	}
@@ -92,29 +112,30 @@ func (mr *MapRenderer) InterpolateColor(color1, color2 color.RGBA, t float64) co
 	return blendColor(color1, color2, t)
 }
 
-// DrawTerritoryTiles draws territory tiles for the political map
+// DrawTerritoryTiles draws every territory tile.
 func (mr *MapRenderer) DrawTerritoryTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	l := mapLayout(mr.config.Radius)
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			hex, cityColor := PoliticalHexTile(mapData, i, j, mr.config.Radius)
+			hex, cityColor := PoliticalHexTile(mapData, i, j, l)
 			canvas.DrawRegularPolygon(6, hex.X, hex.Y, mr.config.Radius, math.Pi/2)
 			canvas.SetColor(hex.R, hex.G, hex.B)
 			canvas.Fill()
 
-			for _, entity := range TileEntities(mapData, i, j, mr.config.Radius, cityColor) {
-				mr.drawEntity(canvas, entity)
+			for _, entity := range TileEntities(mapData, i, j, l, cityColor) {
+				mr.drawEntity(canvas, l, entity)
 			}
 		}
 	}
 }
 
 // drawRiverTile draws a single tile's river edges.
-func (mr *MapRenderer) drawRiverTile(canvas Canvas, mapData *fileio.Civ5MapData, row, col int) {
-	x, y := fileio.GetImagePosition(row, col, mr.config.Radius)
-	canvas.SetColor(95, 150, 148)
+func (mr *MapRenderer) drawRiverTile(canvas Canvas, l tileLayout, mapData *fileio.Civ5MapData, row, col int) {
+	x, y := l.center(row, col)
+	canvas.SetColor(riverColor.R, riverColor.G, riverColor.B)
 	canvas.SetLineWidth(1.0)
 
-	for _, edge := range RiverEdgesForTile(mapData.MapTiles[row][col].RiverData, x, y, mr.config.Radius) {
+	for _, edge := range RiverEdgesForTile(mapData.MapTiles[row][col].RiverData, x, y, l) {
 		canvas.DrawLine(edge.X1, edge.Y1, edge.X2, edge.Y2)
 		canvas.Stroke()
 	}
@@ -122,9 +143,10 @@ func (mr *MapRenderer) drawRiverTile(canvas Canvas, mapData *fileio.Civ5MapData,
 
 // DrawRivers draws rivers on the map
 func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+	l := mapLayout(mr.config.Radius)
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			mr.drawRiverTile(canvas, mapData, i, j)
+			mr.drawRiverTile(canvas, l, mapData, i, j)
 		}
 	}
 }
@@ -136,9 +158,10 @@ func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, map
 		return
 	}
 
+	l := mapLayout(mr.config.Radius)
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			for _, segment := range RoadSegmentsForTile(mapData, mapHeight, mapWidth, i, j, mr.config.Radius) {
+			for _, segment := range RoadSegmentsForTile(mapData, mapHeight, mapWidth, i, j, l) {
 				canvas.SetLineWidth(segment.LineWidth)
 				canvas.SetColor(segment.R, segment.G, segment.B)
 				canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
@@ -148,12 +171,12 @@ func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, map
 	}
 }
 
-// DrawPhysicalMap creates a physical map image using the abstracted canvas
-func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
+// DrawPhysicalMap renders the physical map onto canvas.
+func (mr *MapRenderer) DrawPhysicalMap(canvas FlippableCanvas, mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
-	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
+	maxImageWidth, maxImageHeight := GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
 
 	// Resize canvas to fit the map
 	canvas.Resize(int(maxImageWidth), int(maxImageHeight))
@@ -174,7 +197,7 @@ func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapDat
 	return canvas.Image()
 }
 
-// DrawBorders draws borders between different territories
+// DrawBorders draws borders between territories.
 func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	// Early exit if no improvement data is present
 	if len(mapData.MapTileImprovements) == 0 {
@@ -193,7 +216,7 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 	}
 }
 
-// DrawPhysicalCityNames draws city names on the map (white text for physical maps)
+// DrawPhysicalCityNames draws white city names.
 func (mr *MapRenderer) DrawPhysicalCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
 	// Early exit if no improvement data is present
 	if len(mapData.MapTileImprovements) == 0 {
@@ -210,12 +233,12 @@ func (mr *MapRenderer) DrawPhysicalCityNames(canvas Canvas, mapData *fileio.Civ5
 }
 
 // drawPoliticalCityNameTile draws a single tile's city name label, in political colors.
-func (mr *MapRenderer) drawPoliticalCityNameTile(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int) {
+func (mr *MapRenderer) drawPoliticalCityNameTile(canvas Canvas, l tileLayout, mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int) {
 	// Skip the label build and DrawString for the common no-city tile.
 	if mapData.MapTileImprovements[row][col].CityName == "" {
 		return
 	}
-	label := PoliticalCityNameLabel(mapData, mapHeight, mapWidth, row, col, mr.config.Radius)
+	label := PoliticalCityNameLabel(mapData, mapHeight, mapWidth, row, col, l)
 	if label.Text == "" {
 		return
 	}
@@ -223,8 +246,8 @@ func (mr *MapRenderer) drawPoliticalCityNameTile(canvas Canvas, mapData *fileio.
 	canvas.DrawString(label.Text, label.X, label.Y)
 }
 
-// DrawPoliticalCityNames draws city names with political colors
-func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int) {
+// DrawPoliticalCityNames draws city names in political colors.
+func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int, l tileLayout) {
 	// Early exit if no improvement data is present
 	if len(mapData.MapTileImprovements) == 0 {
 		return
@@ -232,17 +255,17 @@ func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ
 
 	for i := 0; i < mapHeight; i++ {
 		for j := 0; j < mapWidth; j++ {
-			mr.drawPoliticalCityNameTile(canvas, mapData, mapHeight, mapWidth, i, j)
+			mr.drawPoliticalCityNameTile(canvas, l, mapData, mapHeight, mapWidth, i, j)
 		}
 	}
 }
 
-// DrawPoliticalMap creates a political map image using the abstracted canvas
-func (mr *MapRenderer) DrawPoliticalMap(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
+// DrawPoliticalMap renders the political map onto canvas.
+func (mr *MapRenderer) DrawPoliticalMap(canvas FlippableCanvas, mapData *fileio.Civ5MapData) image.Image {
 	mapHeight := len(mapData.MapTiles)
 	mapWidth := len(mapData.MapTiles[0])
 
-	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
+	maxImageWidth, maxImageHeight := GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
 
 	// Resize canvas to fit the map
 	canvas.Resize(int(maxImageWidth), int(maxImageHeight))
@@ -259,242 +282,12 @@ func (mr *MapRenderer) DrawPoliticalMap(canvas Canvas, mapData *fileio.Civ5MapDa
 
 	canvas.InvertY()
 	// Draw city names on top of hexes
-	mr.DrawPoliticalCityNames(canvas, mapData, mapHeight, mapWidth)
+	mr.DrawPoliticalCityNames(canvas, mapData, mapHeight, mapWidth, mapLayout(mr.config.Radius))
 
 	return canvas.Image()
 }
 
-// drawPoliticalTile draws one tile's fill, entities, border and road, all of which stay within its hex.
-// Rivers are excluded: their stroke straddles the shared edge, so they get their own pass after every fill.
-func (mr *MapRenderer) drawPoliticalTile(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int) {
-	hex, cityColor := PoliticalHexTile(mapData, row, col, mr.config.Radius)
-	canvas.DrawRegularPolygon(6, hex.X, hex.Y, mr.config.Radius, math.Pi/2)
-	canvas.SetColor(hex.R, hex.G, hex.B)
-	canvas.Fill()
-
-	for _, entity := range TileEntities(mapData, row, col, mr.config.Radius, cityColor) {
-		mr.drawEntity(canvas, entity)
-	}
-
-	if len(mapData.MapTileImprovements) == 0 {
-		return
-	}
-
-	for _, segment := range BorderSegmentsForTile(mapData, mapHeight, mapWidth, row, col, mr.config.Radius) {
-		canvas.SetColor(segment.R, segment.G, segment.B)
-		canvas.SetLineWidth(segment.LineWidth)
-		canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
-		canvas.Stroke()
-	}
-	for _, segment := range RoadSegmentsForTile(mapData, mapHeight, mapWidth, row, col, mr.config.Radius) {
-		canvas.SetLineWidth(segment.LineWidth)
-		canvas.SetColor(segment.R, segment.G, segment.B)
-		canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
-		canvas.Stroke()
-	}
-}
-
-// DrawPoliticalMapTileMajor renders DrawPoliticalMap tile by tile, the unit RedrawDirtyTiles works in;
-// anti-aliasing order differs slightly (max channel delta 60).
-func (mr *MapRenderer) DrawPoliticalMapTileMajor(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
-	mapHeight := len(mapData.MapTiles)
-	mapWidth := len(mapData.MapTiles[0])
-
-	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
-	canvas.Resize(int(maxImageWidth), int(maxImageHeight))
-
-	fmt.Println("Map height: ", mapHeight, ", width: ", mapWidth)
-
-	canvas.InvertY()
-	for i := 0; i < mapHeight; i++ {
-		for j := 0; j < mapWidth; j++ {
-			mr.drawPoliticalTile(canvas, mapData, mapHeight, mapWidth, i, j)
-		}
-	}
-	mr.DrawRivers(canvas, mapData, mapHeight, mapWidth)
-
-	canvas.InvertY()
-	mr.DrawPoliticalCityNames(canvas, mapData, mapHeight, mapWidth)
-
-	return canvas.Image()
-}
-
-// tileCoord is a map tile's position; tileSet is a set of them.
-type tileCoord struct{ row, col int }
-type tileSet map[tileCoord]bool
-
-// RedrawDirtyTiles repaints paintSet tiles (fill, entities, border, road, river) without touching
-// the rest of the canvas. paintSet must include each dirty tile's neighbors.
-//
-// Draws into a blank scratch canvas sized to paintSet's bounding box and pastes the tiles back:
-// gg blends anti-aliasing against existing pixels, so repainting in place would drift at shared
-// edges.
-//
-// Returns every rect it may have changed; everything outside is identical to the previous frame.
-func (mr *MapRenderer) RedrawDirtyTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int, paintSet tileSet) []image.Rectangle {
-	if len(paintSet) == 0 {
-		return nil
-	}
-
-	maxImageWidth, maxImageHeight := fileio.GetImagePosition(mapHeight, mapWidth, mr.config.Radius)
-	mainBounds := image.Rect(0, 0, int(maxImageWidth), int(maxImageHeight))
-	radius := mr.config.Radius
-
-	paintTiles, scratchBounds := paintTileRects(paintSet, mainBounds, maxImageHeight, radius)
-	contextTiles := sortedContextTiles(paintSet, mapHeight, mapWidth)
-	scratchImage := mr.paintTilesToScratch(mapData, mapHeight, mapWidth, contextTiles, scratchBounds, mainBounds.Dy())
-	dirtyRects := pasteBack(canvas, scratchImage, paintTiles, scratchBounds)
-
-	dirtyRects = append(dirtyRects, mr.restampLabels(canvas, mapData, mapHeight, mapWidth, paintSet, dirtyRects, mainBounds)...)
-
-	return dirtyRects
-}
-
-// paintTileRect pairs a paint-set tile with the rect on the main canvas its own repaint occupies.
-type paintTileRect struct {
-	rc   tileCoord
-	rect image.Rectangle
-}
-
-// paintTileRects returns each paint tile's rect (hex radius plus stroke padding) and their union.
-func paintTileRects(paintSet tileSet, mainBounds image.Rectangle, maxImageHeight, radius float64) (tiles []paintTileRect, union image.Rectangle) {
-	const pad = 2.0 // safety margin for river/border stroke half-widths right at a tile's radius
-	tiles = make([]paintTileRect, 0, len(paintSet))
-	for rc := range paintSet {
-		x, y := fileio.GetImagePosition(rc.row, rc.col, radius)
-		finalX, finalY := x, maxImageHeight-y
-		rect := image.Rect(
-			int(finalX-radius-pad), int(finalY-radius-pad),
-			int(finalX+radius+pad)+1, int(finalY+radius+pad)+1,
-		).Intersect(mainBounds)
-		tiles = append(tiles, paintTileRect{rc, rect})
-		if union.Empty() {
-			union = rect
-		} else {
-			union = union.Union(rect)
-		}
-	}
-	return tiles, union
-}
-
-// sortedContextTiles returns paintSet plus one more neighbor ring, in row-major order. The ring is
-// drawn so edge tiles blend against real neighbors, but never pasted back.
-func sortedContextTiles(paintSet tileSet, mapHeight, mapWidth int) []tileCoord {
-	contextSet := expandWithNeighbors(paintSet, mapHeight, mapWidth)
-	tiles := make([]tileCoord, 0, len(contextSet))
-	for rc := range contextSet {
-		tiles = append(tiles, rc)
-	}
-	sort.Slice(tiles, func(a, b int) bool {
-		if tiles[a].row != tiles[b].row {
-			return tiles[a].row < tiles[b].row
-		}
-		return tiles[a].col < tiles[b].col
-	})
-	return tiles
-}
-
-// paintTilesToScratch draws contextTiles into a blank canvas of scratchBounds' size, in the main
-// canvas's coordinates shifted so scratchBounds.Min is (0, 0).
-func (mr *MapRenderer) paintTilesToScratch(mapData *fileio.Civ5MapData, mapHeight, mapWidth int, contextTiles []tileCoord, scratchBounds image.Rectangle, mainCanvasHeight int) image.Image {
-	scratch := NewDrawingContext(scratchBounds.Dx(), scratchBounds.Dy())
-	// Use the main canvas's integer pixel height: its own InvertY() flips against that, not a raw float height.
-	scratch.TranslatedInvertY(-float64(scratchBounds.Min.X), float64(mainCanvasHeight)-float64(scratchBounds.Min.Y))
-	for _, rc := range contextTiles {
-		mr.drawPoliticalTile(scratch, mapData, mapHeight, mapWidth, rc.row, rc.col)
-	}
-	for _, rc := range contextTiles {
-		mr.drawRiverTile(scratch, mapData, rc.row, rc.col)
-	}
-	return scratch.Image()
-}
-
-// pasteBack copies each paint tile's rect from scratchImage onto canvas and returns those rects.
-func pasteBack(canvas Canvas, scratchImage image.Image, paintTiles []paintTileRect, scratchBounds image.Rectangle) []image.Rectangle {
-	dirtyRects := make([]image.Rectangle, 0, len(paintTiles))
-	for _, pt := range paintTiles {
-		srcPoint := pt.rect.Min.Sub(scratchBounds.Min)
-		canvas.PasteRegion(scratchImage, pt.rect, srcPoint)
-		dirtyRects = append(dirtyRects, pt.rect)
-	}
-	return dirtyRects
-}
-
-// cityLabel is a city's label plus the rect its pixels occupy.
-type cityLabel struct {
-	row, col int
-	text     ColoredText
-	rect     image.Rectangle
-}
-
-// cityLabels returns every city label in DrawPoliticalCityNames's order, with rects from real font metrics.
-func (mr *MapRenderer) cityLabels(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int, mainBounds image.Rectangle) []cityLabel {
-	const labelPad = 1.0 // rounding safety margin
-	var labels []cityLabel
-	for row := 0; row < mapHeight; row++ {
-		for col := 0; col < mapWidth; col++ {
-			if mapData.MapTileImprovements[row][col].CityName == "" {
-				continue
-			}
-			text := PoliticalCityNameLabel(mapData, mapHeight, mapWidth, row, col, mr.config.Radius)
-			if text.Text == "" {
-				continue
-			}
-			w, h := canvas.MeasureString(text.Text)
-			rect := image.Rect(
-				int(text.X-labelPad), int(text.Y-h-labelPad),
-				int(text.X+w+labelPad)+1, int(text.Y+labelPad)+1,
-			).Intersect(mainBounds)
-			labels = append(labels, cityLabel{row, col, text, rect})
-		}
-	}
-	return labels
-}
-
-// restampLabels redraws labels a paste could have erased (those overlapping a pasted rect, or whose
-// tile changed) plus any label overlapping one of those, in order so stacking matches a full
-// redraw. Returns the rects of labels whose own tile changed. Re-stamping is idempotent because
-// gg's default font isn't anti-aliased.
-func (mr *MapRenderer) restampLabels(canvas Canvas, mapData *fileio.Civ5MapData, mapHeight, mapWidth int, paintSet tileSet, pasted []image.Rectangle, mainBounds image.Rectangle) (changed []image.Rectangle) {
-	labels := mr.cityLabels(canvas, mapData, mapHeight, mapWidth, mainBounds)
-	restamp := make([]bool, len(labels))
-	for i, l := range labels {
-		if paintSet[tileCoord{l.row, l.col}] {
-			restamp[i] = true
-			changed = append(changed, l.rect)
-			continue
-		}
-		for _, p := range pasted {
-			if l.rect.Overlaps(p) {
-				restamp[i] = true
-				break
-			}
-		}
-	}
-	for grew := true; grew; {
-		grew = false
-		for i := range labels {
-			if restamp[i] {
-				continue
-			}
-			for j := range labels {
-				if restamp[j] && labels[i].rect.Overlaps(labels[j].rect) {
-					restamp[i], grew = true, true
-					break
-				}
-			}
-		}
-	}
-	for i, l := range labels {
-		if restamp[i] {
-			canvas.SetColor(l.text.R, l.text.G, l.text.B)
-			canvas.DrawString(l.text.Text, l.text.X, l.text.Y)
-		}
-	}
-	return changed
-}
-
-// SaveImage saves the image to a file
+// SaveImage saves canvas to outputFilename.
 func (mr *MapRenderer) SaveImage(canvas Canvas, outputFilename string) error {
 	return canvas.SavePNG(outputFilename)
 }

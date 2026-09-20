@@ -1,6 +1,7 @@
 package fileio
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -247,18 +248,11 @@ func buildCivDatasetValues(streamReader *io.SectionReader, datasetNames []string
 }
 
 func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
-	inputFile, err := os.Open(filename)
+	fileData, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load replay file %q: %w", filename, err)
 	}
-	defer inputFile.Close()
-
-	fi, err := inputFile.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get file info for %q: %w", filename, err)
-	}
-	fileLength := fi.Size()
-	streamReader := io.NewSectionReader(inputFile, int64(0), fileLength)
+	streamReader := io.NewSectionReader(bytes.NewReader(fileData), int64(0), int64(len(fileData)))
 	fmt.Println("Loading Civ5Replay...")
 
 	gameName := unsafeReadFixedBytes(streamReader, 4)
@@ -462,4 +456,44 @@ func ReadCiv5ReplayFile(filename string) (*Civ5ReplayData, error) {
 	}
 
 	return &replayData, nil
+}
+
+// Replay event type ids (Civ5ReplayEvent.TypeId); ApplyReplayEvent acts only on the first four tile events.
+const (
+	ReplayEventNotification    = 0
+	ReplayEventCityFounded     = 1
+	ReplayEventTilesClaimed    = 2
+	ReplayEventCityTransferred = 3
+	ReplayEventTilesRazed      = 4
+	ReplayEventReligionFounded = 5 // "X has founded the new religion Y in the holy city of Z." - real tile (Z).
+	ReplayEventPantheonFounded = 6 // "X has started worshipping a pantheon of gods..." - civ-level, no tile.
+)
+
+// replayNoTileSentinel is the (X, Y) a locationless event carries instead of a tile.
+const replayNoTileSentinel = 65535
+
+// replayEventCanBeLocationless reports whether typeId can carry replayNoTileSentinel; all others have a real tile.
+func replayEventCanBeLocationless(typeId int) bool {
+	return typeId == ReplayEventNotification || typeId == ReplayEventPantheonFounded
+}
+
+func replayEventTypeName(typeId int) string {
+	switch typeId {
+	case ReplayEventNotification:
+		return "notification"
+	case ReplayEventCityFounded:
+		return "CityFounded"
+	case ReplayEventTilesClaimed:
+		return "TilesClaimed"
+	case ReplayEventCityTransferred:
+		return "CityTransferred"
+	case ReplayEventTilesRazed:
+		return "TilesRazed"
+	case ReplayEventReligionFounded:
+		return "ReligionFounded"
+	case ReplayEventPantheonFounded:
+		return "PantheonFounded"
+	default:
+		return "unhandled"
+	}
 }

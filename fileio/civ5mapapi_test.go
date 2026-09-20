@@ -1,8 +1,7 @@
 package fileio
 
 import (
-	"image/color"
-	"math"
+	"strings"
 	"testing"
 )
 
@@ -21,40 +20,6 @@ func TestGetNeighborsEvenRow(t *testing.T) {
 	want := [6][2]int{{5, 3}, {4, 3}, {4, 2}, {4, 1}, {5, 1}, {6, 2}}
 	if got != want {
 		t.Errorf("GetNeighbors(5, 2) = %v, want %v", got, want)
-	}
-}
-
-func TestGetImagePosition(t *testing.T) {
-	x, y := GetImagePosition(0, 0, 16.0)
-	angle := math.Pi / 6
-	wantX := 16.0 * 1.5
-	wantY := 16.0
-	if math.Abs(x-wantX) > 1e-9 || math.Abs(y-wantY) > 1e-9 {
-		t.Errorf("GetImagePosition(0, 0, 16.0) = (%v, %v), want (%v, %v)", x, y, wantX, wantY)
-	}
-
-	// Odd row should shift x by radius*cos(angle)
-	xOdd, _ := GetImagePosition(1, 0, 16.0)
-	wantXOdd := wantX + 16.0*math.Cos(angle)
-	if math.Abs(xOdd-wantXOdd) > 1e-9 {
-		t.Errorf("GetImagePosition(1, 0, 16.0) x = %v, want %v", xOdd, wantXOdd)
-	}
-}
-
-func TestGetPhysicalMapTileColor(t *testing.T) {
-	tests := []struct {
-		terrain string
-		want    color.RGBA
-	}{
-		{"TERRAIN_GRASS", color.RGBA{105, 125, 54, 255}},
-		{"TERRAIN_OCEAN", color.RGBA{47, 74, 93, 255}},
-		{"TERRAIN_UNKNOWN", color.RGBA{0, 0, 0, 255}},
-		{"", color.RGBA{0, 0, 0, 255}},
-	}
-	for _, tt := range tests {
-		if got := GetPhysicalMapTileColor(tt.terrain); got != tt.want {
-			t.Errorf("GetPhysicalMapTileColor(%q) = %v, want %v", tt.terrain, got, tt.want)
-		}
 	}
 }
 
@@ -189,5 +154,262 @@ func TestGetPoliticalMapTileColor(t *testing.T) {
 	}
 	if got := GetPoliticalMapTileColor(mapData, 50, 50); got != "" {
 		t.Errorf("GetPoliticalMapTileColor(50,50) = %q, want \"\"", got)
+	}
+}
+
+// newTestReplayMapData builds a 1x2 map data grid for ApplyReplayEvent tests.
+func newTestReplayMapData() *Civ5MapData {
+	return &Civ5MapData{
+		MapTileImprovements: [][]*Civ5MapTileImprovement{
+			{
+				{X: 0, Y: 0, CityId: -1, Owner: -1},
+				{X: 1, Y: 0, CityId: -1, Owner: -1},
+			},
+		},
+	}
+}
+
+func TestApplyReplayEventCityFounded(t *testing.T) {
+	mapData := newTestReplayMapData()
+	event := Civ5ReplayEvent{
+		TypeId: ReplayEventCityFounded,
+		Text:   "Rome is founded.",
+		Tiles:  []Civ5ReplayEventTile{{X: 0, Y: 0}},
+	}
+
+	nextCityId := ApplyReplayEvent(mapData, event, 0)
+
+	tile := mapData.MapTileImprovements[0][0]
+	if tile.CityId != 0 {
+		t.Errorf("CityId = %d, want 0", tile.CityId)
+	}
+	if tile.CityName != "Rome" {
+		t.Errorf("CityName = %q, want Rome", tile.CityName)
+	}
+	if nextCityId != 1 {
+		t.Errorf("nextCityId = %d, want 1", nextCityId)
+	}
+}
+
+func TestApplyReplayEventCityFoundedMultipleTiles(t *testing.T) {
+	mapData := &Civ5MapData{
+		MapTileImprovements: [][]*Civ5MapTileImprovement{
+			{
+				{X: 0, Y: 0, CityId: -1},
+				{X: 1, Y: 0, CityId: -1},
+			},
+		},
+	}
+	event := Civ5ReplayEvent{
+		TypeId: ReplayEventCityFounded,
+		Text:   "Paris is founded.",
+		Tiles: []Civ5ReplayEventTile{
+			{X: 0, Y: 0},
+			{X: 1, Y: 0},
+		},
+	}
+
+	nextCityId := ApplyReplayEvent(mapData, event, 5)
+
+	// Each tile in the event gets its own incrementing city id.
+	if mapData.MapTileImprovements[0][0].CityId != 5 {
+		t.Errorf("tile 0 CityId = %d, want 5", mapData.MapTileImprovements[0][0].CityId)
+	}
+	if mapData.MapTileImprovements[0][1].CityId != 6 {
+		t.Errorf("tile 1 CityId = %d, want 6", mapData.MapTileImprovements[0][1].CityId)
+	}
+	if nextCityId != 7 {
+		t.Errorf("nextCityId = %d, want 7", nextCityId)
+	}
+}
+
+func TestApplyReplayEventTilesClaimed(t *testing.T) {
+	mapData := newTestReplayMapData()
+	event := Civ5ReplayEvent{
+		TypeId: ReplayEventTilesClaimed,
+		CivId:  3,
+		Tiles:  []Civ5ReplayEventTile{{X: 1, Y: 0}},
+	}
+
+	nextCityId := ApplyReplayEvent(mapData, event, 2)
+
+	if mapData.MapTileImprovements[0][1].Owner != 3 {
+		t.Errorf("Owner = %d, want 3", mapData.MapTileImprovements[0][1].Owner)
+	}
+	// Non-founding events must not advance the city id counter.
+	if nextCityId != 2 {
+		t.Errorf("nextCityId = %d, want unchanged 2", nextCityId)
+	}
+}
+
+func TestApplyReplayEventCityTransferred(t *testing.T) {
+	mapData := newTestReplayMapData()
+	event := Civ5ReplayEvent{
+		TypeId: ReplayEventCityTransferred,
+		CivId:  7,
+		Tiles:  []Civ5ReplayEventTile{{X: 0, Y: 0}},
+	}
+
+	ApplyReplayEvent(mapData, event, 0)
+
+	if mapData.MapTileImprovements[0][0].Owner != 7 {
+		t.Errorf("Owner = %d, want 7", mapData.MapTileImprovements[0][0].Owner)
+	}
+}
+
+func TestApplyReplayEventTilesRazed(t *testing.T) {
+	mapData := &Civ5MapData{
+		MapTileImprovements: [][]*Civ5MapTileImprovement{
+			{
+				{X: 0, Y: 0, CityId: 4, CityName: "Carthage", Owner: 2, RouteType: 0},
+			},
+		},
+	}
+	event := Civ5ReplayEvent{
+		TypeId: ReplayEventTilesRazed,
+		Tiles:  []Civ5ReplayEventTile{{X: 0, Y: 0}},
+	}
+
+	nextCityId := ApplyReplayEvent(mapData, event, 5)
+
+	tile := mapData.MapTileImprovements[0][0]
+	if tile.Owner != -1 {
+		t.Errorf("Owner = %d, want -1", tile.Owner)
+	}
+	if tile.CityId != -1 {
+		t.Errorf("CityId = %d, want -1", tile.CityId)
+	}
+	if tile.CityName != "" {
+		t.Errorf("CityName = %q, want empty", tile.CityName)
+	}
+	if tile.RouteType != 2 {
+		t.Errorf("RouteType = %d, want 2 (road)", tile.RouteType)
+	}
+	// Razing does not found a city, so the counter is unaffected.
+	if nextCityId != 5 {
+		t.Errorf("nextCityId = %d, want unchanged 5", nextCityId)
+	}
+}
+
+func TestApplyReplayEventUnknownTypeIsNoOp(t *testing.T) {
+	mapData := newTestReplayMapData()
+	event := Civ5ReplayEvent{
+		TypeId: 99,
+		Tiles:  []Civ5ReplayEventTile{{X: 0, Y: 0}},
+	}
+
+	nextCityId := ApplyReplayEvent(mapData, event, 3)
+
+	tile := mapData.MapTileImprovements[0][0]
+	if tile.CityId != -1 || tile.Owner != -1 {
+		t.Errorf("unknown event type mutated tile: %+v", tile)
+	}
+	if nextCityId != 3 {
+		t.Errorf("nextCityId = %d, want unchanged 3", nextCityId)
+	}
+}
+
+func TestSetupCivPlayerDataRebuildsFromReplay(t *testing.T) {
+	mapData := &Civ5MapData{
+		Civ5PlayerData: []*Civ5PlayerData{}, // empty triggers rebuild
+	}
+	replayData := &Civ5ReplayData{
+		IsReplayFile: true,
+		AllCivs: []Civ5ReplayCiv{
+			{Name: "CIVILIZATION_ROME", LongName: "PLAYERCOLOR_RED"},
+			{Name: "Attila", LongName: ""}, // not a recognized civ/minor civ name
+		},
+	}
+
+	SetupCivPlayerData(mapData, replayData)
+
+	if len(mapData.Civ5PlayerData) != 2 {
+		t.Fatalf("Civ5PlayerData length = %d, want 2", len(mapData.Civ5PlayerData))
+	}
+	if mapData.Civ5PlayerData[0].CivType != "CIVILIZATION_ROME" {
+		t.Errorf("player 0 CivType = %q, want CIVILIZATION_ROME", mapData.Civ5PlayerData[0].CivType)
+	}
+	if mapData.Civ5PlayerData[0].TeamColor != "PLAYERCOLOR_RED" {
+		t.Errorf("player 0 TeamColor = %q, want PLAYERCOLOR_RED", mapData.Civ5PlayerData[0].TeamColor)
+	}
+	// Names that aren't already CIVILIZATION_/MINOR_CIV get synthesized.
+	if mapData.Civ5PlayerData[1].CivType != "CIVILIZATION_ATTILA" {
+		t.Errorf("player 1 CivType = %q, want CIVILIZATION_ATTILA", mapData.Civ5PlayerData[1].CivType)
+	}
+	if mapData.Civ5PlayerData[1].TeamColor != "PLAYERCOLOR_ATTILA" {
+		t.Errorf("player 1 TeamColor = %q, want PLAYERCOLOR_ATTILA", mapData.Civ5PlayerData[1].TeamColor)
+	}
+}
+
+func TestSetupCivPlayerDataSwapsPlayerToIndexZero(t *testing.T) {
+	mapData := &Civ5MapData{
+		Civ5PlayerData: []*Civ5PlayerData{
+			{Index: 0, CivType: "CIVILIZATION_ROME"},
+			{Index: 1, CivType: "CIVILIZATION_GREECE"},
+			{Index: 2, CivType: "CIVILIZATION_EGYPT"},
+		},
+	}
+	replayData := &Civ5ReplayData{
+		IsReplayFile: true,
+		PlayerCiv:    "CIVILIZATION_EGYPT",
+	}
+
+	SetupCivPlayerData(mapData, replayData)
+
+	if mapData.Civ5PlayerData[0].CivType != "CIVILIZATION_EGYPT" {
+		t.Errorf("player 0 CivType = %q, want CIVILIZATION_EGYPT (swapped in)", mapData.Civ5PlayerData[0].CivType)
+	}
+	if mapData.Civ5PlayerData[2].CivType != "CIVILIZATION_ROME" {
+		t.Errorf("player 2 CivType = %q, want CIVILIZATION_ROME (swapped out)", mapData.Civ5PlayerData[2].CivType)
+	}
+}
+
+func TestSetupCivPlayerDataPlayerNotFoundLeavesOrderUnchanged(t *testing.T) {
+	mapData := &Civ5MapData{
+		Civ5PlayerData: []*Civ5PlayerData{
+			{Index: 0, CivType: "CIVILIZATION_ROME"},
+			{Index: 1, CivType: "CIVILIZATION_GREECE"},
+		},
+	}
+	replayData := &Civ5ReplayData{
+		IsReplayFile: true,
+		PlayerCiv:    "CIVILIZATION_UNKNOWN",
+	}
+
+	SetupCivPlayerData(mapData, replayData)
+
+	if mapData.Civ5PlayerData[0].CivType != "CIVILIZATION_ROME" {
+		t.Errorf("player 0 CivType = %q, want unchanged CIVILIZATION_ROME", mapData.Civ5PlayerData[0].CivType)
+	}
+}
+
+func TestPrepareReplayRejectsIncompatibleDataWithoutTouchingTheMap(t *testing.T) {
+	mapData, replayData := newValidReplayFixtures()
+	replayData.AllReplayEvents = nil // makes the pair incompatible
+
+	err := PrepareReplay(mapData, replayData)
+	if err == nil {
+		t.Fatal("PrepareReplay() with incompatible data = nil error, want an error")
+	}
+	if !strings.Contains(err.Error(), "not compatible") {
+		t.Errorf("PrepareReplay() error = %q, want it to mention compatibility", err)
+	}
+	if len(mapData.Civ5PlayerData) != 0 {
+		t.Errorf("PrepareReplay() changed the map's player data despite failing validation")
+	}
+}
+
+func TestPrepareReplaySetsUpPlayersAndCityOwners(t *testing.T) {
+	mapData, replayData := newValidReplayFixtures()
+	mapData.CityOwnerIndexMap = nil // as loaded from a bare JSON export
+
+	if err := PrepareReplay(mapData, replayData); err != nil {
+		t.Fatalf("PrepareReplay() = %v", err)
+	}
+	if len(mapData.Civ5PlayerData) != 1 || mapData.Civ5PlayerData[0].CivType != "CIVILIZATION_ROME" {
+		t.Errorf("Civ5PlayerData = %v, want one CIVILIZATION_ROME player", mapData.Civ5PlayerData)
+	}
+	if got, ok := mapData.CityOwnerIndexMap[0]; !ok || got != 0 {
+		t.Errorf("CityOwnerIndexMap[0] = %d (present %v), want identity 0", got, ok)
 	}
 }

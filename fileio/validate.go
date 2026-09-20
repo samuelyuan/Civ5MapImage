@@ -187,3 +187,58 @@ func ValidateFileExtension(filename string, allowedExt ...string) error {
 	}
 	return fmt.Errorf("filename %q has extension %q, expected %s", filename, ext, strings.Join(allowedExt, " or "))
 }
+
+// ValidateReplayRenderable returns a descriptive error if mapData and replayData can't render together (e.g. a mismatched map).
+func ValidateReplayRenderable(mapData *Civ5MapData, replayData *Civ5ReplayData) error {
+	if mapData == nil {
+		return fmt.Errorf("map data is nil")
+	}
+	if replayData == nil {
+		return fmt.Errorf("replay data is nil")
+	}
+	if len(mapData.MapTiles) == 0 || len(mapData.MapTiles[0]) == 0 {
+		return fmt.Errorf("map has no tiles to draw")
+	}
+	if len(mapData.MapTileImprovements) == 0 {
+		return fmt.Errorf("map is missing tile improvement data required to render a replay (was it exported without game data?)")
+	}
+	if len(replayData.AllReplayEvents) == 0 {
+		return fmt.Errorf("replay has no events to animate")
+	}
+
+	mapHeight := len(mapData.MapTileImprovements)
+	mapWidth := len(mapData.MapTileImprovements[0])
+
+	// 0 for replays that don't carry their own dimensions (e.g. one converted from a .civ5save).
+	if replayData.MapWidth > 0 && replayData.MapHeight > 0 {
+		if replayData.MapWidth != mapWidth || replayData.MapHeight != mapHeight {
+			return fmt.Errorf("replay was recorded on a %dx%d map, but the provided map is %dx%d; make sure -map points to the matching .Civ5Map file",
+				replayData.MapWidth, replayData.MapHeight, mapWidth, mapHeight)
+		}
+	}
+
+	fmt.Println("\n=== Validating replay events ===")
+	eventTypeCounts := map[int]int{}
+	for _, event := range replayData.AllReplayEvents {
+		eventTypeCounts[event.TypeId]++
+	}
+	fmt.Printf("Validated %d/%d replay events\n", len(replayData.AllReplayEvents), len(replayData.AllReplayEvents))
+	for _, typeId := range GetSortedKeys(eventTypeCounts) {
+		fmt.Printf("  %d of TypeId %d (%s)\n", eventTypeCounts[typeId], typeId, replayEventTypeName(typeId))
+	}
+
+	for _, event := range replayData.AllReplayEvents {
+		for _, tile := range event.Tiles {
+			if replayEventCanBeLocationless(event.TypeId) && tile.X == replayNoTileSentinel && tile.Y == replayNoTileSentinel {
+				continue
+			}
+			if tile.Y < 0 || tile.Y >= mapHeight || tile.X < 0 || tile.X >= mapWidth {
+				return fmt.Errorf("replay event on turn %d (TypeId %d) references tile (%d, %d), which is outside the map bounds (%dx%d); the replay may not match this map",
+					event.Turn, event.TypeId, tile.X, tile.Y, mapWidth, mapHeight)
+			}
+		}
+	}
+	fmt.Println()
+
+	return nil
+}
