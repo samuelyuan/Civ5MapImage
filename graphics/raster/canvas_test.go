@@ -169,13 +169,13 @@ func TestColorTableSnapsOffPaletteColorsAndCountsEachOnce(t *testing.T) {
 	}
 }
 
-// Scratch canvases share the table, so a color one of them can't find in the palette shows up on the parent.
-func TestScratchCanvasSharesTheColorTable(t *testing.T) {
+// Sibling canvases share the table, so a color one of them can't find in the palette shows up on the parent.
+func TestSiblingCanvasSharesTheColorTable(t *testing.T) {
 	c := unitCanvas(4, 4)
-	scratch := c.NewSibling(2, 2)
-	scratch.SetColor(10, 10, 240)
+	sibling := c.NewSibling(2, 2)
+	sibling.SetColor(10, 10, 240)
 	if c.inexact != 1 {
-		t.Errorf("parent inexact = %d after its scratch canvas drew an off-palette color, want 1", c.inexact)
+		t.Errorf("parent inexact = %d after its sibling canvas drew an off-palette color, want 1", c.inexact)
 	}
 }
 
@@ -200,14 +200,14 @@ func TestPalettedCanvasResizeKeepsTrackingRegionIDs(t *testing.T) {
 }
 
 func TestPalettedCanvasPasteRegion(t *testing.T) {
-	t.Run("same-palette scratch canvas is copied as indices", func(t *testing.T) {
+	t.Run("same-palette sibling canvas is copied as indices", func(t *testing.T) {
 		c := unitCanvas(6, 6)
-		scratch := c.NewSibling(3, 3)
-		scratch.SetColor(0, 0, 255)
-		scratch.DrawRectangle(0, 0, 3, 3)
-		scratch.Fill()
+		sibling := c.NewSibling(3, 3)
+		sibling.SetColor(0, 0, 255)
+		sibling.DrawRectangle(0, 0, 3, 3)
+		sibling.Fill()
 
-		c.PasteRegion(scratch.Image(), image.Rect(2, 2, 4, 4), image.Pt(1, 1))
+		c.PasteRegion(sibling.Image(), image.Rect(2, 2, 4, 4), image.Pt(1, 1))
 		blue := c.IndexFor(0, 0, 255)
 		for y := 0; y < 6; y++ {
 			for x := 0; x < 6; x++ {

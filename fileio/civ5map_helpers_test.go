@@ -221,7 +221,7 @@ func TestParseTeamVisibility(t *testing.T) {
 	// 2x2 map: team0 sees (0,0),(1,1); team1 sees nothing; team2 sees (0,1).
 	visibilityData := []byte{0b00001001, 0b00000100}
 
-	visible := ParseTeamVisibility(visibilityData, 2, 2, 3)
+	visible := ParseTeamVisibility(visibilityData, MapSize{Height: 2, Width: 2}, 3)
 	if len(visible) != 3 {
 		t.Fatalf("ParseTeamVisibility() returned %d teams, want 3", len(visible))
 	}
@@ -233,6 +233,20 @@ func TestParseTeamVisibility(t *testing.T) {
 	}
 	if !reflect.DeepEqual(visible[2], [][2]int{{0, 1}}) {
 		t.Errorf("visible[2] = %v, want [[0 1]]", visible[2])
+	}
+}
+
+// On a 3 wide x 2 high map a bit is team*6 + y*3 + x, so a swapped width and height would read different tiles.
+func TestParseTeamVisibilityOnANonSquareMap(t *testing.T) {
+	// team0 sees (x=2, y=0) and (x=0, y=1): bits 2 and 3. team1 sees (x=1, y=1): bit 6+4 = 10.
+	visibilityData := []byte{0b00001100, 0b00000100}
+
+	visible := ParseTeamVisibility(visibilityData, MapSize{Height: 2, Width: 3}, 2)
+	if !reflect.DeepEqual(visible[0], [][2]int{{2, 0}, {0, 1}}) {
+		t.Errorf("visible[0] = %v, want [[2 0] [0 1]]", visible[0])
+	}
+	if !reflect.DeepEqual(visible[1], [][2]int{{1, 1}}) {
+		t.Errorf("visible[1] = %v, want [[1 1]]", visible[1])
 	}
 }
 

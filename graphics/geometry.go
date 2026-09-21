@@ -1,6 +1,7 @@
 package graphics
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -46,9 +47,9 @@ func pixelLayout(radius float64, canvasHeight int) tileLayout {
 	return tileLayout{radius: radius, canvasHeight: canvasHeight, pixels: true}
 }
 
-// center returns the center of tile (row, col).
-func (l tileLayout) center(row, col int) (x, y float64) {
-	x, y = GetImagePosition(row, col, l.radius)
+// center returns the center of the tile at pos.
+func (l tileLayout) center(pos fileio.TilePos) (x, y float64) {
+	x, y = GetImagePosition(pos, l.radius)
 	if l.pixels {
 		y = float64(l.canvasHeight) - y
 	}
@@ -78,6 +79,18 @@ func (l tileLayout) hexEdge(edgeIndex int, centerX, centerY float64) Line {
 		edge.Y1, edge.Y2 = 2*centerY-edge.Y1, 2*centerY-edge.Y2
 	}
 	return edge
+}
+
+// repaintRectPad is the margin a tile's repaint rect adds around its hex, for river and border stroke half-widths right at the tile's radius.
+const repaintRectPad = 2.0
+
+// repaintRect returns the pixel rect that repainting the tile at pos can touch, clipped to bounds.
+func (l tileLayout) repaintRect(pos fileio.TilePos, bounds image.Rectangle) image.Rectangle {
+	x, y := l.center(pos)
+	return image.Rect(
+		int(x-l.radius-repaintRectPad), int(y-l.radius-repaintRectPad),
+		int(x+l.radius+repaintRectPad)+1, int(y+l.radius+repaintRectPad)+1,
+	).Intersect(bounds)
 }
 
 // ColoredLine is a line segment with its width and color.
@@ -112,29 +125,29 @@ func markerColor(accent color.RGBA) color.RGBA {
 	return blendColor(accent, color.RGBA{255, 255, 255, 255}, 0.2)
 }
 
-// tileIsMinor reports whether tile (row, col) belongs to a city state.
-func tileIsMinor(mapData *fileio.Civ5MapData, row, col int) bool {
-	return strings.Contains(fileio.GetTileCivName(mapData, row, col), "MINOR")
+// tileIsMinor reports whether the tile at pos belongs to a city state.
+func tileIsMinor(mapData *fileio.Civ5MapData, pos fileio.TilePos) bool {
+	return strings.Contains(fileio.GetTileCivName(mapData, pos), "MINOR")
 }
 
-// PhysicalHexTile returns tile (row, col)'s position and terrain fill color for the physical map.
-func PhysicalHexTile(mapData *fileio.Civ5MapData, row, col int, radius float64) HexTile {
-	x, y := GetImagePosition(row, col, radius)
-	c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, row, col))
+// PhysicalHexTile returns the position and terrain fill color of the tile at pos, for the physical map.
+func PhysicalHexTile(mapData *fileio.Civ5MapData, pos fileio.TilePos, radius float64) HexTile {
+	x, y := GetImagePosition(pos, radius)
+	c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
 	return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}
 }
 
-// PoliticalHexTile returns tile (row, col)'s political position and fill, plus its city icon color (white if unowned).
-func PoliticalHexTile(mapData *fileio.Civ5MapData, row, col int, l tileLayout) (HexTile, color.RGBA) {
-	x, y := l.center(row, col)
+// PoliticalHexTile returns the political position and fill of the tile at pos, plus its city icon color (white if unowned).
+func PoliticalHexTile(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout) (HexTile, color.RGBA) {
+	x, y := l.center(pos)
 	cityColor := color.RGBA{255, 255, 255, 255}
 
-	if fileio.IsWaterTile(mapData, row, col) {
-		c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, row, col))
+	if fileio.IsWaterTile(mapData, pos) {
+		c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
 		return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}, cityColor
 	}
 
-	tileColor := fileio.GetPoliticalMapTileColor(mapData, row, col)
+	tileColor := fileio.GetPoliticalMapTileColor(mapData, pos)
 	renderColor, ok := civColorMap[tileColor]
 	if !ok {
 		if tileColor != "" {
@@ -142,11 +155,11 @@ func PoliticalHexTile(mapData *fileio.Civ5MapData, row, col int, l tileLayout) (
 			return HexTile{X: x, Y: y}, cityColor
 		}
 		// Territory not owned by anyone.
-		c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, row, col))
+		c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
 		return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}, cityColor
 	}
 
-	shades := shadesFor(renderColor, tileIsMinor(mapData, row, col))
+	shades := shadesFor(renderColor, tileIsMinor(mapData, pos))
 	return HexTile{X: x, Y: y, R: shades.fill.R, G: shades.fill.G, B: shades.fill.B}, shades.accent
 }
 
@@ -165,15 +178,15 @@ type Entity struct {
 	R, G, B uint8
 }
 
-// TileEntities returns tile (row, col)'s mountain/city markers (cityColor for a city), or nil.
-func TileEntities(mapData *fileio.Civ5MapData, row, col int, l tileLayout, cityColor color.RGBA) []Entity {
-	x, y := l.center(row, col)
+// TileEntities returns the mountain/city markers of the tile at pos (cityColor for a city), or nil.
+func TileEntities(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout, cityColor color.RGBA) []Entity {
+	x, y := l.center(pos)
 
 	var entities []Entity
-	if fileio.TileHasMountain(mapData, row, col) {
+	if fileio.TileHasMountain(mapData, pos) {
 		entities = append(entities, Entity{Type: EntityMountain, X: x, Y: y})
 	}
-	if fileio.TileHasCity(mapData, row, col) {
+	if fileio.TileHasCity(mapData, pos) {
 		entities = append(entities, Entity{Type: EntityCity, X: x, Y: y, R: cityColor.R, G: cityColor.G, B: cityColor.B})
 	}
 	return entities
@@ -194,30 +207,27 @@ func RiverEdgesForTile(riverData int, centerX, centerY float64, l tileLayout) []
 	return edges
 }
 
-// RoadSegmentsForTile returns lines from tile (row, col) to each neighbor with a route or city, or nil if it has no route (255).
-func RoadSegmentsForTile(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int, l tileLayout) []ColoredLine {
-	routeType := mapData.MapTileImprovements[row][col].RouteType
+// RoadSegmentsForTile returns lines from the tile at pos to each neighbor with a route or city, or nil if it has no route (255).
+func RoadSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, l tileLayout) []ColoredLine {
+	routeType := mapData.TileImprovement(pos).RouteType
 	if routeType == 255 {
 		return nil
 	}
 
-	x1, y1 := l.center(row, col)
+	x1, y1 := l.center(pos)
 
 	var segments []ColoredLine
-	neighbors := fileio.GetNeighbors(col, row)
-	for n := 0; n < len(neighbors); n++ {
-		newX := neighbors[n][0]
-		newY := neighbors[n][1]
-		if newX < 0 || newY < 0 || newX >= mapWidth || newY >= mapHeight {
+	for _, neighbor := range fileio.GetNeighbors(pos) {
+		if !neighbor.InMap(mapSize) {
 			continue
 		}
 
-		neighborTile := mapData.MapTileImprovements[newY][newX]
+		neighborTile := mapData.TileImprovement(neighbor)
 		if neighborTile.RouteType == 255 && neighborTile.CityName == "" {
 			continue
 		}
 
-		x2, y2 := l.center(newY, newX)
+		x2, y2 := l.center(neighbor)
 
 		var lineWidth float64
 		var r, g, b uint8
@@ -248,36 +258,33 @@ func RoadSegmentsForTile(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, 
 // BorderLineWidth is the width every territory border segment draws with.
 const BorderLineWidth = 1.5
 
-// tileBorderColor returns tile (row, col)'s civ border color, white if unrecognized.
-func tileBorderColor(mapData *fileio.Civ5MapData, row, col int) color.RGBA {
-	renderColor, ok := civColorMap[fileio.GetPoliticalMapTileColor(mapData, row, col)]
+// tileBorderColor returns the civ border color of the tile at pos, white if unrecognized.
+func tileBorderColor(mapData *fileio.Civ5MapData, pos fileio.TilePos) color.RGBA {
+	renderColor, ok := civColorMap[fileio.GetPoliticalMapTileColor(mapData, pos)]
 	if !ok {
 		return color.RGBA{255, 255, 255, 255}
 	}
-	return shadesFor(renderColor, tileIsMinor(mapData, row, col)).accent
+	return shadesFor(renderColor, tileIsMinor(mapData, pos)).accent
 }
 
 // BorderSegmentsForTile returns border lines against neighbors with a different owner, or nil if the tile has no valid owner.
-func BorderSegmentsForTile(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int, radius float64) []ColoredLine {
-	currentTileOwner := mapData.MapTileImprovements[row][col].Owner
+func BorderSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, radius float64) []ColoredLine {
+	currentTileOwner := mapData.TileImprovement(pos).Owner
 	if fileio.IsInvalidTileOwner(currentTileOwner) {
 		return nil
 	}
 
-	x1, y1 := GetImagePosition(row, col, radius)
+	x1, y1 := GetImagePosition(pos, radius)
 
-	borderColor := tileBorderColor(mapData, row, col)
+	borderColor := tileBorderColor(mapData, pos)
 
 	var segments []ColoredLine
-	neighbors := fileio.GetNeighbors(col, row)
-	for n := 0; n < len(neighbors); n++ {
-		newX := neighbors[n][0]
-		newY := neighbors[n][1]
-		if newX < 0 || newY < 0 || newX >= mapWidth || newY >= mapHeight {
+	for n, neighbor := range fileio.GetNeighbors(pos) {
+		if !neighbor.InMap(mapSize) {
 			continue
 		}
 
-		otherTileOwner := mapData.MapTileImprovements[newY][newX].Owner
+		otherTileOwner := mapData.TileImprovement(neighbor).Owner
 		if currentTileOwner == otherTileOwner {
 			continue
 		}
@@ -300,23 +307,27 @@ type ColoredText struct {
 	R, G, B uint8
 }
 
-// cityNameText returns tile (row, col)'s display city name, trimmed at the first null byte.
-func cityNameText(mapData *fileio.Civ5MapData, row, col int) string {
-	name := mapData.MapTileImprovements[row][col].CityName
+// trimCityName trims a stored city name at its first null byte.
+func trimCityName(name string) string {
 	if i := strings.IndexByte(name, 0); i >= 0 {
-		name = name[:i]
+		return name[:i]
 	}
 	return name
 }
 
+// cityNameText returns the display city name of the tile at pos.
+func cityNameText(mapData *fileio.Civ5MapData, pos fileio.TilePos) string {
+	return trimCityName(mapData.TileImprovement(pos).CityName)
+}
+
 // cityLabelPosition returns the anchor for a tile's city label, centered above the tile (via InvertedRow in the y-up layout).
-func cityLabelPosition(l tileLayout, mapHeight, row, col int, cityName string) (float64, float64) {
+func cityLabelPosition(l tileLayout, mapHeight int, pos fileio.TilePos, cityName string) (float64, float64) {
 	halfWidth := 6.0 * float64(len(cityName)) / 2.0
 	if l.pixels {
-		x, y := l.center(row, col)
+		x, y := l.center(pos)
 		return x - halfWidth, y - l.radius/2
 	}
-	x, y := GetImagePosition(InvertedRow(mapHeight, row), col, l.radius)
+	x, y := GetImagePosition(fileio.TilePos{Row: InvertedRow(mapHeight, pos.Row), Col: pos.Col}, l.radius)
 	return x - halfWidth, y - l.radius*1.5
 }
 
@@ -330,35 +341,41 @@ func blendColor(c1, c2 color.RGBA, t float64) color.RGBA {
 	}
 }
 
-// PhysicalCityNameLabel returns tile (row, col)'s city label in white.
-func PhysicalCityNameLabel(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int, radius float64) ColoredText {
-	cityName := cityNameText(mapData, row, col)
-	x, y := cityLabelPosition(mapLayout(radius), mapHeight, row, col, cityName)
+// PhysicalCityNameLabel returns the city label of the tile at pos, in white.
+func PhysicalCityNameLabel(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, radius float64) ColoredText {
+	cityName := cityNameText(mapData, pos)
+	x, y := cityLabelPosition(mapLayout(radius), mapSize.Height, pos, cityName)
 	return ColoredText{Text: cityName, X: x, Y: y, R: 255, G: 255, B: 255}
 }
 
-// PoliticalCityNameLabel returns tile (row, col)'s city label in its owning civ's color (white if unrecognized).
-func PoliticalCityNameLabel(mapData *fileio.Civ5MapData, mapHeight, mapWidth, row, col int, l tileLayout) ColoredText {
-	cityName := cityNameText(mapData, row, col)
-	x, y := cityLabelPosition(l, mapHeight, row, col, cityName)
+// PoliticalCityNameLabel returns the city label of the tile at pos, in its owning civ's color (white if unrecognized).
+func PoliticalCityNameLabel(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, l tileLayout) ColoredText {
+	cityName := cityNameText(mapData, pos)
+	x, y := cityLabelPosition(l, mapSize.Height, pos, cityName)
 
-	tileColor := fileio.GetPoliticalMapTileColor(mapData, row, col)
+	tileColor := fileio.GetPoliticalMapTileColor(mapData, pos)
 	renderColor, ok := civColorMap[tileColor]
 	if !ok {
 		return ColoredText{Text: cityName, X: x, Y: y, R: 255, G: 255, B: 255}
 	}
 
-	textColor := markerColor(shadesFor(renderColor, tileIsMinor(mapData, row, col)).accent)
+	textColor := markerColor(shadesFor(renderColor, tileIsMinor(mapData, pos)).accent)
 	return ColoredText{Text: cityName, X: x, Y: y, R: textColor.R, G: textColor.G, B: textColor.B}
 }
 
-func GetImagePosition(i int, j int, radius float64) (float64, float64) {
+// GetImagePosition returns the center of the tile at pos, in the map's y-up layout.
+func GetImagePosition(pos fileio.TilePos, radius float64) (float64, float64) {
 	angle := math.Pi / 6
 
-	x := (radius * 1.5) + float64(j)*(2*radius*math.Cos(angle))
-	y := radius + float64(i)*radius*(1+math.Sin(angle))
-	if i%2 == 1 {
+	x := (radius * 1.5) + float64(pos.Col)*(2*radius*math.Cos(angle))
+	y := radius + float64(pos.Row)*radius*(1+math.Sin(angle))
+	if pos.Row%2 == 1 {
 		x += radius * math.Cos(angle)
 	}
 	return x, y
+}
+
+// imageSize returns the width and height of the image a map of the given size needs: where the tile just past its far corner would be.
+func imageSize(mapSize fileio.MapSize, radius float64) (width, height float64) {
+	return GetImagePosition(fileio.TilePos{Row: mapSize.Height, Col: mapSize.Width}, radius)
 }

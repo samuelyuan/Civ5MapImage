@@ -31,6 +31,9 @@ type Civ5ReplayEventTile struct {
 	Y int
 }
 
+// Pos returns the tile's position on the map; the file stores it as X (the column) and Y (the row).
+func (t Civ5ReplayEventTile) Pos() TilePos { return TilePos{Row: t.Y, Col: t.X} }
+
 type Civ5ReplayEvent struct {
 	Turn   int
 	TypeId int

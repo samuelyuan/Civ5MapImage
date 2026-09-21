@@ -639,14 +639,14 @@ func ParseTeamRelationships(relationshipData []byte, teamCount int) Civ5TeamRela
 }
 
 // ParseTeamVisibility decodes visibilityData into each team's visible tiles, indexed by team.
-func ParseTeamVisibility(visibilityData []byte, mapWidth, mapHeight, teamCount int) [][][2]int {
-	mapSize := mapWidth * mapHeight
+func ParseTeamVisibility(visibilityData []byte, mapSize MapSize, teamCount int) [][][2]int {
+	tileCount := mapSize.Width * mapSize.Height
 	matrix := make([][][2]int, teamCount)
 	for t := 0; t < teamCount; t++ {
 		var visible [][2]int
-		for y := 0; y < mapHeight; y++ {
-			for x := 0; x < mapWidth; x++ {
-				bitIndex := t*mapSize + y*mapWidth + x
+		for y := 0; y < mapSize.Height; y++ {
+			for x := 0; x < mapSize.Width; x++ {
+				bitIndex := t*tileCount + y*mapSize.Width + x
 				byteIndex := bitIndex / 8
 				if byteIndex >= len(visibilityData) {
 					continue
@@ -1218,7 +1218,7 @@ type gameDescriptionSectionData struct {
 }
 
 // readGameDescriptionSection reads the game description header through the visibility bitset.
-func readGameDescriptionSection(reader *io.SectionReader, version int, mapWidth, mapHeight uint32) (Civ5GameDescriptionHeader, gameDescriptionSectionData, Civ5GameTypeLists, error) {
+func readGameDescriptionSection(reader *io.SectionReader, version int, mapSize MapSize) (Civ5GameDescriptionHeader, gameDescriptionSectionData, Civ5GameTypeLists, error) {
 	fmt.Println("Reading game description header...")
 	gameDescriptionHeader := Civ5GameDescriptionHeader{}
 	typeLists := Civ5GameTypeLists{}
@@ -1318,7 +1318,7 @@ func readGameDescriptionSection(reader *io.SectionReader, version int, mapWidth,
 	}
 
 	// Per-team tile visibility bitset, right after the influence array.
-	visibilityDataSize := (int(mapWidth)*int(mapHeight)*int(gameDescriptionHeader.TeamCount) + 7) / 8
+	visibilityDataSize := (mapSize.Width*mapSize.Height*int(gameDescriptionHeader.TeamCount) + 7) / 8
 	visibilityDataBytes, err := readByteArray(reader, uint32(visibilityDataSize))
 	if err != nil {
 		return gameDescriptionHeader, gameDescriptionSectionData{}, typeLists, err
@@ -1432,14 +1432,14 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 		return createPhysicalMapData(&mapHeader, terrainList, featureTerrainList, resourceList, mapTiles), nil
 	}
 
-	gameDescriptionHeader, sectionData, typeLists, err := readGameDescriptionSection(streamReader, version, mapHeader.Width, mapHeader.Height)
+	gameDescriptionHeader, sectionData, typeLists, err := readGameDescriptionSection(streamReader, version, MapSize{Height: int(mapHeader.Height), Width: int(mapHeader.Width)})
 	if err != nil {
 		return nil, err
 	}
 
 	teamCount := int(gameDescriptionHeader.TeamCount)
 	teamRelationships := ParseTeamRelationships(sectionData.RelationshipDataBytes, teamCount)
-	teamVisibility := ParseTeamVisibility(sectionData.VisibilityDataBytes, int(mapHeader.Width), int(mapHeader.Height), teamCount)
+	teamVisibility := ParseTeamVisibility(sectionData.VisibilityDataBytes, MapSize{Height: int(mapHeader.Height), Width: int(mapHeader.Width)}, teamCount)
 
 	mapTileImprovementData, allPlayerData, teamData, err := readTailSections(inputFile, fileLength, &mapHeader, &gameDescriptionHeader, typeLists.PolicyTypeList)
 	if err != nil {

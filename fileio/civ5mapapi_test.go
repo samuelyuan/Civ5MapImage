@@ -6,20 +6,40 @@ import (
 )
 
 func TestGetNeighborsOddRow(t *testing.T) {
-	// y=1 is odd, should use NeighborOdd offsets
-	got := GetNeighbors(5, 1)
-	want := [6][2]int{{6, 2}, {5, 2}, {4, 1}, {5, 0}, {6, 0}, {6, 1}}
+	// row 1 is odd, should use NeighborOdd offsets
+	got := GetNeighbors(TilePos{Row: 1, Col: 5})
+	want := [6]TilePos{{Row: 2, Col: 6}, {Row: 2, Col: 5}, {Row: 1, Col: 4}, {Row: 0, Col: 5}, {Row: 0, Col: 6}, {Row: 1, Col: 6}}
 	if got != want {
-		t.Errorf("GetNeighbors(5, 1) = %v, want %v", got, want)
+		t.Errorf("GetNeighbors(row 1, col 5) = %v, want %v", got, want)
 	}
 }
 
 func TestGetNeighborsEvenRow(t *testing.T) {
-	// y=2 is even, should use NeighborEven offsets
-	got := GetNeighbors(5, 2)
-	want := [6][2]int{{5, 3}, {4, 3}, {4, 2}, {4, 1}, {5, 1}, {6, 2}}
+	// row 2 is even, should use NeighborEven offsets
+	got := GetNeighbors(TilePos{Row: 2, Col: 5})
+	want := [6]TilePos{{Row: 3, Col: 5}, {Row: 3, Col: 4}, {Row: 2, Col: 4}, {Row: 1, Col: 4}, {Row: 1, Col: 5}, {Row: 2, Col: 6}}
 	if got != want {
-		t.Errorf("GetNeighbors(5, 2) = %v, want %v", got, want)
+		t.Errorf("GetNeighbors(row 2, col 5) = %v, want %v", got, want)
+	}
+}
+
+func TestTilePosInMap(t *testing.T) {
+	const height, width = 3, 4
+	tests := []struct {
+		pos  TilePos
+		want bool
+	}{
+		{TilePos{Row: 0, Col: 0}, true},
+		{TilePos{Row: 2, Col: 3}, true},
+		{TilePos{Row: 3, Col: 0}, false}, // row is the first axis, bounded by the height
+		{TilePos{Row: 0, Col: 4}, false}, // col is bounded by the width
+		{TilePos{Row: -1, Col: 0}, false},
+		{TilePos{Row: 0, Col: -1}, false},
+	}
+	for _, tt := range tests {
+		if got := tt.pos.InMap(MapSize{Height: height, Width: width}); got != tt.want {
+			t.Errorf("%+v.InMap(%d, %d) = %v, want %v", tt.pos, height, width, got, tt.want)
+		}
 	}
 }
 
@@ -48,20 +68,20 @@ func newTestMapData() *Civ5MapData {
 func TestGetTerrainStringBounds(t *testing.T) {
 	mapData := newTestMapData()
 
-	if got := GetTerrainString(mapData, 0, 0); got != "TERRAIN_GRASS" {
+	if got := GetTerrainString(mapData, TilePos{Row: 0, Col: 0}); got != "TERRAIN_GRASS" {
 		t.Errorf("GetTerrainString(0,0) = %q, want TERRAIN_GRASS", got)
 	}
-	if got := GetTerrainString(mapData, 0, 1); got != "TERRAIN_OCEAN" {
+	if got := GetTerrainString(mapData, TilePos{Row: 0, Col: 1}); got != "TERRAIN_OCEAN" {
 		t.Errorf("GetTerrainString(0,1) = %q, want TERRAIN_OCEAN", got)
 	}
 	// Out of bounds should not panic and should return ""
-	if got := GetTerrainString(mapData, -1, 0); got != "" {
+	if got := GetTerrainString(mapData, TilePos{Row: -1, Col: 0}); got != "" {
 		t.Errorf("GetTerrainString(-1,0) = %q, want \"\"", got)
 	}
-	if got := GetTerrainString(mapData, 5, 0); got != "" {
+	if got := GetTerrainString(mapData, TilePos{Row: 5, Col: 0}); got != "" {
 		t.Errorf("GetTerrainString(5,0) = %q, want \"\"", got)
 	}
-	if got := GetTerrainString(mapData, 0, 5); got != "" {
+	if got := GetTerrainString(mapData, TilePos{Row: 0, Col: 5}); got != "" {
 		t.Errorf("GetTerrainString(0,5) = %q, want \"\"", got)
 	}
 }
@@ -69,14 +89,14 @@ func TestGetTerrainStringBounds(t *testing.T) {
 func TestIsWaterTile(t *testing.T) {
 	mapData := newTestMapData()
 
-	if IsWaterTile(mapData, 0, 0) {
+	if IsWaterTile(mapData, TilePos{Row: 0, Col: 0}) {
 		t.Errorf("expected (0,0) grass tile to not be water")
 	}
-	if !IsWaterTile(mapData, 0, 1) {
+	if !IsWaterTile(mapData, TilePos{Row: 0, Col: 1}) {
 		t.Errorf("expected (0,1) ocean tile to be water")
 	}
 	// out of bounds should be false, not panic
-	if IsWaterTile(mapData, 10, 10) {
+	if IsWaterTile(mapData, TilePos{Row: 10, Col: 10}) {
 		t.Errorf("expected out of bounds tile to not be water")
 	}
 }
@@ -84,13 +104,13 @@ func TestIsWaterTile(t *testing.T) {
 func TestTileHasCity(t *testing.T) {
 	mapData := newTestMapData()
 
-	if !TileHasCity(mapData, 0, 0) {
+	if !TileHasCity(mapData, TilePos{Row: 0, Col: 0}) {
 		t.Errorf("expected (0,0) to have a city")
 	}
-	if TileHasCity(mapData, 0, 1) {
+	if TileHasCity(mapData, TilePos{Row: 0, Col: 1}) {
 		t.Errorf("expected (0,1) to not have a city")
 	}
-	if TileHasCity(mapData, -1, 0) {
+	if TileHasCity(mapData, TilePos{Row: -1, Col: 0}) {
 		t.Errorf("expected out of bounds to not have a city")
 	}
 }
@@ -98,13 +118,13 @@ func TestTileHasCity(t *testing.T) {
 func TestTileHasMountain(t *testing.T) {
 	mapData := newTestMapData()
 
-	if TileHasMountain(mapData, 0, 0) {
+	if TileHasMountain(mapData, TilePos{Row: 0, Col: 0}) {
 		t.Errorf("expected (0,0) elevation 0 to not be a mountain")
 	}
-	if !TileHasMountain(mapData, 0, 1) {
+	if !TileHasMountain(mapData, TilePos{Row: 0, Col: 1}) {
 		t.Errorf("expected (0,1) elevation 2 to be a mountain")
 	}
-	if TileHasMountain(mapData, 99, 99) {
+	if TileHasMountain(mapData, TilePos{Row: 99, Col: 99}) {
 		t.Errorf("expected out of bounds to not be a mountain")
 	}
 }
@@ -130,15 +150,15 @@ func TestIsInvalidTileOwner(t *testing.T) {
 func TestGetTileCivName(t *testing.T) {
 	mapData := newTestMapData()
 
-	if got := GetTileCivName(mapData, 0, 0); got != "CIVILIZATION_ROME" {
+	if got := GetTileCivName(mapData, TilePos{Row: 0, Col: 0}); got != "CIVILIZATION_ROME" {
 		t.Errorf("GetTileCivName(0,0) = %q, want CIVILIZATION_ROME", got)
 	}
 	// invalid owner should return ""
-	if got := GetTileCivName(mapData, 0, 1); got != "" {
+	if got := GetTileCivName(mapData, TilePos{Row: 0, Col: 1}); got != "" {
 		t.Errorf("GetTileCivName(0,1) = %q, want \"\"", got)
 	}
 	// out of bounds should return "" without panicking
-	if got := GetTileCivName(mapData, 50, 50); got != "" {
+	if got := GetTileCivName(mapData, TilePos{Row: 50, Col: 50}); got != "" {
 		t.Errorf("GetTileCivName(50,50) = %q, want \"\"", got)
 	}
 }
@@ -146,13 +166,13 @@ func TestGetTileCivName(t *testing.T) {
 func TestGetPoliticalMapTileColor(t *testing.T) {
 	mapData := newTestMapData()
 
-	if got := GetPoliticalMapTileColor(mapData, 0, 0); got != "PLAYERCOLOR_RED" {
+	if got := GetPoliticalMapTileColor(mapData, TilePos{Row: 0, Col: 0}); got != "PLAYERCOLOR_RED" {
 		t.Errorf("GetPoliticalMapTileColor(0,0) = %q, want PLAYERCOLOR_RED", got)
 	}
-	if got := GetPoliticalMapTileColor(mapData, 0, 1); got != "" {
+	if got := GetPoliticalMapTileColor(mapData, TilePos{Row: 0, Col: 1}); got != "" {
 		t.Errorf("GetPoliticalMapTileColor(0,1) = %q, want \"\"", got)
 	}
-	if got := GetPoliticalMapTileColor(mapData, 50, 50); got != "" {
+	if got := GetPoliticalMapTileColor(mapData, TilePos{Row: 50, Col: 50}); got != "" {
 		t.Errorf("GetPoliticalMapTileColor(50,50) = %q, want \"\"", got)
 	}
 }
@@ -411,5 +431,59 @@ func TestPrepareReplaySetsUpPlayersAndCityOwners(t *testing.T) {
 	}
 	if got, ok := mapData.CityOwnerIndexMap[0]; !ok || got != 0 {
 		t.Errorf("CityOwnerIndexMap[0] = %d (present %v), want identity 0", got, ok)
+	}
+}
+
+// A 3 wide x 2 high map whose tiles are all distinct, so a swapped row and column reads a different tile or none.
+func newAccessorTestMap() *Civ5MapData {
+	physical := [][]*Civ5MapTilePhysical{
+		{{Elevation: 10}, {Elevation: 11}, {Elevation: 12}},
+		{{Elevation: 20}, {Elevation: 21}, {Elevation: 22}},
+	}
+	improvements := [][]*Civ5MapTileImprovement{
+		{{CityId: 10}, {CityId: 11}, {CityId: 12}},
+		{{CityId: 20}, {CityId: 21}, {CityId: 22}},
+	}
+	return &Civ5MapData{MapTiles: physical, MapTileImprovements: improvements}
+}
+
+func TestPhysicalTileReadsRowThenColumn(t *testing.T) {
+	m := newAccessorTestMap()
+	if got := m.PhysicalTile(TilePos{Row: 1, Col: 2}); got != m.MapTiles[1][2] || got.Elevation != 22 {
+		t.Errorf("PhysicalTile(row 1, col 2) = %+v, want the tile at MapTiles[1][2]", got)
+	}
+	if got := m.PhysicalTile(TilePos{Row: 0, Col: 1}); got.Elevation != 11 {
+		t.Errorf("PhysicalTile(row 0, col 1).Elevation = %d, want 11", got.Elevation)
+	}
+	for _, pos := range []TilePos{{Row: 2, Col: 0}, {Row: 0, Col: 3}, {Row: -1, Col: 0}, {Row: 0, Col: -1}, {Row: 2, Col: 1}} {
+		if got := m.PhysicalTile(pos); got != nil {
+			t.Errorf("PhysicalTile(%+v) = %+v, want nil off the 2 x 3 map", pos, got)
+		}
+	}
+}
+
+func TestTileImprovementReadsRowThenColumn(t *testing.T) {
+	m := newAccessorTestMap()
+	if got := m.TileImprovement(TilePos{Row: 1, Col: 2}); got != m.MapTileImprovements[1][2] || got.CityId != 22 {
+		t.Errorf("TileImprovement(row 1, col 2) = %+v, want the record at MapTileImprovements[1][2]", got)
+	}
+	for _, pos := range []TilePos{{Row: 2, Col: 0}, {Row: 0, Col: 3}, {Row: -1, Col: 0}, {Row: 0, Col: -1}} {
+		if got := m.TileImprovement(pos); got != nil {
+			t.Errorf("TileImprovement(%+v) = %+v, want nil off the 2 x 3 map", pos, got)
+		}
+	}
+}
+
+func TestTileImprovementIsNilWhenTheMapHasNoImprovementData(t *testing.T) {
+	m := newAccessorTestMap()
+	m.MapTileImprovements = nil
+	if got := m.TileImprovement(TilePos{Row: 0, Col: 0}); got != nil {
+		t.Errorf("TileImprovement on a map with no improvement data = %+v, want nil", got)
+	}
+}
+
+func TestReplayEventTilePosIsRowFromYAndColumnFromX(t *testing.T) {
+	if got, want := (Civ5ReplayEventTile{X: 4, Y: 7}).Pos(), (TilePos{Row: 7, Col: 4}); got != want {
+		t.Errorf("Civ5ReplayEventTile{X: 4, Y: 7}.Pos() = %+v, want %+v", got, want)
 	}
 }

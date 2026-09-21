@@ -37,7 +37,7 @@ func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 	renderer := NewMapRenderer(DefaultDrawingConfig())
 	canvas := newBenchCanvas(mapData)
 	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-	grid := renderer.tileGridFor(size, size)
+	grid := renderer.tileGridFor(fileio.MapSize{Height: size, Width: size})
 
 	ownerOf := func(id int32) int { return mapData.MapTileImprovements[int(id)/size][int(id)%size].Owner }
 	indexOf := func(c color.RGBA) uint8 { return canvas.IndexFor(c.R, c.G, c.B) }
@@ -61,7 +61,7 @@ func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 					break
 				}
 			}
-			border := indexOf(tileBorderColor(mapData, row, col))
+			border := indexOf(tileBorderColor(mapData, fileio.TilePos{Row: row, Col: col}))
 			got := canvas.IndexAt(x, y)
 			switch {
 			case near:
@@ -70,7 +70,7 @@ func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 					gaps++
 				}
 			default:
-				hex, _ := PoliticalHexTile(mapData, row, col, mapLayout(renderer.config.Radius))
+				hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: row, Col: col}, mapLayout(renderer.config.Radius))
 				fill := indexOf(color.RGBA{hex.R, hex.G, hex.B, 255})
 				outline := indexOf(tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255}))
 				if got == border && border != fill && border != outline {
@@ -110,9 +110,9 @@ func TestTileOutlinesLeaveNoGapsBetweenTiles(t *testing.T) {
 	renderer := NewMapRenderer(DefaultDrawingConfig())
 	canvas := newBenchCanvas(mapData)
 	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-	grid := renderer.tileGridFor(size, size)
+	grid := renderer.tileGridFor(fileio.MapSize{Height: size, Width: size})
 
-	hex, _ := PoliticalHexTile(mapData, 0, 0, mapLayout(renderer.config.Radius))
+	hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: 0, Col: 0}, mapLayout(renderer.config.Radius))
 	outline := tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255})
 	outlineIndex := canvas.IndexFor(outline.R, outline.G, outline.B)
 
@@ -216,7 +216,7 @@ func testPalette(n int) color.Palette {
 func TestPalettedCanvasHexTilingHasNoGapsOrOverlaps(t *testing.T) {
 	const rows, cols, radius = 10, 10, 16.0
 	palette := testPalette(rows*cols + 1)
-	width, height := GetImagePosition(rows, cols, radius)
+	width, height := imageSize(fileio.MapSize{Height: rows, Width: cols}, radius)
 	canvas := raster.NewPalettedCanvas(int(width), int(height), palette)
 	layout := pixelLayout(radius, int(height))
 
@@ -224,7 +224,7 @@ func TestPalettedCanvasHexTilingHasNoGapsOrOverlaps(t *testing.T) {
 	centers := make([]center, 0, rows*cols)
 	for row := 0; row < rows; row++ {
 		for col := 0; col < cols; col++ {
-			x, y := layout.center(row, col)
+			x, y := layout.center(fileio.TilePos{Row: row, Col: col})
 			centers = append(centers, center{x, y})
 			r, g, b, _ := palette[len(centers)].RGBA()
 			canvas.SetColor(uint8(r>>8), uint8(g>>8), uint8(b>>8))
@@ -257,5 +257,45 @@ func TestPalettedCanvasHexTilingHasNoGapsOrOverlaps(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("no pixels checked")
+	}
+}
+
+// On a map that isn't square, a tile's id, the pixel at its center and the tile found under that pixel must all agree,
+// which fails if the id is built or decoded with the height where the width belongs.
+func TestTileGridIDsAgreeWithTileIDOnANonSquareMap(t *testing.T) {
+	grid := buildTileGrid(fileio.MapSize{Height: 5, Width: 9}, 16)
+	for row := 0; row < grid.mapSize.Height; row++ {
+		for col := 0; col < grid.mapSize.Width; col++ {
+			pos := fileio.TilePos{Row: row, Col: col}
+			x, y := grid.layout.center(pos)
+			px, py := int(x), int(y)
+			if got, want := grid.at(px, py), grid.tileID(pos); got != want {
+				t.Fatalf("the pixel at the center of %+v holds id %d, want tileID %d", pos, got, want)
+			}
+			if got := grid.tilesIn(image.Rect(px, py, px+1, py+1)); len(got) != 1 || !got[pos] {
+				t.Fatalf("tilesIn at the center of %+v = %v, want just that tile", pos, got)
+			}
+		}
+	}
+}
+
+func TestTileGridForRebuildsOnlyWhenTheMapSizeChanges(t *testing.T) {
+	renderer := NewMapRenderer(DefaultDrawingConfig())
+	wide := fileio.MapSize{Height: 4, Width: 8}
+	first := renderer.tileGridFor(fileio.MapSize{Height: 4, Width: 6})
+	if again := renderer.tileGridFor(fileio.MapSize{Height: 4, Width: 6}); again != first {
+		t.Error("the same size rebuilt the grid, want the cached one")
+	}
+	if grid := renderer.tileGridFor(wide); grid == first || grid.mapSize != wide {
+		t.Errorf("a wider map of the same height gave grid size %+v (rebuilt: %v), want %+v rebuilt", grid.mapSize, grid != first, wide)
+	}
+	taller := fileio.MapSize{Height: 6, Width: 4}
+	renderer.tileGridFor(fileio.MapSize{Height: 4, Width: 4})
+	if grid := renderer.tileGridFor(taller); grid.mapSize != taller {
+		t.Errorf("a taller map of the same width gave grid size %+v, want %+v", grid.mapSize, taller)
+	}
+	tall := fileio.MapSize{Height: 8, Width: 4}
+	if grid := renderer.tileGridFor(tall); grid.mapSize != tall {
+		t.Errorf("the next taller size gave grid size %+v, want %+v", grid.mapSize, tall)
 	}
 }

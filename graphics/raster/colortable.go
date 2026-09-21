@@ -2,7 +2,7 @@ package raster
 
 import "image/color"
 
-// colorTable maps RGB colors to indices in a palette. Scratch canvases share their parent's table, so a color that
+// colorTable maps RGB colors to indices in a palette. Sibling (staging) canvases share their parent's table, so a color that
 // isn't in the palette is counted once no matter which canvas drew it.
 type colorTable struct {
 	palette color.Palette

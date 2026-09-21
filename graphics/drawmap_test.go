@@ -94,7 +94,7 @@ func TestDrawTerrainTilesDrawsExpectedShapes(t *testing.T) {
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{},
 	}
 
-	mr.DrawTerrainTiles(canvas, mapData, 1, 2)
+	mr.DrawTerrainTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	ops := canvas.GetOperations()
 	// Tile 1 (no mountain): DrawRegularPolygon + SetColor + Fill = 3 ops
@@ -117,7 +117,7 @@ func TestDrawRiversDrawsEachEdgePresent(t *testing.T) {
 		},
 	}
 
-	mr.DrawRivers(canvas, mapData, 1, 1)
+	mr.DrawRivers(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	// 1 SetColor + 1 SetLineWidth + 3 edges * (DrawLine + Stroke) = 8 ops
@@ -136,7 +136,7 @@ func TestDrawRiversNoRiverData(t *testing.T) {
 		},
 	}
 
-	mr.DrawRivers(canvas, mapData, 1, 1)
+	mr.DrawRivers(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	// Only the unconditional SetColor + SetLineWidth calls.
@@ -163,7 +163,7 @@ func TestDrawRoadsConnectsAdjacentTiles(t *testing.T) {
 	// A 1x2 map: tile (0,0) and (1,0) are hex-neighbors of each other, both roads.
 	mapData := newRoadTestMapData(0, 0)
 
-	mr.DrawRoads(canvas, mapData, 1, 2)
+	mr.DrawRoads(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	ops := canvas.GetOperations()
 	// Each tile draws one line to the other: SetLineWidth + SetColor + DrawLine + Stroke = 4 ops each.
@@ -179,7 +179,7 @@ func TestDrawRoadsSkipsTilesWithNoRoute(t *testing.T) {
 	// RouteType 255 means "no route" on both tiles, and neither has a city name.
 	mapData := newRoadTestMapData(255, 255)
 
-	mr.DrawRoads(canvas, mapData, 1, 2)
+	mr.DrawRoads(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	ops := canvas.GetOperations()
 	if len(ops) != 0 {
@@ -193,7 +193,7 @@ func TestDrawRoadsNoImprovementsIsNoOp(t *testing.T) {
 
 	mapData := &fileio.Civ5MapData{MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{}}
 
-	mr.DrawRoads(canvas, mapData, 1, 2)
+	mr.DrawRoads(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	if ops := canvas.GetOperations(); len(ops) != 0 {
 		t.Fatalf("DrawRoads() with no improvements recorded %d ops, want 0: %v", len(ops), ops)
@@ -222,7 +222,7 @@ func TestDrawBordersDrawsLineBetweenDifferentOwners(t *testing.T) {
 
 	mapData := newBorderTestMapData(0, 1, "PLAYERCOLOR_BLACK", "PLAYERCOLOR_BLUE")
 
-	mr.DrawBorders(canvas, mapData, 1, 2)
+	mr.DrawBorders(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	ops := canvas.GetOperations()
 	// Each tile draws one border edge to the other: SetColor + SetLineWidth + DrawLine + Stroke = 4 ops each.
@@ -240,7 +240,7 @@ func TestDrawBordersSameOwnerDrawsNothing(t *testing.T) {
 
 	mapData := newBorderTestMapData(0, 0, "PLAYERCOLOR_BLACK", "PLAYERCOLOR_BLACK")
 
-	mr.DrawBorders(canvas, mapData, 1, 2)
+	mr.DrawBorders(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	if ops := canvas.GetOperations(); len(ops) != 0 {
 		t.Fatalf("DrawBorders() with same owner recorded %v, want no ops", ops)
@@ -253,7 +253,7 @@ func TestDrawBordersInvalidOwnerSkipsTile(t *testing.T) {
 
 	mapData := newBorderTestMapData(-1, -1, "PLAYERCOLOR_BLACK", "PLAYERCOLOR_BLACK")
 
-	mr.DrawBorders(canvas, mapData, 1, 2)
+	mr.DrawBorders(canvas, mapData, fileio.MapSize{Height: 1, Width: 2})
 
 	if ops := canvas.GetOperations(); len(ops) != 0 {
 		t.Fatalf("DrawBorders() with invalid owners recorded %v, want no ops", ops)
@@ -270,7 +270,7 @@ func TestDrawPhysicalCityNames(t *testing.T) {
 		},
 	}
 
-	mr.DrawPhysicalCityNames(canvas, mapData, 1, 1)
+	mr.DrawPhysicalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 {
@@ -290,7 +290,7 @@ func TestDrawPhysicalCityNamesNoImprovementsIsNoOp(t *testing.T) {
 
 	mapData := &fileio.Civ5MapData{MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{}}
 
-	mr.DrawPhysicalCityNames(canvas, mapData, 1, 1)
+	mr.DrawPhysicalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	if ops := canvas.GetOperations(); len(ops) != 0 {
 		t.Fatalf("DrawPhysicalCityNames() with no improvements recorded %d ops, want 0: %v", len(ops), ops)
@@ -309,7 +309,7 @@ func TestDrawPoliticalCityNamesKnownColor(t *testing.T) {
 		CityOwnerIndexMap: map[int]int{0: 0},
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, 1, 1, mapLayout(mr.config.Radius))
+	mr.DrawPoliticalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, mapLayout(mr.config.Radius))
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 {
@@ -330,7 +330,7 @@ func TestDrawPoliticalCityNamesUnknownColorFallsBackToWhite(t *testing.T) {
 		},
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, 1, 1, mapLayout(mr.config.Radius))
+	mr.DrawPoliticalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, mapLayout(mr.config.Radius))
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 || ops[0] != "SetColor(255, 255, 255)" {
@@ -361,7 +361,7 @@ func TestDrawTerritoryTilesWaterTileUsesTerrainColor(t *testing.T) {
 
 	mapData := newTerritoryTestMapData(1 /* TERRAIN_OCEAN */, -1, "", "")
 
-	mr.DrawTerritoryTiles(canvas, mapData, 1, 1)
+	mr.DrawTerritoryTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	// DrawRegularPolygon + SetColor + Fill, no mountain, no city.
@@ -381,7 +381,7 @@ func TestDrawTerritoryTilesUnownedLandUsesTerrainColor(t *testing.T) {
 
 	mapData := newTerritoryTestMapData(0 /* TERRAIN_GRASS */, -1, "", "")
 
-	mr.DrawTerritoryTiles(canvas, mapData, 1, 1)
+	mr.DrawTerritoryTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	if len(ops) != 3 {
@@ -396,7 +396,7 @@ func TestDrawTerritoryTilesOwnedMajorCivDrawsCityIcon(t *testing.T) {
 	mapData := newTerritoryTestMapData(0, 0, "PLAYERCOLOR_BLACK", "CIVILIZATION_ROME")
 	mapData.MapTileImprovements[0][0].CityId = 0 // has a city
 
-	mr.DrawTerritoryTiles(canvas, mapData, 1, 1)
+	mr.DrawTerritoryTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	// Tile: DrawRegularPolygon + SetColor + Fill (3), plus city icon: DrawRectangle + SetColor + Fill (3).
@@ -412,7 +412,7 @@ func TestDrawTerritoryTilesOwnedUnknownColorFallsBackToBlack(t *testing.T) {
 	// Owned by a civ whose team color isn't a recognized key in civColorMap.
 	mapData := newTerritoryTestMapData(0, 0, "PLAYERCOLOR_DOES_NOT_EXIST", "CIVILIZATION_ROME")
 
-	mr.DrawTerritoryTiles(canvas, mapData, 1, 1)
+	mr.DrawTerritoryTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 1})
 
 	ops := canvas.GetOperations()
 	if len(ops) != 3 {

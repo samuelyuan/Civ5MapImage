@@ -29,14 +29,15 @@ func PrintValidationResults(results []ValidationResult) {
 	}
 }
 
-func plotTypeFromMapTile(mapData *Civ5MapData, row, column int) (int8, bool) {
-	if row < 0 || row >= len(mapData.MapTiles) || column < 0 || column >= len(mapData.MapTiles[row]) {
+func plotTypeFromMapTile(mapData *Civ5MapData, pos TilePos) (int8, bool) {
+	tile := mapData.PhysicalTile(pos)
+	if tile == nil {
 		return 0, false
 	}
-	if IsWaterTile(mapData, row, column) {
+	if IsWaterTile(mapData, pos) {
 		return 3, true // PLOT_OCEAN
 	}
-	switch mapData.MapTiles[row][column].Elevation {
+	switch tile.Elevation {
 	case 2:
 		return 0, true // PLOT_MOUNTAIN
 	case 1:
@@ -63,9 +64,9 @@ func replayRiverEdges(riverBits int8) (e, se, sw bool) {
 func ValidateMapAndReplay(mapData *Civ5MapData, replayData *Civ5ReplayData) []ValidationResult {
 	var results []ValidationResult
 
-	mapWidth := int(mapData.MapHeader.Width)
-	mapHeight := int(mapData.MapHeader.Height)
-	dimensionsMatch := mapWidth == replayData.MapWidth && mapHeight == replayData.MapHeight
+	mapSize := MapSize{Height: int(mapData.MapHeader.Height), Width: int(mapData.MapHeader.Width)}
+	replaySize := MapSize{Height: replayData.MapHeight, Width: replayData.MapWidth}
+	dimensionsMatch := mapSize == replaySize
 	dimPassed := 0
 	if dimensionsMatch {
 		dimPassed = 1
@@ -74,7 +75,7 @@ func ValidateMapAndReplay(mapData *Civ5MapData, replayData *Civ5ReplayData) []Va
 		Name:   "grid dimensions",
 		Passed: dimPassed,
 		Total:  1,
-		Notes:  fmt.Sprintf("map=%dx%d replay=%dx%d", mapWidth, mapHeight, replayData.MapWidth, replayData.MapHeight),
+		Notes:  fmt.Sprintf("map=%dx%d replay=%dx%d", mapSize.Width, mapSize.Height, replaySize.Width, replaySize.Height),
 	})
 
 	if !dimensionsMatch || len(replayData.Tiles) == 0 {
@@ -82,26 +83,28 @@ func ValidateMapAndReplay(mapData *Civ5MapData, replayData *Civ5ReplayData) []Va
 	}
 
 	plotTypeMatches, terrainMatches, riverEdgeMatches := 0, 0, 0
-	totalTiles := mapWidth * mapHeight
+	totalTiles := mapSize.Width * mapSize.Height
 	totalRiverEdges := 0
-	for y := 0; y < mapHeight; y++ {
-		for x := 0; x < mapWidth; x++ {
-			idx := y*mapWidth + x
+	for y := 0; y < mapSize.Height; y++ {
+		for x := 0; x < mapSize.Width; x++ {
+			idx := y*mapSize.Width + x
 			if idx >= len(replayData.Tiles) {
 				continue
 			}
 			replayTile := replayData.Tiles[idx]
 
-			if expectedPlotType, ok := plotTypeFromMapTile(mapData, y, x); ok && expectedPlotType == replayTile.PlotType {
+			pos := TilePos{Row: y, Col: x}
+			mapTile := mapData.PhysicalTile(pos)
+			if expectedPlotType, ok := plotTypeFromMapTile(mapData, pos); ok && expectedPlotType == replayTile.PlotType {
 				plotTypeMatches++
 			}
 
-			mapTerrain := int8(mapData.MapTiles[y][x].TerrainType)
+			mapTerrain := int8(mapTile.TerrainType)
 			if mapTerrain == replayTile.TerrainType {
 				terrainMatches++
 			}
 
-			mapE, mapSE, mapSW := mapRiverEdges(mapData.MapTiles[y][x].RiverData)
+			mapE, mapSE, mapSW := mapRiverEdges(mapTile.RiverData)
 			replayE, replaySE, replaySW := replayRiverEdges(replayTile.RiverBits)
 			totalRiverEdges += 3
 			if mapE == replayE {
@@ -206,14 +209,13 @@ func ValidateReplayRenderable(mapData *Civ5MapData, replayData *Civ5ReplayData) 
 		return fmt.Errorf("replay has no events to animate")
 	}
 
-	mapHeight := len(mapData.MapTileImprovements)
-	mapWidth := len(mapData.MapTileImprovements[0])
+	mapSize := MapSize{Height: len(mapData.MapTileImprovements), Width: len(mapData.MapTileImprovements[0])}
 
 	// 0 for replays that don't carry their own dimensions (e.g. one converted from a .civ5save).
 	if replayData.MapWidth > 0 && replayData.MapHeight > 0 {
-		if replayData.MapWidth != mapWidth || replayData.MapHeight != mapHeight {
+		if replaySize := (MapSize{Height: replayData.MapHeight, Width: replayData.MapWidth}); replaySize != mapSize {
 			return fmt.Errorf("replay was recorded on a %dx%d map, but the provided map is %dx%d; make sure -map points to the matching .Civ5Map file",
-				replayData.MapWidth, replayData.MapHeight, mapWidth, mapHeight)
+				replaySize.Width, replaySize.Height, mapSize.Width, mapSize.Height)
 		}
 	}
 
@@ -232,9 +234,9 @@ func ValidateReplayRenderable(mapData *Civ5MapData, replayData *Civ5ReplayData) 
 			if replayEventCanBeLocationless(event.TypeId) && tile.X == replayNoTileSentinel && tile.Y == replayNoTileSentinel {
 				continue
 			}
-			if tile.Y < 0 || tile.Y >= mapHeight || tile.X < 0 || tile.X >= mapWidth {
+			if !tile.Pos().InMap(mapSize) {
 				return fmt.Errorf("replay event on turn %d (TypeId %d) references tile (%d, %d), which is outside the map bounds (%dx%d); the replay may not match this map",
-					event.Turn, event.TypeId, tile.X, tile.Y, mapWidth, mapHeight)
+					event.Turn, event.TypeId, tile.X, tile.Y, mapSize.Width, mapSize.Height)
 			}
 		}
 	}

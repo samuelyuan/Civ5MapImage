@@ -5,113 +5,109 @@ import (
 	"strings"
 )
 
-// Hex grid utility functions
+// TilePos is a map tile's position. Build it with field names, so a row and a column can't be swapped.
+type TilePos struct{ Row, Col int }
+
+// MapSize is a map's dimensions in tiles. Build it with field names, so a height and a width can't be swapped.
+type MapSize struct{ Height, Width int }
+
+// Size returns the map's size, from its physical tiles.
+func (m *Civ5MapData) Size() MapSize {
+	if len(m.MapTiles) == 0 {
+		return MapSize{}
+	}
+	return MapSize{Height: len(m.MapTiles), Width: len(m.MapTiles[0])}
+}
+
+// PhysicalTile returns the physical tile at pos, or nil if pos is off the map.
+func (m *Civ5MapData) PhysicalTile(pos TilePos) *Civ5MapTilePhysical {
+	if pos.Row < 0 || pos.Row >= len(m.MapTiles) || pos.Col < 0 || pos.Col >= len(m.MapTiles[pos.Row]) {
+		return nil
+	}
+	return m.MapTiles[pos.Row][pos.Col]
+}
+
+// TileImprovement returns the improvement record at pos, or nil if pos is off the map or the map has no improvement data.
+func (m *Civ5MapData) TileImprovement(pos TilePos) *Civ5MapTileImprovement {
+	if pos.Row < 0 || pos.Row >= len(m.MapTileImprovements) || pos.Col < 0 || pos.Col >= len(m.MapTileImprovements[pos.Row]) {
+		return nil
+	}
+	return m.MapTileImprovements[pos.Row][pos.Col]
+}
+
+// InMap reports whether p is a tile of a map of the given size.
+func (p TilePos) InMap(size MapSize) bool {
+	return p.Row >= 0 && p.Col >= 0 && p.Row < size.Height && p.Col < size.Width
+}
+
+// Hex grid neighbor offsets, by the parity of the row.
 var (
-	NeighborOdd  = [6][2]int{{1, 1}, {0, 1}, {-1, 0}, {0, -1}, {1, -1}, {1, 0}}
-	NeighborEven = [6][2]int{{0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, 0}}
+	NeighborOdd  = [6]TilePos{{Col: 1, Row: 1}, {Col: 0, Row: 1}, {Col: -1, Row: 0}, {Col: 0, Row: -1}, {Col: 1, Row: -1}, {Col: 1, Row: 0}}
+	NeighborEven = [6]TilePos{{Col: 0, Row: 1}, {Col: -1, Row: 1}, {Col: -1, Row: 0}, {Col: -1, Row: -1}, {Col: 0, Row: -1}, {Col: 1, Row: 0}}
 )
 
-func GetNeighbors(x int, y int) [6][2]int {
-	var offset [6][2]int
-	if y%2 == 1 {
-		offset = NeighborOdd
-	} else {
-		offset = NeighborEven
+// GetNeighbors returns the six neighbors of pos in a fixed order, including ones that fall off the map (see InMap).
+func GetNeighbors(pos TilePos) [6]TilePos {
+	offsets := NeighborEven
+	if pos.Row%2 == 1 {
+		offsets = NeighborOdd
 	}
-
-	neighbors := [6][2]int{}
-	for i := 0; i < 6; i++ {
-		newX := x + offset[i][0]
-		newY := y + offset[i][1]
-		neighbors[i][0] = newX
-		neighbors[i][1] = newY
+	var neighbors [6]TilePos
+	for i, offset := range offsets {
+		neighbors[i] = TilePos{Row: pos.Row + offset.Row, Col: pos.Col + offset.Col}
 	}
 	return neighbors
 }
 
-func GetTerrainString(mapData *Civ5MapData, row int, column int) string {
-	// Check bounds to prevent panic
-	if row < 0 || row >= len(mapData.MapTiles) {
+func GetTerrainString(mapData *Civ5MapData, pos TilePos) string {
+	tile := mapData.PhysicalTile(pos)
+	if tile == nil || tile.TerrainType < 0 || tile.TerrainType >= len(mapData.TerrainList) {
 		return ""
 	}
-	if column < 0 || column >= len(mapData.MapTiles[row]) {
-		return ""
-	}
-	terrainType := mapData.MapTiles[row][column].TerrainType
-	if terrainType < 0 || terrainType >= len(mapData.TerrainList) {
-		return ""
-	}
-	return mapData.TerrainList[terrainType]
+	return mapData.TerrainList[tile.TerrainType]
 }
 
-func IsWaterTile(mapData *Civ5MapData, row int, column int) bool {
-	terrainString := GetTerrainString(mapData, row, column)
+func IsWaterTile(mapData *Civ5MapData, pos TilePos) bool {
+	terrainString := GetTerrainString(mapData, pos)
 	return terrainString == "TERRAIN_COAST" || terrainString == "TERRAIN_OCEAN"
 }
 
-func TileHasCity(mapData *Civ5MapData, row int, column int) bool {
-	// Check bounds to prevent panic
-	if row < 0 || row >= len(mapData.MapTileImprovements) {
-		return false
-	}
-	if column < 0 || column >= len(mapData.MapTileImprovements[row]) {
-		return false
-	}
-	return mapData.MapTileImprovements[row][column].CityId != -1
+func TileHasCity(mapData *Civ5MapData, pos TilePos) bool {
+	tile := mapData.TileImprovement(pos)
+	return tile != nil && tile.CityId != -1
 }
 
-func TileHasMountain(mapData *Civ5MapData, row int, column int) bool {
-	// Check bounds to prevent panic
-	if row < 0 || row >= len(mapData.MapTiles) {
-		return false
-	}
-	if column < 0 || column >= len(mapData.MapTiles[row]) {
-		return false
-	}
-	return mapData.MapTiles[row][column].Elevation == 2
+func TileHasMountain(mapData *Civ5MapData, pos TilePos) bool {
+	tile := mapData.PhysicalTile(pos)
+	return tile != nil && tile.Elevation == 2
 }
 
 func IsInvalidTileOwner(value int) bool {
 	return value == 0xFF || value == 0xFFFF || value == 0xFFFFFFFF || value == -1
 }
 
-func GetTileCivName(mapData *Civ5MapData, row int, column int) string {
-	// Check bounds to prevent panic
-	if row < 0 || row >= len(mapData.MapTileImprovements) {
+func GetTileCivName(mapData *Civ5MapData, pos TilePos) string {
+	tile := mapData.TileImprovement(pos)
+	if tile == nil || IsInvalidTileOwner(tile.Owner) {
 		return ""
 	}
-	if column < 0 || column >= len(mapData.MapTileImprovements[row]) {
-		return ""
-	}
-	tileOwner := mapData.MapTileImprovements[row][column].Owner
-	if IsInvalidTileOwner(tileOwner) {
-		return ""
-	}
-	civIndex := mapData.CityOwnerIndexMap[tileOwner]
+	civIndex := mapData.CityOwnerIndexMap[tile.Owner]
 	if civIndex < len(mapData.Civ5PlayerData) {
 		return mapData.Civ5PlayerData[civIndex].CivType
 	}
 	return ""
 }
 
-func GetPoliticalMapTileColor(mapData *Civ5MapData, row int, column int) string {
-	// Check bounds to prevent panic
-	if row < 0 || row >= len(mapData.MapTileImprovements) {
+func GetPoliticalMapTileColor(mapData *Civ5MapData, pos TilePos) string {
+	tile := mapData.TileImprovement(pos)
+	if tile == nil || IsInvalidTileOwner(tile.Owner) {
 		return ""
 	}
-	if column < 0 || column >= len(mapData.MapTileImprovements[row]) {
-		return ""
-	}
-	tileOwner := mapData.MapTileImprovements[row][column].Owner
-	if IsInvalidTileOwner(tileOwner) {
-		return ""
-	}
-	civIndex := mapData.CityOwnerIndexMap[tileOwner]
-	tileColor := ""
+	civIndex := mapData.CityOwnerIndexMap[tile.Owner]
 	if civIndex < len(mapData.Civ5PlayerData) {
-		tileColor = mapData.Civ5PlayerData[civIndex].TeamColor
+		return mapData.Civ5PlayerData[civIndex].TeamColor
 	}
-	return tileColor
+	return ""
 }
 
 // SetupCivPlayerData builds or reorders mapData's civ player data from the replay.
@@ -161,21 +157,23 @@ func ApplyReplayEvent(mapData *Civ5MapData, event Civ5ReplayEvent, nextCityId in
 	switch event.TypeId {
 	case ReplayEventCityFounded:
 		for _, tile := range event.Tiles {
-			mapData.MapTileImprovements[tile.Y][tile.X].CityId = nextCityId
-			mapData.MapTileImprovements[tile.Y][tile.X].CityName = strings.TrimSuffix(event.Text, " is founded.")
+			record := mapData.TileImprovement(tile.Pos())
+			record.CityId = nextCityId
+			record.CityName = strings.TrimSuffix(event.Text, " is founded.")
 			nextCityId += 1
 		}
 	case ReplayEventTilesClaimed, ReplayEventCityTransferred:
 		for _, tile := range event.Tiles {
-			mapData.MapTileImprovements[tile.Y][tile.X].Owner = event.CivId
+			mapData.TileImprovement(tile.Pos()).Owner = event.CivId
 		}
 	case ReplayEventTilesRazed:
 		for _, tile := range event.Tiles {
-			mapData.MapTileImprovements[tile.Y][tile.X].Owner = -1
-			mapData.MapTileImprovements[tile.Y][tile.X].CityId = -1
-			mapData.MapTileImprovements[tile.Y][tile.X].CityName = ""
+			record := mapData.TileImprovement(tile.Pos())
+			record.Owner = -1
+			record.CityId = -1
+			record.CityName = ""
 			// Razed tile becomes a road
-			mapData.MapTileImprovements[tile.Y][tile.X].RouteType = 2
+			record.RouteType = 2
 		}
 	}
 	return nextCityId

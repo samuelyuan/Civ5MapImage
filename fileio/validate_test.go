@@ -145,3 +145,78 @@ func TestValidateReplayRenderableUnknownDimensionsFallsBackToTileScan(t *testing
 		t.Errorf("ValidateReplayRenderable() error = %q, want the tile-scan fallback to catch it (mentioning turn 3)", err)
 	}
 }
+
+// newCrossCheckFixtures returns a 3 wide x 2 high map and a replay whose tiles all agree with it. The map isn't square,
+// and every tile differs, so swapping rows with columns or width with height changes the result.
+func newCrossCheckFixtures() (*Civ5MapData, *Civ5ReplayData) {
+	mapData := &Civ5MapData{
+		MapHeader:   Civ5MapHeader{Width: 3, Height: 2},
+		TerrainList: []string{"TERRAIN_GRASS", "TERRAIN_OCEAN"},
+		MapTiles: [][]*Civ5MapTilePhysical{
+			{{TerrainType: 1}, {TerrainType: 0, Elevation: 2}, {TerrainType: 0, Elevation: 1}},
+			{{TerrainType: 0}, {TerrainType: 0, Elevation: 2, RiverData: 1}, {TerrainType: 1}},
+		},
+	}
+	replayData := &Civ5ReplayData{
+		MapWidth:  3,
+		MapHeight: 2,
+		Tiles: []Civ5ReplayTile{ // row-major: PlotType 3 ocean, 0 mountain, 1 hills, 2 land
+			{PlotType: 3, TerrainType: 1}, {PlotType: 0, TerrainType: 0}, {PlotType: 1, TerrainType: 0},
+			{PlotType: 2, TerrainType: 0}, {PlotType: 0, TerrainType: 0, RiverBits: 4}, {PlotType: 3, TerrainType: 1},
+		},
+	}
+	return mapData, replayData
+}
+
+func findResult(t *testing.T, results []ValidationResult, namePrefix string) ValidationResult {
+	t.Helper()
+	for _, r := range results {
+		if strings.HasPrefix(r.Name, namePrefix) {
+			return r
+		}
+	}
+	t.Fatalf("no %q result in %v", namePrefix, results)
+	return ValidationResult{}
+}
+
+func TestValidateMapAndReplayAcceptsAMatchingNonSquareMap(t *testing.T) {
+	mapData, replayData := newCrossCheckFixtures()
+	results := ValidateMapAndReplay(mapData, replayData)
+	for _, prefix := range []string{"grid dimensions", "tile PlotType", "tile TerrainType", "river edges"} {
+		if r := findResult(t, results, prefix); r.Passed != r.Total || r.Total == 0 {
+			t.Errorf("%s: passed %d of %d, want all of a nonzero total", r.Name, r.Passed, r.Total)
+		}
+	}
+}
+
+func TestValidateMapAndReplayCountsEachMismatchedTile(t *testing.T) {
+	mapData, replayData := newCrossCheckFixtures()
+	replayData.Tiles[4].PlotType = 2    // the map's tile at row 1, col 1 is a mountain
+	replayData.Tiles[5].TerrainType = 0 // the map's tile at row 1, col 2 is ocean
+	replayData.Tiles[2].RiverBits = 2   // a river edge (SE) the map's tile at row 0, col 2 doesn't have
+
+	results := ValidateMapAndReplay(mapData, replayData)
+	if r := findResult(t, results, "tile PlotType"); r.Passed != 5 || r.Total != 6 {
+		t.Errorf("PlotType: passed %d of %d, want 5 of 6", r.Passed, r.Total)
+	}
+	if r := findResult(t, results, "tile TerrainType"); r.Passed != 5 || r.Total != 6 {
+		t.Errorf("TerrainType: passed %d of %d, want 5 of 6", r.Passed, r.Total)
+	}
+	if r := findResult(t, results, "river edges"); r.Passed != 17 || r.Total != 18 {
+		t.Errorf("river edges: passed %d of %d, want 17 of 18", r.Passed, r.Total)
+	}
+}
+
+// A replay recorded on the transposed grid (2 wide x 3 high) has the same tile count but is a different map.
+func TestValidateMapAndReplayRejectsTransposedDimensions(t *testing.T) {
+	mapData, replayData := newCrossCheckFixtures()
+	replayData.MapWidth, replayData.MapHeight = 2, 3
+
+	results := ValidateMapAndReplay(mapData, replayData)
+	if len(results) != 1 {
+		t.Fatalf("got %d results, want only the dimensions check when they differ: %v", len(results), results)
+	}
+	if r := findResult(t, results, "grid dimensions"); r.Passed != 0 {
+		t.Errorf("grid dimensions passed = %d, want 0 for a transposed grid", r.Passed)
+	}
+}

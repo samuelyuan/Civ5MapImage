@@ -22,7 +22,7 @@ const glyphOpaque = 0x8000
 
 // PalettedCanvas draws without anti-aliasing into an *image.Paletted, so every pixel is a palette entry.
 type PalettedCanvas struct {
-	*colorTable // palette lookup, shared with scratch canvases
+	*colorTable // palette lookup, shared with sibling (staging) canvases
 	img         *image.Paletted
 	background  uint8       // the index the canvas is cleared to
 	origin      image.Point // this canvas's (0, 0) in the coordinates drawing calls use
@@ -70,7 +70,7 @@ func (c *PalettedCanvas) Resize(width, height int) {
 	}
 }
 
-// SetOrigin sets the drawing coordinates of this canvas's (0, 0), so a scratch canvas draws in the main canvas's coordinates.
+// SetOrigin sets the drawing coordinates of this canvas's (0, 0), so a staging canvas draws in the main canvas's coordinates.
 func (c *PalettedCanvas) SetOrigin(origin image.Point) { c.origin = origin }
 
 // local converts drawing coordinates to this canvas's pixels.

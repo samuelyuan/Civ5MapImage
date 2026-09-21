@@ -7,11 +7,8 @@ import (
 	"image/color"
 	"image/draw"
 	"image/gif"
-	"math/rand"
 	"os"
 	"path/filepath"
-	"reflect"
-	"slices"
 	"testing"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
@@ -73,166 +70,7 @@ func TestDrawReplayHandlesNilCityOwnerIndexMap(t *testing.T) {
 	}
 }
 
-func TestTileTrackerReportsExactlyTheTilesWhoseRecordChanged(t *testing.T) {
-	mapData := buildBenchMapData(12, 12, 4, 1)
-	tracker := newTileTracker(mapData)
-
-	mapData.MapTileImprovements[3][4].Owner++
-	mapData.MapTileImprovements[7][1].CityName = "Renamed"
-	mapData.MapTileImprovements[11][11].RouteType = 2
-
-	want := tileSet{{3, 4}: true, {7, 1}: true, {11, 11}: true}
-	if got := tracker.takeChanges(); !reflect.DeepEqual(got, want) {
-		t.Errorf("tracker.takeChanges() = %v, want %v", got, want)
-	}
-	if got := tracker.takeChanges(); len(got) != 0 {
-		t.Errorf("a second call reported %v; the tracker should be up to date", got)
-	}
-}
-
-// A change to any field is caught, including ones no event touches today: nothing here lists event types.
-func TestTileTrackerNeedsNoKnowledgeOfEvents(t *testing.T) {
-	mapData := buildBenchMapData(6, 6, 2, 1)
-	tracker := newTileTracker(mapData)
-
-	tile := mapData.MapTileImprovements[2][3]
-	tile.Improvement, tile.UnitId, tile.RouteOwner = 5, 9, 1
-
-	if got := tracker.takeChanges(); !got[tileCoord{2, 3}] || len(got) != 1 {
-		t.Errorf("tracker.takeChanges() = %v, want just (2, 3)", got)
-	}
-}
-
-// An event that doesn't change anything, such as claiming a tile its civ already owns, repaints nothing.
-func TestTileTrackerIgnoresEventsThatChangeNothing(t *testing.T) {
-	mapData := buildBenchMapData(12, 12, 4, 1)
-	tracker := newTileTracker(mapData)
-
-	owner := mapData.MapTileImprovements[5][5].Owner
-	fileio.ApplyReplayEvent(mapData, fileio.Civ5ReplayEvent{
-		TypeId: fileio.ReplayEventTilesClaimed, CivId: owner, Tiles: []fileio.Civ5ReplayEventTile{{X: 5, Y: 5}},
-	}, 0)
-
-	if got := tracker.takeChanges(); len(got) != 0 {
-		t.Errorf("tracker.takeChanges() = %v after a no-op claim, want nothing", got)
-	}
-}
-
-// Every event type fileio.ApplyReplayEvent handles must show up as changed tiles, or the renderer would skip them.
-func TestTileTrackerSeesEveryHandledEventType(t *testing.T) {
-	tile := []fileio.Civ5ReplayEventTile{{X: 4, Y: 6}}
-	events := map[string]fileio.Civ5ReplayEvent{
-		"city founded":     {TypeId: fileio.ReplayEventCityFounded, Text: "Testopolis is founded.", Tiles: tile},
-		"tiles claimed":    {TypeId: fileio.ReplayEventTilesClaimed, CivId: 3, Tiles: tile},
-		"city transferred": {TypeId: fileio.ReplayEventCityTransferred, CivId: 3, Tiles: tile},
-		"tiles razed":      {TypeId: fileio.ReplayEventTilesRazed, Tiles: tile},
-	}
-	for name, event := range events {
-		mapData := buildBenchMapData(12, 12, 4, 1)
-		mapData.MapTileImprovements[6][4].Owner = 0 // not already owned by civ 3
-		tracker := newTileTracker(mapData)
-		fileio.ApplyReplayEvent(mapData, event, 100)
-		if got := tracker.takeChanges(); !got[tileCoord{6, 4}] {
-			t.Errorf("%s: tracker.takeChanges() = %v, want it to include (6, 4)", name, got)
-		}
-	}
-}
-
-func TestClusterRects(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []image.Rectangle
-		want []image.Rectangle
-	}{
-		{"nothing", nil, nil},
-		{"one rect is unchanged", []image.Rectangle{image.Rect(5, 5, 15, 15)}, []image.Rectangle{image.Rect(5, 5, 15, 15)}},
-		{"far apart stay separate",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(100, 100, 110, 110)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(100, 100, 110, 110)}},
-		{"overlapping merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(5, 5, 20, 20)},
-			[]image.Rectangle{image.Rect(0, 0, 20, 20)}},
-		{"touching merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10, 0, 20, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 20, 10)}},
-		{"just inside the gap merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+clusterGap-1, 0, 30, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 30, 10)}},
-		{"exactly the gap apart stay separate",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+clusterGap, 0, 30, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+clusterGap, 0, 30, 10)}},
-		{"empty rects are dropped",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), {}, image.Rect(50, 50, 50, 60)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10)}},
-	}
-	for _, tt := range tests {
-		if got := clusterRects(tt.in); !slices.Equal(got, tt.want) {
-			t.Errorf("%s: clusterRects(%v) = %v, want %v", tt.name, tt.in, got, tt.want)
-		}
-	}
-}
-
-// Merging two rects grows their box, and the bigger box can reach a third rect that neither was near alone; the input order must not matter.
-func TestClusterRectsMergesChainsInAnyOrder(t *testing.T) {
-	tall := image.Rect(0, 0, 10, 50)
-	wide := image.Rect(15, 0, 60, 10)    // near tall, so they merge into (0, 0, 60, 50)
-	inside := image.Rect(45, 30, 55, 40) // far from both alone, but inside their merged box
-	want := []image.Rectangle{image.Rect(0, 0, 60, 50)}
-	orders := [][]image.Rectangle{{tall, wide, inside}, {inside, tall, wide}, {wide, inside, tall}, {inside, wide, tall}}
-	for _, in := range orders {
-		if got := clusterRects(in); !slices.Equal(got, want) {
-			t.Errorf("clusterRects(%v) = %v, want %v", in, got, want)
-		}
-	}
-}
-
-func TestFrameRegionsAlwaysYieldsAFrame(t *testing.T) {
-	noop := []image.Rectangle{noopRegion}
-	for name, in := range map[string][]image.Rectangle{
-		"no rects":   nil,
-		"only empty": {{}, image.Rect(5, 5, 5, 9)},
-	} {
-		if got := frameRegions(in); !slices.Equal(got, noop) {
-			t.Errorf("%s: frameRegions() = %v, want the no-op frame %v", name, got, noop)
-		}
-	}
-	real := []image.Rectangle{image.Rect(0, 0, 10, 10), {}, image.Rect(100, 0, 110, 10)}
-	if got, want := frameRegions(real), clusterRects(real); !slices.Equal(got, want) {
-		t.Errorf("frameRegions(%v) = %v, want the clusters %v", real, got, want)
-	}
-}
-
-// For any input, every rect is covered by some cluster, no two clusters are within the gap of each other, and the input order doesn't matter.
-func TestClusterRectsCoversInputWithSeparatedClusters(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
-	for trial := 0; trial < 200; trial++ {
-		var in []image.Rectangle
-		for i, n := 0, 1+rng.Intn(60); i < n; i++ {
-			x, y := rng.Intn(400), rng.Intn(400)
-			in = append(in, image.Rect(x, y, x+1+rng.Intn(40), y+1+rng.Intn(40)))
-		}
-		clusters := clusterRects(in)
-		reversed := slices.Clone(in)
-		slices.Reverse(reversed)
-		if again := clusterRects(reversed); !slices.Equal(clusters, again) {
-			t.Fatalf("trial %d: reversing the input gave %v, want %v", trial, again, clusters)
-		}
-		for _, r := range in {
-			if !slices.ContainsFunc(clusters, func(c image.Rectangle) bool { return r.In(c) }) {
-				t.Fatalf("trial %d: %v is in no cluster of %v", trial, r, clusters)
-			}
-		}
-		for i, a := range clusters {
-			for _, b := range clusters[i+1:] {
-				if a.Inset(-clusterGap).Overlaps(b) {
-					t.Fatalf("trial %d: clusters %v and %v are within the gap", trial, a, b)
-				}
-			}
-		}
-	}
-}
-
-// DrawReplay's output must be byte-identical run to run, which needs paintTileRects to sort its rects.
+// DrawReplay's output must be byte-identical run to run, which needs tileRepaintRects to sort its rects.
 func TestDrawReplayOutputIsDeterministic(t *testing.T) {
 	const mapHeight, mapWidth, turns, dirtyPerTurn, civs = 30, 40, 10, 15, 8
 	var first []byte
@@ -259,8 +97,7 @@ func TestDrawReplayOutputIsDeterministic(t *testing.T) {
 func runReplayFrames(renderer *MapRenderer, mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5ReplayEvent) {
 	canvas := newBenchCanvas(mapData)
 	nextCityId := 0
-	mapHeight := len(mapData.MapTiles)
-	mapWidth := len(mapData.MapTiles[0])
+	mapSize := mapData.Size()
 	var tracker *tileTracker
 	for turnIndex, events := range turnsEvents {
 		for _, event := range events {
@@ -270,7 +107,7 @@ func runReplayFrames(renderer *MapRenderer, mapData *fileio.Civ5MapData, turnsEv
 			tracker = newTileTracker(mapData)
 			renderer.DrawPoliticalMapTileMajor(canvas, mapData)
 			canvas.Snapshot(canvas.Image().Bounds())
-		} else if dirtyRects := renderer.RedrawDirtyTiles(canvas, mapData, mapHeight, mapWidth, tracker.takeChanges()); len(dirtyRects) > 0 {
+		} else if dirtyRects := renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges()); len(dirtyRects) > 0 {
 			canvas.Snapshot(unionRects(dirtyRects))
 		}
 	}
@@ -367,8 +204,7 @@ func writeGifFullFrames(mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5
 	canvas := newBenchCanvas(mapData)
 	outGif := &gif.GIF{}
 	nextCityId := 0
-	mapHeight := len(mapData.MapTiles)
-	mapWidth := len(mapData.MapTiles[0])
+	mapSize := mapData.Size()
 	var tracker *tileTracker
 	for turnIndex, events := range turnsEvents {
 		for _, event := range events {
@@ -378,7 +214,7 @@ func writeGifFullFrames(mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5
 			tracker = newTileTracker(mapData)
 			renderer.DrawPoliticalMapTileMajor(canvas, mapData)
 		} else {
-			renderer.RedrawDirtyTiles(canvas, mapData, mapHeight, mapWidth, tracker.takeChanges())
+			renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges())
 		}
 		outGif.Image = append(outGif.Image, canvas.Snapshot(canvas.Image().Bounds()))
 		outGif.Delay = append(outGif.Delay, GIF_DELAY)
