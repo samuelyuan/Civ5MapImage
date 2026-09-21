@@ -12,7 +12,6 @@ import (
 
 var (
 	_ Canvas          = (*DrawingContext)(nil)
-	_ FlippableCanvas = (*DrawingContext)(nil)
 	_ Canvas          = (*raster.PalettedCanvas)(nil)
 )
 
@@ -45,12 +44,6 @@ type Canvas interface {
 	// Final output
 	Image() image.Image
 	SavePNG(filename string) error
-}
-
-// FlippableCanvas is a Canvas that can flip its y axis, for the maps drawn in the file's y-up space.
-type FlippableCanvas interface {
-	Canvas
-	InvertY()
 }
 
 // DrawingContext implements Canvas over a gg.Context.
@@ -92,10 +85,6 @@ func (d *DrawingContext) Fill() {
 
 func (d *DrawingContext) Stroke() {
 	d.dc.Stroke()
-}
-
-func (d *DrawingContext) InvertY() {
-	d.dc.InvertY()
 }
 
 func (d *DrawingContext) Resize(width, height int) {
@@ -167,10 +156,6 @@ func (m *MockCanvas) Fill() {
 
 func (m *MockCanvas) Stroke() {
 	m.operations = append(m.operations, "Stroke()")
-}
-
-func (m *MockCanvas) InvertY() {
-	m.operations = append(m.operations, "InvertY()")
 }
 
 func (m *MockCanvas) Resize(width, height int) {

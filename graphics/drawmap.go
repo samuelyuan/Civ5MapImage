@@ -55,12 +55,12 @@ func NewMapRenderer(config *DrawingConfig) *MapRenderer {
 // DrawMountain draws a mountain icon at (imageX, imageY).
 func (mr *MapRenderer) DrawMountain(canvas Canvas, l tileLayout, imageX, imageY float64) {
 	// Draw base
-	canvas.DrawRegularPolygon(3, imageX, imageY, l.radius, l.apexUpRotation())
+	canvas.DrawRegularPolygon(3, imageX, imageY, l.radius, 0)
 	canvas.SetColor(mountainBaseColor.R, mountainBaseColor.G, mountainBaseColor.B)
 	canvas.Fill()
 
 	// Draw mountain peak
-	canvas.DrawRegularPolygon(3, imageX, imageY+l.up(l.radius/2), l.radius/2, l.apexUpRotation())
+	canvas.DrawRegularPolygon(3, imageX, imageY-l.radius/2, l.radius/2, 0)
 	canvas.SetColor(mountainPeakColor.R, mountainPeakColor.G, mountainPeakColor.B)
 	canvas.Fill()
 }
@@ -74,8 +74,7 @@ func (mr *MapRenderer) GetNewCityColor(cityColor color.RGBA) color.RGBA {
 func (mr *MapRenderer) DrawCityIcon(canvas Canvas, l tileLayout, imageX, imageY float64, cityColor color.RGBA) {
 	iconColor := mr.GetNewCityColor(cityColor)
 	// The icon reaches 0.3r above the tile's center and 0.2r below it.
-	top := math.Min(imageY+l.up(l.radius*3/10), imageY+l.up(-l.radius/5))
-	canvas.DrawRectangle(imageX-(l.radius/5), top, l.radius/2, l.radius/2)
+	canvas.DrawRectangle(imageX-(l.radius/5), imageY-l.radius*3/10, l.radius/2, l.radius/2)
 	canvas.SetColor(iconColor.R, iconColor.G, iconColor.B)
 	canvas.Fill()
 }
@@ -92,10 +91,10 @@ func (mr *MapRenderer) drawEntity(canvas Canvas, l tileLayout, entity Entity) {
 
 // DrawTerrainTiles draws every terrain tile.
 func (mr *MapRenderer) DrawTerrainTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapSize fileio.MapSize) {
-	l := mapLayout(mr.config.Radius)
+	l := layoutForMap(mapSize, mr.config.Radius)
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
-			hex := PhysicalHexTile(mapData, fileio.TilePos{Row: i, Col: j}, mr.config.Radius)
+			hex := PhysicalHexTile(mapData, fileio.TilePos{Row: i, Col: j}, l)
 			canvas.DrawRegularPolygon(6, hex.X, hex.Y, mr.config.Radius, math.Pi/2)
 			canvas.SetColor(hex.R, hex.G, hex.B)
 			canvas.Fill()
@@ -114,7 +113,7 @@ func (mr *MapRenderer) InterpolateColor(color1, color2 color.RGBA, t float64) co
 
 // DrawTerritoryTiles draws every territory tile.
 func (mr *MapRenderer) DrawTerritoryTiles(canvas Canvas, mapData *fileio.Civ5MapData, mapSize fileio.MapSize) {
-	l := mapLayout(mr.config.Radius)
+	l := layoutForMap(mapSize, mr.config.Radius)
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
 			hex, cityColor := PoliticalHexTile(mapData, fileio.TilePos{Row: i, Col: j}, l)
@@ -143,7 +142,7 @@ func (mr *MapRenderer) drawRiverTile(canvas Canvas, l tileLayout, mapData *filei
 
 // DrawRivers draws rivers on the map
 func (mr *MapRenderer) DrawRivers(canvas Canvas, mapData *fileio.Civ5MapData, mapSize fileio.MapSize) {
-	l := mapLayout(mr.config.Radius)
+	l := layoutForMap(mapSize, mr.config.Radius)
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
 			mr.drawRiverTile(canvas, l, mapData, fileio.TilePos{Row: i, Col: j})
@@ -158,7 +157,7 @@ func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, map
 		return
 	}
 
-	l := mapLayout(mr.config.Radius)
+	l := layoutForMap(mapSize, mr.config.Radius)
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
 			for _, segment := range RoadSegmentsForTile(mapData, mapSize, fileio.TilePos{Row: i, Col: j}, l) {
@@ -172,7 +171,7 @@ func (mr *MapRenderer) DrawRoads(canvas Canvas, mapData *fileio.Civ5MapData, map
 }
 
 // DrawPhysicalMap renders the physical map onto canvas.
-func (mr *MapRenderer) DrawPhysicalMap(canvas FlippableCanvas, mapData *fileio.Civ5MapData) image.Image {
+func (mr *MapRenderer) DrawPhysicalMap(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
 	mapSize := mapData.Size()
 
 	maxImageWidth, maxImageHeight := imageSize(mapSize, mr.config.Radius)
@@ -182,15 +181,11 @@ func (mr *MapRenderer) DrawPhysicalMap(canvas FlippableCanvas, mapData *fileio.C
 
 	fmt.Println("Map height: ", mapSize.Height, ", width: ", mapSize.Width)
 
-	// Need to invert image because the map format is inverted
-	canvas.InvertY()
-
 	mr.DrawTerrainTiles(canvas, mapData, mapSize)
 	mr.DrawRivers(canvas, mapData, mapSize)
 	mr.DrawRoads(canvas, mapData, mapSize)
 
 	// Draw city names on top of hexes
-	canvas.InvertY()
 	mr.DrawPhysicalCityNames(canvas, mapData, mapSize)
 
 	return canvas.Image()
@@ -203,9 +198,11 @@ func (mr *MapRenderer) DrawBorders(canvas Canvas, mapData *fileio.Civ5MapData, m
 		return
 	}
 
+	l := layoutForMap(mapSize, mr.config.Radius)
+
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
-			for _, segment := range BorderSegmentsForTile(mapData, mapSize, fileio.TilePos{Row: i, Col: j}, mr.config.Radius) {
+			for _, segment := range BorderSegmentsForTile(mapData, mapSize, fileio.TilePos{Row: i, Col: j}, l) {
 				canvas.SetColor(segment.R, segment.G, segment.B)
 				canvas.SetLineWidth(segment.LineWidth)
 				canvas.DrawLine(segment.Line.X1, segment.Line.Y1, segment.Line.X2, segment.Line.Y2)
@@ -222,9 +219,11 @@ func (mr *MapRenderer) DrawPhysicalCityNames(canvas Canvas, mapData *fileio.Civ5
 		return
 	}
 
+	l := layoutForMap(mapSize, mr.config.Radius)
+
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
-			label := PhysicalCityNameLabel(mapData, mapSize, fileio.TilePos{Row: i, Col: j}, mr.config.Radius)
+			label := PhysicalCityNameLabel(mapData, fileio.TilePos{Row: i, Col: j}, l)
 			canvas.SetColor(label.R, label.G, label.B)
 			canvas.DrawString(label.Text, label.X, label.Y)
 		}
@@ -232,12 +231,12 @@ func (mr *MapRenderer) DrawPhysicalCityNames(canvas Canvas, mapData *fileio.Civ5
 }
 
 // drawPoliticalCityNameTile draws a single tile's city name label, in political colors.
-func (mr *MapRenderer) drawPoliticalCityNameTile(canvas Canvas, l tileLayout, mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos) {
+func (mr *MapRenderer) drawPoliticalCityNameTile(canvas Canvas, l tileLayout, mapData *fileio.Civ5MapData, pos fileio.TilePos) {
 	// Skip the label build and DrawString for the common no-city tile.
 	if mapData.TileImprovement(pos).CityName == "" {
 		return
 	}
-	label := PoliticalCityNameLabel(mapData, mapSize, pos, l)
+	label := PoliticalCityNameLabel(mapData, pos, l)
 	if label.Text == "" {
 		return
 	}
@@ -254,13 +253,13 @@ func (mr *MapRenderer) DrawPoliticalCityNames(canvas Canvas, mapData *fileio.Civ
 
 	for i := 0; i < mapSize.Height; i++ {
 		for j := 0; j < mapSize.Width; j++ {
-			mr.drawPoliticalCityNameTile(canvas, l, mapData, mapSize, fileio.TilePos{Row: i, Col: j})
+			mr.drawPoliticalCityNameTile(canvas, l, mapData, fileio.TilePos{Row: i, Col: j})
 		}
 	}
 }
 
 // DrawPoliticalMap renders the political map onto canvas.
-func (mr *MapRenderer) DrawPoliticalMap(canvas FlippableCanvas, mapData *fileio.Civ5MapData) image.Image {
+func (mr *MapRenderer) DrawPoliticalMap(canvas Canvas, mapData *fileio.Civ5MapData) image.Image {
 	mapSize := mapData.Size()
 
 	maxImageWidth, maxImageHeight := imageSize(mapSize, mr.config.Radius)
@@ -270,17 +269,13 @@ func (mr *MapRenderer) DrawPoliticalMap(canvas FlippableCanvas, mapData *fileio.
 
 	fmt.Println("Map height: ", mapSize.Height, ", width: ", mapSize.Width)
 
-	// Need to invert image because the map format is inverted
-	canvas.InvertY()
-
 	mr.DrawTerritoryTiles(canvas, mapData, mapSize)
 	mr.DrawBorders(canvas, mapData, mapSize)
 	mr.DrawRivers(canvas, mapData, mapSize)
 	mr.DrawRoads(canvas, mapData, mapSize)
 
-	canvas.InvertY()
 	// Draw city names on top of hexes
-	mr.DrawPoliticalCityNames(canvas, mapData, mapSize, mapLayout(mr.config.Radius))
+	mr.DrawPoliticalCityNames(canvas, mapData, mapSize, layoutForMap(mapSize, mr.config.Radius))
 
 	return canvas.Image()
 }

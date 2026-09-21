@@ -70,7 +70,7 @@ func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 					gaps++
 				}
 			default:
-				hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: row, Col: col}, mapLayout(renderer.config.Radius))
+				hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: row, Col: col}, newTileLayout(renderer.config.Radius, 100))
 				fill := indexOf(color.RGBA{hex.R, hex.G, hex.B, 255})
 				outline := indexOf(tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255}))
 				if got == border && border != fill && border != outline {
@@ -112,7 +112,7 @@ func TestTileOutlinesLeaveNoGapsBetweenTiles(t *testing.T) {
 	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
 	grid := renderer.tileGridFor(fileio.MapSize{Height: size, Width: size})
 
-	hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: 0, Col: 0}, mapLayout(renderer.config.Radius))
+	hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(renderer.config.Radius, 100))
 	outline := tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255})
 	outlineIndex := canvas.IndexFor(outline.R, outline.G, outline.B)
 
@@ -218,7 +218,7 @@ func TestPalettedCanvasHexTilingHasNoGapsOrOverlaps(t *testing.T) {
 	palette := testPalette(rows*cols + 1)
 	width, height := imageSize(fileio.MapSize{Height: rows, Width: cols}, radius)
 	canvas := raster.NewPalettedCanvas(int(width), int(height), palette)
-	layout := pixelLayout(radius, int(height))
+	layout := newTileLayout(radius, int(height))
 
 	type center struct{ x, y float64 }
 	centers := make([]center, 0, rows*cols)

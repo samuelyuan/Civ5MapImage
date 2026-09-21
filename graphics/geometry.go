@@ -14,71 +14,42 @@ type Line struct {
 	X1, Y1, X2, Y2 float64
 }
 
-// hexVertex returns vertex i (0-5) of the pointy-top hex at (centerX, centerY), starting 30 degrees from the x axis.
+// hexVertex returns vertex i (0-5) of the pointy-top hex at (centerX, centerY) in y-down pixels: vertex 0 is 30 degrees
+// above the x axis on screen, and each next one is 60 degrees counterclockwise.
 func hexVertex(i int, centerX, centerY, radius float64) (x, y float64) {
 	angle := (math.Pi / 6) + float64(i)*(math.Pi/3)
-	return centerX + radius*math.Cos(angle), centerY + radius*math.Sin(angle)
+	return centerX + radius*math.Cos(angle), centerY - radius*math.Sin(angle)
 }
 
-// getHexEdge returns edge edgeIndex (0-5) of the hexagon at (centerX, centerY).
+// getHexEdge returns edge edgeIndex (0-5) of the hexagon at (centerX, centerY), between vertices edgeIndex and edgeIndex+1.
 func getHexEdge(edgeIndex int, centerX, centerY, radius float64) Line {
 	x1, y1 := hexVertex(edgeIndex, centerX, centerY, radius)
 	x2, y2 := hexVertex(edgeIndex+1, centerX, centerY, radius)
 	return Line{X1: x1, Y1: y1, X2: x2, Y2: y2}
 }
 
-// InvertedRow mirrors row against mapHeight; city labels need it because they're drawn after the canvas flip is undone.
-func InvertedRow(mapHeight, row int) int {
-	return mapHeight - row
-}
-
-// tileLayout places tiles and marks on a canvas: mapLayout keeps the map file's y-up space (the canvas flips it), pixelLayout flips once into y-down pixels.
+// tileLayout places tiles on a canvas in y-down pixels. The map file numbers rows from the bottom, so GetImagePosition's
+// y points up; center flips it against the canvas's integer height.
 type tileLayout struct {
 	radius       float64
-	canvasHeight int // pixel layouts only
-	pixels       bool
+	canvasHeight int
 }
 
-// mapLayout is the y-up layout the physical and political maps draw in.
-func mapLayout(radius float64) tileLayout { return tileLayout{radius: radius} }
+// newTileLayout is the layout of a canvas canvasHeight pixels tall.
+func newTileLayout(radius float64, canvasHeight int) tileLayout {
+	return tileLayout{radius: radius, canvasHeight: canvasHeight}
+}
 
-// pixelLayout is the y-down layout of a canvas canvasHeight pixels tall, flipped against that integer height.
-func pixelLayout(radius float64, canvasHeight int) tileLayout {
-	return tileLayout{radius: radius, canvasHeight: canvasHeight, pixels: true}
+// layoutForMap is the layout of the canvas a map of the given size is drawn on.
+func layoutForMap(mapSize fileio.MapSize, radius float64) tileLayout {
+	_, height := imageSize(mapSize, radius)
+	return newTileLayout(radius, int(height))
 }
 
 // center returns the center of the tile at pos.
 func (l tileLayout) center(pos fileio.TilePos) (x, y float64) {
 	x, y = GetImagePosition(pos, l.radius)
-	if l.pixels {
-		y = float64(l.canvasHeight) - y
-	}
-	return x, y
-}
-
-// up returns dy as an offset toward the top of the picture.
-func (l tileLayout) up(dy float64) float64 {
-	if l.pixels {
-		return -dy
-	}
-	return dy
-}
-
-// apexUpRotation is the DrawRegularPolygon rotation that points a triangle's apex toward the top of the picture.
-func (l tileLayout) apexUpRotation() float64 {
-	if l.pixels {
-		return 0
-	}
-	return math.Pi
-}
-
-// hexEdge is getHexEdge on the tile edge that looks the same in either layout: the pixel layout mirrors it vertically.
-func (l tileLayout) hexEdge(edgeIndex int, centerX, centerY float64) Line {
-	edge := getHexEdge(edgeIndex, centerX, centerY, l.radius)
-	if l.pixels {
-		edge.Y1, edge.Y2 = 2*centerY-edge.Y1, 2*centerY-edge.Y2
-	}
-	return edge
+	return x, float64(l.canvasHeight) - y
 }
 
 // repaintRectPad is the margin a tile's repaint rect adds around its hex, for river and border stroke half-widths right at the tile's radius.
@@ -131,8 +102,8 @@ func tileIsMinor(mapData *fileio.Civ5MapData, pos fileio.TilePos) bool {
 }
 
 // PhysicalHexTile returns the position and terrain fill color of the tile at pos, for the physical map.
-func PhysicalHexTile(mapData *fileio.Civ5MapData, pos fileio.TilePos, radius float64) HexTile {
-	x, y := GetImagePosition(pos, radius)
+func PhysicalHexTile(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout) HexTile {
+	x, y := l.center(pos)
 	c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
 	return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}
 }
@@ -196,13 +167,13 @@ func TileEntities(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout,
 func RiverEdgesForTile(riverData int, centerX, centerY float64, l tileLayout) []Line {
 	var edges []Line
 	if (riverData>>2)&1 != 0 { // Southwest (edge 3)
-		edges = append(edges, l.hexEdge(3, centerX, centerY))
+		edges = append(edges, getHexEdge(3, centerX, centerY, l.radius))
 	}
 	if (riverData>>1)&1 != 0 { // Southeast (edge 4)
-		edges = append(edges, l.hexEdge(4, centerX, centerY))
+		edges = append(edges, getHexEdge(4, centerX, centerY, l.radius))
 	}
 	if riverData&1 != 0 { // East (edge 5)
-		edges = append(edges, l.hexEdge(5, centerX, centerY))
+		edges = append(edges, getHexEdge(5, centerX, centerY, l.radius))
 	}
 	return edges
 }
@@ -268,13 +239,13 @@ func tileBorderColor(mapData *fileio.Civ5MapData, pos fileio.TilePos) color.RGBA
 }
 
 // BorderSegmentsForTile returns border lines against neighbors with a different owner, or nil if the tile has no valid owner.
-func BorderSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, radius float64) []ColoredLine {
+func BorderSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, l tileLayout) []ColoredLine {
 	currentTileOwner := mapData.TileImprovement(pos).Owner
 	if fileio.IsInvalidTileOwner(currentTileOwner) {
 		return nil
 	}
 
-	x1, y1 := GetImagePosition(pos, radius)
+	x1, y1 := l.center(pos)
 
 	borderColor := tileBorderColor(mapData, pos)
 
@@ -290,7 +261,7 @@ func BorderSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, 
 		}
 
 		segments = append(segments, ColoredLine{
-			Line:      getHexEdge(n, x1, y1, radius-1),
+			Line:      getHexEdge(n, x1, y1, l.radius-1),
 			LineWidth: BorderLineWidth,
 			R:         borderColor.R,
 			G:         borderColor.G,
@@ -320,15 +291,11 @@ func cityNameText(mapData *fileio.Civ5MapData, pos fileio.TilePos) string {
 	return trimCityName(mapData.TileImprovement(pos).CityName)
 }
 
-// cityLabelPosition returns the anchor for a tile's city label, centered above the tile (via InvertedRow in the y-up layout).
-func cityLabelPosition(l tileLayout, mapHeight int, pos fileio.TilePos, cityName string) (float64, float64) {
+// cityLabelPosition returns the anchor for a tile's city label, centered above the tile.
+func cityLabelPosition(l tileLayout, pos fileio.TilePos, cityName string) (float64, float64) {
 	halfWidth := 6.0 * float64(len(cityName)) / 2.0
-	if l.pixels {
-		x, y := l.center(pos)
-		return x - halfWidth, y - l.radius/2
-	}
-	x, y := GetImagePosition(fileio.TilePos{Row: InvertedRow(mapHeight, pos.Row), Col: pos.Col}, l.radius)
-	return x - halfWidth, y - l.radius*1.5
+	x, y := l.center(pos)
+	return x - halfWidth, y - l.radius/2
 }
 
 // blendColor linearly interpolates between two colors by t (0 = c1, 1 = c2).
@@ -342,16 +309,16 @@ func blendColor(c1, c2 color.RGBA, t float64) color.RGBA {
 }
 
 // PhysicalCityNameLabel returns the city label of the tile at pos, in white.
-func PhysicalCityNameLabel(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, radius float64) ColoredText {
+func PhysicalCityNameLabel(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout) ColoredText {
 	cityName := cityNameText(mapData, pos)
-	x, y := cityLabelPosition(mapLayout(radius), mapSize.Height, pos, cityName)
+	x, y := cityLabelPosition(l, pos, cityName)
 	return ColoredText{Text: cityName, X: x, Y: y, R: 255, G: 255, B: 255}
 }
 
 // PoliticalCityNameLabel returns the city label of the tile at pos, in its owning civ's color (white if unrecognized).
-func PoliticalCityNameLabel(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, l tileLayout) ColoredText {
+func PoliticalCityNameLabel(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout) ColoredText {
 	cityName := cityNameText(mapData, pos)
-	x, y := cityLabelPosition(l, mapSize.Height, pos, cityName)
+	x, y := cityLabelPosition(l, pos, cityName)
 
 	tileColor := fileio.GetPoliticalMapTileColor(mapData, pos)
 	renderColor, ok := civColorMap[tileColor]

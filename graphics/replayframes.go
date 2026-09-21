@@ -103,7 +103,7 @@ func planRedraw(canvas Canvas, grid *tileGrid, changed tileChanges, labels []cit
 	changedAndNeighbors := withNeighbors(changed.tiles(), mapSize)
 	tileRects := tileRepaintRects(changedAndNeighbors, canvasBounds, grid.layout)
 	// A city label may stick out past its tile, before or after the change.
-	labelRects := changedLabelRects(canvas, grid.layout, mapSize.Height, changed, labels, canvasBounds)
+	labelRects := changedLabelRects(canvas, grid.layout, changed, labels, canvasBounds)
 	dirtyRects := append(tileRects, labelRects...)
 
 	// Each dirty rect is a box larger than its hex, so it holds pixels of the tiles around it.
@@ -128,7 +128,7 @@ func tileRepaintRects(tiles tileSet, canvasBounds image.Rectangle, l tileLayout)
 }
 
 // changedLabelRects returns the rects of the changed tiles' labels as they are now and as they were before.
-func changedLabelRects(canvas Canvas, layout tileLayout, mapHeight int, changed tileChanges, labels []cityLabel, bounds image.Rectangle) []image.Rectangle {
+func changedLabelRects(canvas Canvas, layout tileLayout, changed tileChanges, labels []cityLabel, bounds image.Rectangle) []image.Rectangle {
 	var rects []image.Rectangle
 	for _, l := range labels {
 		if _, ok := changed[l.pos]; ok && !l.rect.Empty() {
@@ -137,7 +137,7 @@ func changedLabelRects(canvas Canvas, layout tileLayout, mapHeight int, changed 
 	}
 	for _, rc := range sortedTiles(changed) {
 		if name := trimCityName(changed[rc].CityName); name != "" {
-			x, y := cityLabelPosition(layout, mapHeight, rc, name)
+			x, y := cityLabelPosition(layout, rc, name)
 			if rect := labelRect(canvas, ColoredText{Text: name, X: x, Y: y}, bounds); !rect.Empty() {
 				rects = append(rects, rect)
 			}
@@ -177,7 +177,7 @@ func (mr *MapRenderer) cityLabels(canvas Canvas, layout tileLayout, mapData *fil
 			if mapData.TileImprovement(pos).CityName == "" {
 				continue
 			}
-			text := PoliticalCityNameLabel(mapData, mapSize, pos, layout)
+			text := PoliticalCityNameLabel(mapData, pos, layout)
 			if text.Text == "" {
 				continue
 			}

@@ -23,7 +23,7 @@ func TestReplayPaletteCoversEveryDrawnColor(t *testing.T) {
 	canvas := newBenchCanvas(mapData)
 	renderer := NewMapRenderer(DefaultDrawingConfig())
 	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-	renderer.DrawMountain(canvas, mapLayout(renderer.config.Radius), 0, 0)
+	renderer.DrawMountain(canvas, newTileLayout(renderer.config.Radius, 100), 0, 0)
 
 	if canvas.Inexact() != 0 {
 		t.Errorf("the renderer drew %d colors that aren't in replayPalette", canvas.Inexact())

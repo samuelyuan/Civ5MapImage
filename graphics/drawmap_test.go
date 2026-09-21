@@ -39,17 +39,17 @@ func TestDrawMountain(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(100, 100)
 
-	mr.DrawMountain(canvas, mapLayout(mr.config.Radius), 10, 20)
+	mr.DrawMountain(canvas, newTileLayout(mr.config.Radius, 100), 10, 20)
 
 	ops := canvas.GetOperations()
 	// Expect base triangle + color + fill, then peak triangle + color + fill = 6 ops
 	if len(ops) != 6 {
 		t.Fatalf("DrawMountain() recorded %d ops, want 6: %v", len(ops), ops)
 	}
-	if ops[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 3.14)" {
+	if ops[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 0.00)" {
 		t.Errorf("DrawMountain() base polygon op = %q", ops[0])
 	}
-	if ops[3] != "DrawRegularPolygon(3, 10.00, 28.00, 8.00, 3.14)" {
+	if ops[3] != "DrawRegularPolygon(3, 10.00, 12.00, 8.00, 0.00)" {
 		t.Errorf("DrawMountain() peak polygon op = %q", ops[3])
 	}
 }
@@ -58,7 +58,7 @@ func TestDrawCityIcon(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(100, 100)
 
-	mr.DrawCityIcon(canvas, mapLayout(mr.config.Radius), 10, 20, color.RGBA{0, 0, 0, 255})
+	mr.DrawCityIcon(canvas, newTileLayout(mr.config.Radius, 100), 10, 20, color.RGBA{0, 0, 0, 255})
 
 	ops := canvas.GetOperations()
 	if len(ops) != 3 {
@@ -73,7 +73,7 @@ func TestGetHexEdge(t *testing.T) {
 	line := getHexEdge(0, 0, 0, 10)
 	angle1 := math.Pi / 6
 	wantX1 := 10 * math.Cos(angle1)
-	wantY1 := 10 * math.Sin(angle1)
+	wantY1 := -10 * math.Sin(angle1) // y points down
 	if math.Abs(line.X1-wantX1) > 1e-9 || math.Abs(line.Y1-wantY1) > 1e-9 {
 		t.Errorf("getHexEdge(0) start = (%v, %v), want (%v, %v)", line.X1, line.Y1, wantX1, wantY1)
 	}
@@ -309,7 +309,7 @@ func TestDrawPoliticalCityNamesKnownColor(t *testing.T) {
 		CityOwnerIndexMap: map[int]int{0: 0},
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, mapLayout(mr.config.Radius))
+	mr.DrawPoliticalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, newTileLayout(mr.config.Radius, 100))
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 {
@@ -330,7 +330,7 @@ func TestDrawPoliticalCityNamesUnknownColorFallsBackToWhite(t *testing.T) {
 		},
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, mapLayout(mr.config.Radius))
+	mr.DrawPoliticalCityNames(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, newTileLayout(mr.config.Radius, 100))
 
 	ops := canvas.GetOperations()
 	if len(ops) != 2 || ops[0] != "SetColor(255, 255, 255)" {
@@ -435,7 +435,7 @@ func newFullMapDataForRender() *fileio.Civ5MapData {
 	}
 }
 
-func TestDrawPhysicalMapResizesAndInvertsCanvas(t *testing.T) {
+func TestDrawPhysicalMapResizesCanvas(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(1, 1)
 	mapData := newFullMapDataForRender()
@@ -449,18 +449,9 @@ func TestDrawPhysicalMapResizesAndInvertsCanvas(t *testing.T) {
 	if ops[0][:6] != "Resize" {
 		t.Errorf("DrawPhysicalMap() first op = %q, want a Resize call", ops[0])
 	}
-	invertCount := 0
-	for _, op := range ops {
-		if op == "InvertY()" {
-			invertCount++
-		}
-	}
-	if invertCount != 2 {
-		t.Errorf("DrawPhysicalMap() called InvertY() %d times, want 2 (once each direction)", invertCount)
-	}
 }
 
-func TestDrawPoliticalMapResizesAndInvertsCanvas(t *testing.T) {
+func TestDrawPoliticalMapResizesCanvas(t *testing.T) {
 	mr := NewMapRenderer(DefaultDrawingConfig())
 	canvas := NewMockCanvas(1, 1)
 	mapData := newFullMapDataForRender()

@@ -85,7 +85,7 @@ func buildTileGrid(mapSize fileio.MapSize, radius float64) *tileGrid {
 	w, h := imageSize(mapSize, radius)
 	canvas := raster.NewPalettedCanvas(int(w), int(h), color.Palette{color.RGBA{0, 0, 0, 255}})
 	canvas.TrackIDs()
-	layout := pixelLayout(radius, int(h))
+	layout := newTileLayout(radius, int(h))
 	for row := 0; row < mapSize.Height; row++ {
 		for col := 0; col < mapSize.Width; col++ {
 			x, y := layout.center(fileio.TilePos{Row: row, Col: col})

@@ -151,7 +151,7 @@ func TestRedrawDirtyTilesDoesNotTouchUnrelatedPixels(t *testing.T) {
 	renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges())
 
 	// Tile (1, 1) is 9+ tiles from (10, 10).
-	x, y := pixelLayout(DefaultDrawingConfig().Radius, bounds.Dy()).center(fileio.TilePos{Row: 1, Col: 1})
+	x, y := newTileLayout(DefaultDrawingConfig().Radius, bounds.Dy()).center(fileio.TilePos{Row: 1, Col: 1})
 	cx, cy := int(x), int(y)
 
 	checkRect := image.Rect(cx-8, cy-8, cx+8, cy+8).Intersect(bounds)
@@ -571,7 +571,7 @@ func TestMergeNearbyRectsCoversInputWithSeparatedClusters(t *testing.T) {
 
 
 func TestTileRepaintRectsAreRowMajor(t *testing.T) {
-	l := mapLayout(16)
+	l := newTileLayout(16, 100)
 	bounds := image.Rect(0, 0, 2000, 2000)
 	rects := tileRepaintRects(tileSet{{Row: 2, Col: 3}: true, {Row: 0, Col: 1}: true, {Row: 2, Col: 0}: true}, bounds, l)
 
