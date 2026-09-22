@@ -34,7 +34,7 @@ func yRange(subpaths []subpath) (minY, maxY float64) {
 	return minY, maxY
 }
 
-// appendCrossings appends, sorted, the x where each closed subpath edge crosses the scanline y (half-open in y, so shared vertices count once).
+// appendCrossings appends, sorted, the x where each closed edge crosses scanline y (half-open in y).
 func appendCrossings(xs []float64, subpaths []subpath, y float64) []float64 {
 	for _, sp := range subpaths {
 		for i, a := range sp.pts {
@@ -49,7 +49,7 @@ func appendCrossings(xs []float64, subpaths []subpath, y float64) []float64 {
 	return xs
 }
 
-// RegularPolygon returns a regular polygon's vertices centered on (x, y); at rotation 0, odd sides point up and even sides sit flat on top.
+// RegularPolygon returns the vertices of a polygon centered on (x, y); at rotation 0 odd sides point up, even sides sit flat.
 func RegularPolygon(sides int, x, y, radius, rotation float64) []Point {
 	angle := 2 * math.Pi / float64(sides)
 	rotation -= math.Pi / 2
@@ -64,7 +64,7 @@ func RegularPolygon(sides int, x, y, radius, rotation float64) []Point {
 	return pts
 }
 
-// pixelAtOrAfter returns the first pixel whose center (index + 0.5) is at or after v, so spans [a, b) sharing an edge neither overlap nor gap.
+// pixelAtOrAfter returns the first pixel whose center is at or after v, so spans [a, b) sharing an edge neither overlap nor gap.
 func pixelAtOrAfter(v float64) int { return int(math.Ceil(v - 0.5)) }
 
 // segment is a line segment prepared for distance queries.
@@ -84,6 +84,38 @@ func (s segment) pixelBounds(half float64) image.Rectangle {
 	return image.Rect(
 		int(math.Floor(math.Min(s.a.X, s.b.X)-half)), int(math.Floor(math.Min(s.a.Y, s.b.Y)-half)),
 		int(math.Ceil(math.Max(s.a.X, s.b.X)+half))+1, int(math.Ceil(math.Max(s.a.Y, s.b.Y)+half))+1)
+}
+
+// rowSpan returns x bounds on row y containing every point within half of the segment (possibly wider, never narrower), and false if none.
+func (s segment) rowSpan(y, half float64) (lo, hi float64, ok bool) {
+	lo, hi = math.Inf(1), math.Inf(-1)
+	for _, end := range [2]Point{s.a, s.b} { // the round caps
+		if dy := y - end.Y; math.Abs(dy) <= half {
+			dx := math.Sqrt(half*half - dy*dy)
+			lo, hi, ok = math.Min(lo, end.X-dx), math.Max(hi, end.X+dx), true
+		}
+	}
+	if s.lengthSq == 0 {
+		return lo, hi, ok
+	}
+
+	// The body: within half of the line (v) and between the ends (u). With dx, dy the direction, each bound is a range of x.
+	length := math.Sqrt(s.lengthSq)
+	ux, uy := s.dx/length, s.dy/length // along the segment
+	w := y - s.a.Y
+	bodyLo, bodyHi := math.Inf(-1), math.Inf(1)
+	limit := func(coefX, offset, from, to float64) bool { // from <= coefX*(x-a.x) + offset <= to
+		if math.Abs(coefX) < 1e-12 {
+			return from <= offset && offset <= to
+		}
+		x0, x1 := (from-offset)/coefX, (to-offset)/coefX
+		bodyLo, bodyHi = math.Max(bodyLo, s.a.X+math.Min(x0, x1)), math.Min(bodyHi, s.a.X+math.Max(x0, x1))
+		return true
+	}
+	if limit(-uy, w*ux, -half, half) && limit(ux, w*uy, 0, length) && bodyLo <= bodyHi {
+		lo, hi, ok = math.Min(lo, bodyLo), math.Max(hi, bodyHi), true
+	}
+	return lo, hi, ok
 }
 
 // distSq returns the squared distance from (px, py) to the segment.

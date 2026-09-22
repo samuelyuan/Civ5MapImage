@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
@@ -297,5 +298,41 @@ func TestTileGridForRebuildsOnlyWhenTheMapSizeChanges(t *testing.T) {
 	tall := fileio.MapSize{Height: 8, Width: 4}
 	if grid := renderer.tileGridFor(tall); grid.mapSize != tall {
 		t.Errorf("the next taller size gave grid size %+v, want %+v", grid.mapSize, tall)
+	}
+}
+
+// Skipping each tile's interior finds exactly the outline and rim pixels a scan of every pixel of the tile does.
+func TestTileEdgePixelsMatchAScanOfEveryPixel(t *testing.T) {
+	sizes := []fileio.MapSize{{Height: 1, Width: 1}, {Height: 2, Width: 3}, {Height: 5, Width: 7}, {Height: 9, Width: 8}, {Height: 14, Width: 11}}
+	for _, radius := range []float64{8, 16} {
+		for _, size := range sizes {
+			g := buildTileGrid(size, radius)
+			for row := 0; row < size.Height; row++ {
+				for col := 0; col < size.Width; col++ {
+					pos := fileio.TilePos{Row: row, Col: col}
+					id, neighbors := g.tileID(pos), g.neighborIDs(pos)
+					var wantOutline []gridPixel
+					var wantRim []rimPixel
+					bounds := g.tileBounds(pos)
+					for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+						for x := bounds.Min.X; x < bounds.Max.X; x++ {
+							if g.at(x, y) != id {
+								continue
+							}
+							if raster.IsOutline(g.at, x, y, id) {
+								wantOutline = append(wantOutline, gridPixel{X: int32(x), Y: int32(y)})
+							}
+							if reach := raster.RimReach(g.at, borderProbes, x, y, id, neighbors[:]); reach != 0 {
+								wantRim = append(wantRim, rimPixel{X: int32(x), Y: int32(y), Reach: reach})
+							}
+						}
+					}
+					if !slices.Equal(g.outline[id], wantOutline) || !slices.Equal(g.rim[id], wantRim) {
+						t.Fatalf("radius %v, %dx%d map, tile %v: outline %d px (want %d), rim %d px (want %d)",
+							radius, size.Height, size.Width, pos, len(g.outline[id]), len(wantOutline), len(g.rim[id]), len(wantRim))
+					}
+				}
+			}
+		}
 	}
 }

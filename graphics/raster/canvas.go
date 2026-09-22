@@ -1,5 +1,4 @@
-// Package raster draws shapes and text onto an indexed image without anti-aliasing, so every pixel is exactly one of
-// the palette's colors: what a GIF frame needs, with no quantizing.
+// Package raster draws shapes and text onto an indexed image without anti-aliasing, so every pixel is exactly a palette color.
 package raster
 
 import (
@@ -7,6 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"math"
 	"os"
 
 	"golang.org/x/image/font"
@@ -14,7 +14,7 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// textFace is the font for DrawString and MeasureString. Its glyph masks are 0 or 255, so text needs no anti-aliasing.
+// textFace is the DrawString font; its glyph masks are 0 or 255, so no anti-aliasing is needed.
 var textFace = basicfont.Face7x13
 
 // glyphOpaque is the mask alpha (of 0xffff) from which a glyph pixel is drawn.
@@ -42,7 +42,18 @@ type PalettedCanvas struct {
 
 // NewPalettedCanvas returns a width x height canvas over palette, initially black.
 func NewPalettedCanvas(width, height int, palette color.Palette) *PalettedCanvas {
-	c := &PalettedCanvas{colorTable: newColorTable(palette), lineWidth: 1}
+	return newPalettedCanvas(width, height, newColorTable(palette))
+}
+
+// NewGrowingPalettedCanvas returns a canvas whose palette starts as black and gains each color drawn, up to 256. Read it via Palette or Image.
+func NewGrowingPalettedCanvas(width, height int) *PalettedCanvas {
+	table := newColorTable(nil)
+	table.grow = true
+	return newPalettedCanvas(width, height, table)
+}
+
+func newPalettedCanvas(width, height int, table *colorTable) *PalettedCanvas {
+	c := &PalettedCanvas{colorTable: table, lineWidth: 1}
 	c.background = c.IndexFor(0, 0, 0)
 	c.Resize(width, height)
 	return c
@@ -70,7 +81,7 @@ func (c *PalettedCanvas) Resize(width, height int) {
 	}
 }
 
-// SetOrigin sets the drawing coordinates of this canvas's (0, 0), so a staging canvas draws in the main canvas's coordinates.
+// SetOrigin sets the drawing coordinates of the canvas's (0, 0), for a staging canvas.
 func (c *PalettedCanvas) SetOrigin(origin image.Point) { c.origin = origin }
 
 // local converts drawing coordinates to this canvas's pixels.
@@ -92,8 +103,7 @@ func (c *PalettedCanvas) TrackIDs() {
 // SetID sets the region id Fill records.
 func (c *PalettedCanvas) SetID(id int32) { c.id = id }
 
-// IDs returns the region id of every pixel (row-major, -1 where nothing was filled) while tracking. It is the canvas's
-// own slice, not a copy.
+// IDs returns the per-pixel region ids (row-major, -1 unfilled) while tracking; the canvas's own slice.
 func (c *PalettedCanvas) IDs() []int32 { return c.ids }
 
 func (c *PalettedCanvas) SetColor(r, g, b uint8)     { c.current = c.IndexFor(r, g, b) }
@@ -112,6 +122,10 @@ func (c *PalettedCanvas) DrawRectangle(x, y, width, height float64) {
 		c.local(x, y), c.local(x+width, y),
 		c.local(x+width, y+height), c.local(x, y+height),
 	}})
+}
+
+func (c *PalettedCanvas) DrawTriangle(x1, y1, x2, y2, x3, y3 float64) {
+	c.subpaths = append(c.subpaths, subpath{closed: true, pts: []Point{c.local(x1, y1), c.local(x2, y2), c.local(x3, y3)}})
 }
 
 func (c *PalettedCanvas) DrawLine(x1, y1, x2, y2 float64) {
@@ -151,7 +165,7 @@ func (c *PalettedCanvas) fillSpan(y, x0, x1 int) {
 	}
 }
 
-// Stroke draws the current path with round caps, painting pixels whose centers are within half the line width, and clears it.
+// Stroke draws the current path with round caps, then clears it.
 func (c *PalettedCanvas) Stroke() {
 	defer c.clearPath()
 	half := c.lineWidth / 2
@@ -165,7 +179,12 @@ func (c *PalettedCanvas) Stroke() {
 func (c *PalettedCanvas) strokeSegment(seg segment, half float64) {
 	r := seg.pixelBounds(half).Intersect(c.img.Rect)
 	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
+		lo, hi, ok := seg.rowSpan(float64(y)+0.5, half)
+		if !ok {
+			continue
+		}
+		// One pixel of slack each side keeps rounding in rowSpan from ever cutting off a pixel distSq accepts.
+		for x := max(r.Min.X, int(math.Floor(lo))-1); x < min(r.Max.X, int(math.Ceil(hi))+2); x++ {
 			if seg.distSq(float64(x)+0.5, float64(y)+0.5) <= half*half {
 				c.setPixel(x, y, c.current)
 			}
@@ -241,7 +260,13 @@ func (c *PalettedCanvas) PaintPixel(x, y int, index uint8) {
 	}
 }
 
-func (c *PalettedCanvas) Image() image.Image { return c.img }
+func (c *PalettedCanvas) Image() image.Image {
+	c.img.Palette = c.palette // a growing palette may have gained colors since the image was made
+	return c.img
+}
+
+// Palette returns the canvas's palette, which a growing canvas extends as colors are drawn.
+func (c *PalettedCanvas) Palette() color.Palette { return c.palette }
 
 func (c *PalettedCanvas) SavePNG(filename string) error {
 	f, err := os.Create(filename)

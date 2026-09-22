@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"image"
+	"image/color"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -475,54 +476,6 @@ func TestTileTrackerSeesEveryHandledEventType(t *testing.T) {
 	}
 }
 
-func TestMergeNearbyRects(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []image.Rectangle
-		want []image.Rectangle
-	}{
-		{"nothing", nil, nil},
-		{"one rect is unchanged", []image.Rectangle{image.Rect(5, 5, 15, 15)}, []image.Rectangle{image.Rect(5, 5, 15, 15)}},
-		{"far apart stay separate",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(100, 100, 110, 110)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(100, 100, 110, 110)}},
-		{"overlapping merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(5, 5, 20, 20)},
-			[]image.Rectangle{image.Rect(0, 0, 20, 20)}},
-		{"touching merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10, 0, 20, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 20, 10)}},
-		{"just inside the gap merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+mergeGap-1, 0, 30, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 30, 10)}},
-		{"exactly the gap apart stay separate",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+mergeGap, 0, 30, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+mergeGap, 0, 30, 10)}},
-		{"empty rects are dropped",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), {}, image.Rect(50, 50, 50, 60)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10)}},
-	}
-	for _, tt := range tests {
-		if got := mergeNearbyRects(tt.in); !slices.Equal(got, tt.want) {
-			t.Errorf("%s: mergeNearbyRects(%v) = %v, want %v", tt.name, tt.in, got, tt.want)
-		}
-	}
-}
-
-// Merging two rects grows their box, and the bigger box can reach a third rect that neither was near alone; the input order must not matter.
-func TestMergeNearbyRectsMergesChainsInAnyOrder(t *testing.T) {
-	tall := image.Rect(0, 0, 10, 50)
-	wide := image.Rect(15, 0, 60, 10)    // near tall, so they merge into (0, 0, 60, 50)
-	inside := image.Rect(45, 30, 55, 40) // far from both alone, but inside their merged box
-	want := []image.Rectangle{image.Rect(0, 0, 60, 50)}
-	orders := [][]image.Rectangle{{tall, wide, inside}, {inside, tall, wide}, {wide, inside, tall}, {inside, wide, tall}}
-	for _, in := range orders {
-		if got := mergeNearbyRects(in); !slices.Equal(got, want) {
-			t.Errorf("mergeNearbyRects(%v) = %v, want %v", in, got, want)
-		}
-	}
-}
-
 func TestFrameRegionsAlwaysYieldsAFrame(t *testing.T) {
 	noop := []image.Rectangle{noopRect}
 	for name, in := range map[string][]image.Rectangle{
@@ -534,41 +487,10 @@ func TestFrameRegionsAlwaysYieldsAFrame(t *testing.T) {
 		}
 	}
 	real := []image.Rectangle{image.Rect(0, 0, 10, 10), {}, image.Rect(100, 0, 110, 10)}
-	if got, want := gifFrameRects(real), mergeNearbyRects(real); !slices.Equal(got, want) {
+	if got, want := gifFrameRects(real), raster.MergeNearbyRects(real, mergeGap); !slices.Equal(got, want) {
 		t.Errorf("gifFrameRects(%v) = %v, want the clusters %v", real, got, want)
 	}
 }
-
-// For any input, every rect is covered by some cluster, no two clusters are within the gap of each other, and the input order doesn't matter.
-func TestMergeNearbyRectsCoversInputWithSeparatedClusters(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
-	for trial := 0; trial < 200; trial++ {
-		var in []image.Rectangle
-		for i, n := 0, 1+rng.Intn(60); i < n; i++ {
-			x, y := rng.Intn(400), rng.Intn(400)
-			in = append(in, image.Rect(x, y, x+1+rng.Intn(40), y+1+rng.Intn(40)))
-		}
-		clusters := mergeNearbyRects(in)
-		reversed := slices.Clone(in)
-		slices.Reverse(reversed)
-		if again := mergeNearbyRects(reversed); !slices.Equal(clusters, again) {
-			t.Fatalf("trial %d: reversing the input gave %v, want %v", trial, again, clusters)
-		}
-		for _, r := range in {
-			if !slices.ContainsFunc(clusters, func(c image.Rectangle) bool { return r.In(c) }) {
-				t.Fatalf("trial %d: %v is in no cluster of %v", trial, r, clusters)
-			}
-		}
-		for i, a := range clusters {
-			for _, b := range clusters[i+1:] {
-				if a.Inset(-mergeGap).Overlaps(b) {
-					t.Fatalf("trial %d: clusters %v and %v are within the gap", trial, a, b)
-				}
-			}
-		}
-	}
-}
-
 
 func TestTileRepaintRectsAreRowMajor(t *testing.T) {
 	l := newTileLayout(16, 100)
@@ -586,5 +508,225 @@ func TestTileRepaintRectsAreRowMajor(t *testing.T) {
 	}
 	if got := tileRepaintRects(tileSet{}, bounds, l); len(got) != 0 {
 		t.Errorf("an empty paint set gave %v, want nothing", got)
+	}
+}
+
+// The replay keeps its thin river, one pixel wide, not the map's two-pixel one: a river edge is a tile radius long, so it paints about that many pixels.
+func TestReplayRiversAreOnePixelWide(t *testing.T) {
+	mr := NewMapRenderer(DefaultDrawingConfig())
+	mapData := terrainWithMountains([][]bool{{false}})
+	mapData.MapTiles[0][0].RiverData = 1 // the east edge
+	mapData.MapTileImprovements = [][]*fileio.Civ5MapTileImprovement{{{CityId: -1, Owner: -1, RouteType: 255}}}
+	canvas := newBenchCanvas(mapData)
+
+	mr.paintTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, []fileio.TilePos{{Row: 0, Col: 0}})
+
+	river := canvas.IndexFor(riverColor.R, riverColor.G, riverColor.B)
+	painted := 0
+	bounds := canvas.Image().Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if canvas.IndexAt(x, y) == river {
+				painted++
+			}
+		}
+	}
+	if radius := int(mr.config.Radius); painted < radius/2 || painted > radius*3/2 {
+		t.Errorf("the river painted %d pixels, want about %d (a tile radius, one pixel wide)", painted, radius)
+	}
+}
+
+func TestRepaintRectCoversTheHexPlusPad(t *testing.T) {
+	const radius = 16.0
+	l := newTileLayout(radius, 600)
+	bounds := image.Rect(0, 0, 2000, 2000)
+	rect := l.repaintRect(fileio.TilePos{Row: 3, Col: 4}, bounds)
+	x, y := l.center(fileio.TilePos{Row: 3, Col: 4})
+	for i := 0; i < 6; i++ {
+		vx, vy := hexVertex(i, x, y, radius)
+		if vx-repaintRectPad < float64(rect.Min.X) || vx+repaintRectPad > float64(rect.Max.X) ||
+			vy-repaintRectPad < float64(rect.Min.Y) || vy+repaintRectPad > float64(rect.Max.Y) {
+			t.Errorf("vertex %d (%.2f, %.2f) plus %v of padding is outside %v", i, vx, vy, repaintRectPad, rect)
+		}
+	}
+}
+
+func TestRepaintRectIsClippedToBounds(t *testing.T) {
+	l := newTileLayout(16, 32) // tile (0, 0) is centered at (24, 16)
+	if got, want := l.repaintRect(fileio.TilePos{Row: 0, Col: 0}, image.Rect(0, 0, 30, 30)), image.Rect(6, 0, 30, 30); got != want {
+		t.Errorf("repaintRect clipped = %v, want %v", got, want)
+	}
+	if got := l.repaintRect(fileio.TilePos{Row: 20, Col: 20}, image.Rect(0, 0, 30, 30)); !got.Empty() {
+		t.Errorf("repaintRect of a tile outside the bounds = %v, want empty", got)
+	}
+}
+
+func TestTileEntitiesMountain(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
+	}
+	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255})
+	if len(entities) != 1 || entities[0].Type != EntityMountain {
+		t.Fatalf("TileEntities() = %+v, want a single EntityMountain", entities)
+	}
+}
+
+func TestTileEntitiesCity(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
+	}
+	cityColor := color.RGBA{10, 20, 30, 255}
+	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), cityColor)
+	if len(entities) != 1 || entities[0].Type != EntityCity {
+		t.Fatalf("TileEntities() = %+v, want a single EntityCity", entities)
+	}
+	if entities[0].R != cityColor.R || entities[0].G != cityColor.G || entities[0].B != cityColor.B {
+		t.Errorf("TileEntities() city color = (%d,%d,%d), want %+v", entities[0].R, entities[0].G, entities[0].B, cityColor)
+	}
+}
+
+func TestTileEntitiesMountainAndCity(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
+	}
+	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255})
+	if len(entities) != 2 || entities[0].Type != EntityMountain || entities[1].Type != EntityCity {
+		t.Fatalf("TileEntities() = %+v, want [EntityMountain, EntityCity] in that order", entities)
+	}
+}
+
+func TestTileEntitiesNone(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
+	}
+	if entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255}); entities != nil {
+		t.Errorf("TileEntities() = %v, want nil", entities)
+	}
+}
+
+func TestTileEntitiesNoImprovementDataIsSafe(t *testing.T) {
+	mapData := &fileio.Civ5MapData{
+		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
+		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{},
+	}
+	if entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255}); entities != nil {
+		t.Errorf("TileEntities() with no improvement data = %v, want nil", entities)
+	}
+}
+
+// A mountain's apex points up on screen and a city icon reaches further above its center than below it.
+func TestMarksPointUp(t *testing.T) {
+	mr := NewMapRenderer(DefaultDrawingConfig())
+	l := newTileLayout(16, 100)
+
+	canvas := NewMockCanvas(100, 100)
+	mr.DrawMountain(canvas, l, 10, 20)
+	got := canvas.GetOperations()
+	if got[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 0.00)" || got[3] != "DrawRegularPolygon(3, 10.00, 12.00, 8.00, 0.00)" {
+		t.Errorf("mountain = %v, want the base at the tile center and the peak 8 above it", got)
+	}
+
+	canvas = NewMockCanvas(100, 100)
+	mr.DrawCityIcon(canvas, l, 10, 20, mountainBaseColor)
+	if got, want := canvas.GetOperations()[0], "DrawRectangle(6.80, 15.20, 8.00, 8.00)"; got != want {
+		t.Errorf("city icon = %q, want %q (top 0.3r above the center)", got, want)
+	}
+}
+
+func TestDrawMountain(t *testing.T) {
+	mr := NewMapRenderer(DefaultDrawingConfig())
+	canvas := NewMockCanvas(100, 100)
+
+	mr.DrawMountain(canvas, newTileLayout(mr.config.Radius, 100), 10, 20)
+
+	ops := canvas.GetOperations()
+	// Expect base triangle + color + fill, then peak triangle + color + fill = 6 ops
+	if len(ops) != 6 {
+		t.Fatalf("DrawMountain() recorded %d ops, want 6: %v", len(ops), ops)
+	}
+	if ops[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 0.00)" {
+		t.Errorf("DrawMountain() base polygon op = %q", ops[0])
+	}
+	if ops[3] != "DrawRegularPolygon(3, 10.00, 12.00, 8.00, 0.00)" {
+		t.Errorf("DrawMountain() peak polygon op = %q", ops[3])
+	}
+}
+
+func TestDrawCityIcon(t *testing.T) {
+	mr := NewMapRenderer(DefaultDrawingConfig())
+	canvas := NewMockCanvas(100, 100)
+
+	mr.DrawCityIcon(canvas, newTileLayout(mr.config.Radius, 100), 10, 20, color.RGBA{0, 0, 0, 255})
+
+	ops := canvas.GetOperations()
+	if len(ops) != 3 {
+		t.Fatalf("DrawCityIcon() recorded %d ops, want 3: %v", len(ops), ops)
+	}
+	if ops[len(ops)-1] != "Fill()" {
+		t.Errorf("DrawCityIcon() last op = %q, want Fill()", ops[len(ops)-1])
+	}
+}
+
+func paletteContains(palette color.Palette, c color.RGBA) bool {
+	for _, p := range palette {
+		r, g, b, _ := p.RGBA()
+		if uint8(r>>8) == c.R && uint8(g>>8) == c.G && uint8(b>>8) == c.B {
+			return true
+		}
+	}
+	return false
+}
+
+// TestReplayPaletteCoversEveryDrawnColor guards against drawn colors missing from the palette.
+func TestReplayPaletteCoversEveryDrawnColor(t *testing.T) {
+	mapData := buildBenchMapData(24, 24, 4, 1)
+	mapData.Civ5PlayerData[1].CivType = "CIVILIZATION_MINOR_TEST"
+
+	canvas := newBenchCanvas(mapData)
+	renderer := NewMapRenderer(DefaultDrawingConfig())
+	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+	renderer.DrawMountain(canvas, newTileLayout(renderer.config.Radius, 100), 0, 0)
+
+	if canvas.Inexact() != 0 {
+		t.Errorf("the renderer drew %d colors that aren't in replayPalette", canvas.Inexact())
+	}
+}
+
+func TestReplayPaletteHasNoDuplicatesFitsAGIFAndKeepsBackground(t *testing.T) {
+	mapData := buildBenchMapData(8, 8, 6, 1)
+	palette := replayPalette(mapData)
+	if len(palette) == 0 || len(palette) > 256 {
+		t.Fatalf("palette has %d entries, want 1..256", len(palette))
+	}
+	seen := map[color.Color]bool{}
+	for _, c := range palette {
+		if seen[c] {
+			t.Errorf("palette has duplicate entry %v", c)
+		}
+		seen[c] = true
+	}
+	if !paletteContains(palette, color.RGBA{0, 0, 0, 255}) {
+		t.Error("palette is missing the black canvas background")
+	}
+}
+
+func TestGetPhysicalMapTileColor(t *testing.T) {
+	tests := []struct {
+		terrain string
+		want    color.RGBA
+	}{
+		{"TERRAIN_GRASS", color.RGBA{105, 125, 54, 255}},
+		{"TERRAIN_OCEAN", color.RGBA{47, 74, 93, 255}},
+		{"TERRAIN_UNKNOWN", color.RGBA{0, 0, 0, 255}},
+		{"", color.RGBA{0, 0, 0, 255}},
+	}
+	for _, tt := range tests {
+		if got := GetPhysicalMapTileColor(tt.terrain); got != tt.want {
+			t.Errorf("GetPhysicalMapTileColor(%q) = %v, want %v", tt.terrain, got, tt.want)
+		}
 	}
 }

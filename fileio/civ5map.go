@@ -1120,19 +1120,15 @@ func reportMapHeaderInfo(header *Civ5MapHeader, version, scenario int) {
 	fmt.Println("Has random goodies: ", header.Settings[0]>>2&1 != 0)
 }
 
-// openMapFileReader opens a map file and returns a section reader spanning its entire contents
-func openMapFileReader(filename string) (*os.File, int64, *io.SectionReader, error) {
-	inputFile, err := os.Open(filename)
+// openMapFileReader reads a map file into memory, so parsing its many small structs costs no system calls,
+// and returns the contents for random access along with a section reader spanning all of them.
+func openMapFileReader(filename string) (io.ReaderAt, int64, *io.SectionReader, error) {
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("failed to load map: %w", err)
 	}
-	fi, err := inputFile.Stat()
-	if err != nil {
-		inputFile.Close()
-		return nil, 0, nil, fmt.Errorf("failed to get file info for %q: %w", filename, err)
-	}
-	fileLength := fi.Size()
-	return inputFile, fileLength, io.NewSectionReader(inputFile, int64(0), fileLength), nil
+	contents := bytes.NewReader(data)
+	return contents, int64(len(data)), io.NewSectionReader(contents, 0, int64(len(data))), nil
 }
 
 // readTerrainTypeLists reads the terrain, feature terrain, feature wonder, and resource type lists
@@ -1334,7 +1330,7 @@ func readGameDescriptionSection(reader *io.SectionReader, version int, mapSize M
 }
 
 // readFileTail reads a fixed-size section of a file, ending precedingBytes before the end of the file
-func readFileTail(inputFile *os.File, fileLength int64, size, precedingBytes int) ([]byte, error) {
+func readFileTail(inputFile io.ReaderAt, fileLength int64, size, precedingBytes int) ([]byte, error) {
 	data := make([]byte, size)
 	offset := fileLength - int64(precedingBytes) - int64(size)
 	if _, err := inputFile.ReadAt(data, offset); err != nil {
@@ -1344,7 +1340,7 @@ func readFileTail(inputFile *os.File, fileLength int64, size, precedingBytes int
 }
 
 // readTailSections reads map tile properties, player civ data, and team names from the end of the file.
-func readTailSections(inputFile *os.File, fileLength int64, mapHeader *Civ5MapHeader, gameDescriptionHeader *Civ5GameDescriptionHeader, policyTypeList []string) ([][]*Civ5MapTileImprovement, []*Civ5PlayerData, []*Civ5TeamData, error) {
+func readTailSections(inputFile io.ReaderAt, fileLength int64, mapHeader *Civ5MapHeader, gameDescriptionHeader *Civ5GameDescriptionHeader, policyTypeList []string) ([][]*Civ5MapTileImprovement, []*Civ5PlayerData, []*Civ5TeamData, error) {
 	mapTilePropertiesSize := int(mapHeader.Height) * int(mapHeader.Width) * binary.Size(Civ5MapTileHeader{})
 	mapTileProperties, err := readFileTail(inputFile, fileLength, mapTilePropertiesSize, 0)
 	if err != nil {
@@ -1377,7 +1373,7 @@ func readTailSections(inputFile *os.File, fileLength int64, mapHeader *Civ5MapHe
 }
 
 // readTeamNamesSection reads the team name array and decodes it via ParseTeamNames.
-func readTeamNamesSection(inputFile *os.File, fileLength int64, precedingBytes int, teamCount int) ([]*Civ5TeamData, error) {
+func readTeamNamesSection(inputFile io.ReaderAt, fileLength int64, precedingBytes int, teamCount int) ([]*Civ5TeamData, error) {
 	if teamCount <= 0 {
 		return nil, nil
 	}
@@ -1396,7 +1392,6 @@ func ReadCiv5MapFile(filename string) (*Civ5MapData, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer inputFile.Close()
 
 	mapHeader := Civ5MapHeader{}
 	if err := readStruct(streamReader, &mapHeader); err != nil {

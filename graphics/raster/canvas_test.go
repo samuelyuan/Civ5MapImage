@@ -4,6 +4,8 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"math/rand"
+	"strings"
 	"testing"
 )
 
@@ -314,5 +316,201 @@ func TestPalettedCanvasStrokeIsConnected(t *testing.T) {
 				t.Errorf("width %v angle %d: stroke split into pieces (%d of %d pixels connected)", width, deg, len(seen), len(painted))
 			}
 		}
+	}
+}
+
+// Stroke paints exactly the pixels whose centers are within half the line width of a segment, however it finds them.
+func TestPalettedCanvasStrokeMatchesAScanOfEveryPixel(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
+	for i := 0; i < 200; i++ {
+		a := Point{rng.Float64()*50 - 5, rng.Float64()*50 - 5}
+		b := Point{rng.Float64()*50 - 5, rng.Float64()*50 - 5}
+		if i%10 == 0 {
+			b = a
+		}
+		width := []float64{1, 2, 3.5}[i%3]
+
+		c := NewPalettedCanvas(40, 40, color.Palette{unitBlack, unitRed})
+		c.SetColor(255, 0, 0)
+		c.SetLineWidth(width)
+		c.DrawLine(a.X, a.Y, b.X, b.Y)
+		c.Stroke()
+
+		seg := newSegment(a, b)
+		for y := 0; y < 40; y++ {
+			for x := 0; x < 40; x++ {
+				want := seg.distSq(float64(x)+0.5, float64(y)+0.5) <= width*width/4
+				if got := c.IndexAt(x, y) != 0; got != want {
+					t.Fatalf("line %v-%v width %v: pixel (%d, %d) painted=%v, want %v", a, b, width, x, y, got, want)
+				}
+			}
+		}
+	}
+}
+
+// The glyph bitmaps were checked against the anti-aliased renderer this canvas replaced, so they pin the font, the baseline and the pixel rounding.
+func TestPalettedCanvasDrawStringDrawsSolidGlyphs(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		x, y float64
+		want []string
+	}{
+		{"whole pixel position", "Hi", 2, 13, []string{
+			"..................",
+			"..................",
+			"..................",
+			"..................",
+			"..#....#..........",
+			"..#....#....#.....",
+			"..#....#..........",
+			"..#....#...##.....",
+			"..######....#.....",
+			"..#....#....#.....",
+			"..#....#....#.....",
+			"..#....#....#.....",
+			"..#....#..#####...",
+			"..................",
+			"..................",
+			"..................",
+		}},
+		{"fractional position, descender", "Rj", 0.4, 12.6, []string{
+			"..................",
+			"..................",
+			"..................",
+			"..................",
+			"#####.............",
+			"#....#......#.....",
+			"#....#............",
+			"#....#.....##.....",
+			"#####.......#.....",
+			"#.#.........#.....",
+			"#..#........#.....",
+			"#...#.......#.....",
+			"#....#..#...#.....",
+			"........#...#.....",
+			".........###......",
+			"..................",
+		}},
+	}
+	for _, tt := range tests {
+		c := NewPalettedCanvas(18, 16, color.Palette{unitBlack, unitRed})
+		c.SetColor(255, 0, 0)
+		c.DrawString(tt.text, tt.x, tt.y)
+		for y, wantRow := range tt.want {
+			var row strings.Builder
+			for x := 0; x < 18; x++ {
+				if c.IndexAt(x, y) != 0 {
+					row.WriteByte('#')
+				} else {
+					row.WriteByte('.')
+				}
+			}
+			if row.String() != wantRow {
+				t.Fatalf("%s: row %d = %q, want %q", tt.name, y, row.String(), wantRow)
+			}
+		}
+	}
+}
+
+func TestPalettedCanvasMeasureStringIsSevenPixelsPerCharacterAndThirteenTall(t *testing.T) {
+	c := NewPalettedCanvas(1, 1, color.Palette{unitBlack})
+	for _, text := range []string{"", "I", "Samarkand 42"} {
+		w, h := c.MeasureString(text)
+		if w != float64(7*len(text)) || h != 13 {
+			t.Errorf("MeasureString(%q) = (%v, %v), want (%d, 13)", text, w, h, 7*len(text))
+		}
+	}
+}
+
+// A fill paints exactly the pixels whose centers are inside the shape. Coordinates avoid putting a center on an edge, where the choice is arbitrary.
+func TestPalettedCanvasFillsExactlyThePixelCentersInsideAShape(t *testing.T) {
+	shapes := map[string][]Point{
+		"hexagon":   RegularPolygon(6, 30.3, 40.2, 16, math.Pi/2),
+		"triangle":  RegularPolygon(3, 62.7, 25.9, 14, math.Pi),
+		"rectangle": {{50.2, 55.5}, {70.5, 55.5}, {70.5, 73.6}, {50.2, 73.6}},
+	}
+	for name, pts := range shapes {
+		c := NewPalettedCanvas(90, 90, color.Palette{unitBlack, unitRed})
+		c.SetColor(255, 0, 0)
+		c.subpaths = append(c.subpaths, subpath{pts: pts, closed: true})
+		c.Fill()
+		for y := 0; y < 90; y++ {
+			for x := 0; x < 90; x++ {
+				want := pointInPolygon(float64(x)+0.5, float64(y)+0.5, pts)
+				if got := c.IndexAt(x, y) != 0; got != want {
+					t.Fatalf("%s: pixel (%d, %d) painted=%v, want %v", name, x, y, got, want)
+				}
+			}
+		}
+	}
+}
+
+// pointInPolygon reports whether (px, py) is inside the polygon (even-odd rule).
+func pointInPolygon(px, py float64, pts []Point) bool {
+	inside := false
+	for i, a := range pts {
+		b := pts[(i+1)%len(pts)]
+		if (a.Y > py) != (b.Y > py) && px < a.X+(py-a.Y)/(b.Y-a.Y)*(b.X-a.X) {
+			inside = !inside
+		}
+	}
+	return inside
+}
+
+// The two faces of a peak share an edge, so together they cover exactly the triangle they split, with no gap and no overlap.
+func TestPalettedCanvasTrianglesSharingAnEdgeTileExactly(t *testing.T) {
+	whole := unitCanvas(10, 10)
+	whole.SetColor(255, 0, 0)
+	whole.DrawTriangle(4, 0, 0, 8, 8, 8)
+	whole.Fill()
+	want := paintedPixels(whole)
+	if len(want) == 0 {
+		t.Fatal("DrawTriangle() painted nothing")
+	}
+
+	halves := unitCanvas(10, 10)
+	halves.SetColor(255, 0, 0)
+	halves.DrawTriangle(4, 0, 0, 8, 4, 8)
+	halves.Fill()
+	halves.SetColor(0, 0, 255)
+	halves.DrawTriangle(4, 0, 4, 8, 8, 8)
+	halves.Fill()
+
+	got := paintedPixels(halves)
+	if len(got) != len(want) {
+		t.Fatalf("halves painted %d pixels, the whole %d", len(got), len(want))
+	}
+	for p := range want {
+		if _, ok := got[p]; !ok {
+			t.Errorf("pixel %v is in the whole triangle but not the halves", p)
+		}
+	}
+	// the halves meet at x=4, a pixel edge: the left one owns columns 0-3 and the right one 4-7
+	for p, v := range got {
+		if wantRed := p.X < 4; (v == halves.IndexFor(255, 0, 0)) != wantRed {
+			t.Errorf("pixel %v has index %d, on the wrong side of the shared edge", p, v)
+		}
+	}
+}
+
+func TestGrowingCanvasPaletteHoldsExactlyTheColorsDrawn(t *testing.T) {
+	c := NewGrowingPalettedCanvas(4, 4)
+	red := c.IndexFor(255, 0, 0)
+	blue := c.IndexFor(0, 0, 255)
+	if red == blue || c.IndexFor(255, 0, 0) != red {
+		t.Fatalf("indexes red=%d blue=%d, want distinct and stable", red, blue)
+	}
+	c.PaintPixel(1, 1, blue)
+
+	img := c.Image().(*image.Paletted)
+	if len(img.Palette) != 3 { // black, red, blue
+		t.Fatalf("palette has %d colors, want 3", len(img.Palette))
+	}
+	if got := img.At(1, 1); got != (color.RGBA{0, 0, 255, 255}) {
+		t.Errorf("pixel = %v, want blue", got)
+	}
+	if c.Inexact() != 0 {
+		t.Errorf("Inexact() = %d, want 0", c.Inexact())
 	}
 }

@@ -167,3 +167,106 @@ func prepareAndDrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5Re
 	}
 	return DrawReplay(mapData, replayData, outputFilename, maxTurns)
 }
+
+// MockCanvas is a Canvas that records operations instead of drawing, for tests.
+type MockCanvas struct {
+	operations    []string
+	width, height int
+	indexes       map[[3]uint8]uint8 // the index IndexFor gave each color
+}
+
+func NewMockCanvas(width, height int) *MockCanvas {
+	return &MockCanvas{
+		operations: make([]string, 0),
+		width:      width,
+		height:     height,
+	}
+}
+
+func (m *MockCanvas) DrawRegularPolygon(sides int, x, y, radius, rotation float64) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("DrawRegularPolygon(%d, %.2f, %.2f, %.2f, %.2f)", sides, x, y, radius, rotation))
+}
+
+func (m *MockCanvas) DrawRectangle(x, y, width, height float64) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("DrawRectangle(%.2f, %.2f, %.2f, %.2f)", x, y, width, height))
+}
+
+func (m *MockCanvas) DrawTriangle(x1, y1, x2, y2, x3, y3 float64) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("DrawTriangle(%.2f, %.2f, %.2f, %.2f, %.2f, %.2f)", x1, y1, x2, y2, x3, y3))
+}
+
+func (m *MockCanvas) DrawLine(x1, y1, x2, y2 float64) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("DrawLine(%.2f, %.2f, %.2f, %.2f)", x1, y1, x2, y2))
+}
+
+func (m *MockCanvas) SetColor(r, g, b uint8) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("SetColor(%d, %d, %d)", r, g, b))
+}
+
+func (m *MockCanvas) SetLineWidth(width float64) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("SetLineWidth(%.2f)", width))
+}
+
+func (m *MockCanvas) Fill() {
+	m.operations = append(m.operations, "Fill()")
+}
+
+func (m *MockCanvas) Stroke() {
+	m.operations = append(m.operations, "Stroke()")
+}
+
+func (m *MockCanvas) Resize(width, height int) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("Resize(%d, %d)", width, height))
+	m.width = width
+	m.height = height
+}
+
+func (m *MockCanvas) DrawString(text string, x, y float64) {
+	m.operations = append(m.operations,
+		fmt.Sprintf("DrawString(\"%s\", %.2f, %.2f)", text, x, y))
+}
+
+// MeasureString approximates the default font (basicfont.Face7x13: 7px advance, 13px tall).
+func (m *MockCanvas) MeasureString(text string) (w, h float64) {
+	return float64(len(text)) * 7, 13
+}
+
+// IndexFor gives each distinct color the next index, counting from 0.
+func (m *MockCanvas) IndexFor(r, g, b uint8) uint8 {
+	if m.indexes == nil {
+		m.indexes = map[[3]uint8]uint8{}
+	}
+	key := [3]uint8{r, g, b}
+	if _, ok := m.indexes[key]; !ok {
+		m.indexes[key] = uint8(len(m.indexes))
+	}
+	m.operations = append(m.operations, fmt.Sprintf("IndexFor(%d, %d, %d) = %d", r, g, b, m.indexes[key]))
+	return m.indexes[key]
+}
+
+func (m *MockCanvas) PaintPixel(x, y int, index uint8) {
+	m.operations = append(m.operations, fmt.Sprintf("PaintPixel(%d, %d, %d)", x, y, index))
+}
+
+func (m *MockCanvas) Image() image.Image {
+	// Return a simple 1x1 image for testing
+	return image.NewRGBA(image.Rect(0, 0, 1, 1))
+}
+
+func (m *MockCanvas) SavePNG(filename string) error {
+	m.operations = append(m.operations,
+		fmt.Sprintf("SavePNG(\"%s\")", filename))
+	return nil
+}
+
+// GetOperations returns the recorded operations.
+func (m *MockCanvas) GetOperations() []string {
+	return m.operations
+}

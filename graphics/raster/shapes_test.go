@@ -2,6 +2,7 @@ package raster
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 )
 
@@ -41,5 +42,38 @@ func TestSegmentDistSq(t *testing.T) {
 	dot := newSegment(Point{2, 2}, Point{2, 2})
 	if got := dot.distSq(5, 6); math.Abs(got-25) > 1e-9 {
 		t.Errorf("single-point segment distSq = %v, want 25", got)
+	}
+}
+
+// rowSpan may be too wide but never too narrow: every pixel center distSq accepts on a row lies inside it, for segments of every direction.
+func TestRowSpanCoversEveryPixelCenterWithinReach(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	segments := []segment{
+		newSegment(Point{10, 10}, Point{10, 10}),     // a point
+		newSegment(Point{2, 7.5}, Point{30, 7.5}),    // horizontal
+		newSegment(Point{12.3, 1}, Point{12.3, 30}),  // vertical
+		newSegment(Point{5, 5}, Point{25, 25}),       // diagonal
+		newSegment(Point{25, 5}, Point{5, 25}),       // the other diagonal
+		newSegment(Point{9.5, 4.5}, Point{9.5, 4.5}), // a point on a pixel center
+	}
+	for i := 0; i < 500; i++ {
+		segments = append(segments, newSegment(Point{rng.Float64() * 40, rng.Float64() * 40}, Point{rng.Float64() * 40, rng.Float64() * 40}))
+	}
+	for _, seg := range segments {
+		for _, half := range []float64{0.5, 1, 1.5, 3} {
+			for py := -5; py < 50; py++ {
+				y := float64(py) + 0.5
+				lo, hi, ok := seg.rowSpan(y, half)
+				for px := -5; px < 50; px++ {
+					x := float64(px) + 0.5
+					if seg.distSq(x, y) > half*half {
+						continue
+					}
+					if !ok || x < lo || x > hi {
+						t.Fatalf("segment %v half %v: pixel center (%v, %v) is within reach but rowSpan = [%v, %v] ok=%v", seg, half, x, y, lo, hi, ok)
+					}
+				}
+			}
+		}
 	}
 }

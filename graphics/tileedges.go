@@ -23,19 +23,9 @@ type tileGrid struct {
 	rim           [][]rimPixel  // per tile: its pixels within borderReach of another tile
 }
 
-type gridPixel struct{ x, y int32 }
-
-// neighborMask is a set of a tile's six neighbors; bit j is the j-th neighbor in GetNeighbors order.
-type neighborMask uint8
-
-func (m *neighborMask) add(j int)                     { *m |= 1 << j }
-func (m neighborMask) intersects(o neighborMask) bool { return m&o != 0 }
-
-// rimPixel is a pixel near another tile; reach holds the neighbors within borderReach.
-type rimPixel struct {
-	x, y  int32
-	reach neighborMask
-}
+type gridPixel = raster.Pixel
+type neighborMask = raster.NeighborMask
+type rimPixel = raster.RimPixel
 
 func (g *tileGrid) at(x, y int) int32 {
 	if x < 0 || y < 0 || x >= g.width || y >= g.height {
@@ -99,7 +89,7 @@ func buildTileGrid(mapSize fileio.MapSize, radius float64) *tileGrid {
 	return g
 }
 
-// buildEdgePixels lists each tile's possible outline and border pixels, so a turn walks short lists; rows build in parallel.
+// buildEdgePixels lists each tile's possible outline and border pixels, built in parallel by row.
 func (g *tileGrid) buildEdgePixels() {
 	g.outline = make([][]gridPixel, g.mapSize.Height*g.mapSize.Width)
 	g.rim = make([][]rimPixel, g.mapSize.Height*g.mapSize.Width)
@@ -120,56 +110,30 @@ func (g *tileGrid) buildTileEdgePixels(pos fileio.TilePos) {
 	outline := make([]gridPixel, 0, 64)
 	rim := make([]rimPixel, 0, 192)
 	bounds := g.tileBounds(pos)
+	spans := raster.BuildRowSpans(g.at, id, bounds)
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		interiorLo, interiorHi := spans.Interior(y-bounds.Min.Y, borderReach)
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if x >= interiorLo && x < interiorHi {
+				x = interiorHi - 1 // no other tile is near any of these, so none is an outline or rim pixel
+				continue
+			}
 			if g.at(x, y) != id {
 				continue
 			}
-			if g.isOutline(x, y, id) {
-				outline = append(outline, gridPixel{int32(x), int32(y)})
+			if raster.IsOutline(g.at, x, y, id) {
+				outline = append(outline, gridPixel{X: int32(x), Y: int32(y)})
 			}
-			if reach := g.rimReach(x, y, id, neighbors); reach != 0 {
-				rim = append(rim, rimPixel{int32(x), int32(y), reach})
+			if reach := raster.RimReach(g.at, borderProbes, x, y, id, neighbors[:]); reach != 0 {
+				rim = append(rim, rimPixel{X: int32(x), Y: int32(y), Reach: reach})
 			}
 		}
 	}
 	g.outline[id], g.rim[id] = outline, rim
 }
 
-// isOutline reports whether pixel (x, y) of tile id has a right or lower neighbor in another tile.
-func (g *tileGrid) isOutline(x, y int, id int32) bool {
-	right, down := g.at(x+1, y), g.at(x, y+1)
-	return (right >= 0 && right != id) || (down >= 0 && down != id)
-}
-
-// rimReach returns rimPixel.reach for pixel (x, y) of tile id, given its neighbors' ids.
-func (g *tileGrid) rimReach(x, y int, id int32, neighbors [6]int32) (reach neighborMask) {
-	for _, p := range borderProbes {
-		other := g.at(x+p[0], y+p[1])
-		if other < 0 || other == id {
-			continue
-		}
-		for j, n := range neighbors {
-			if n == other {
-				reach.add(j)
-			}
-		}
-	}
-	return reach
-}
-
 // borderProbes are the offsets within borderReach (Manhattan distance) of a pixel.
-var borderProbes = func() [][2]int {
-	var probes [][2]int
-	for dy := -borderReach; dy <= borderReach; dy++ {
-		for dx := -borderReach; dx <= borderReach; dx++ {
-			if d := max(dx, -dx) + max(dy, -dy); d > 0 && d <= borderReach {
-				probes = append(probes, [2]int{dx, dy})
-			}
-		}
-	}
-	return probes
-}()
+var borderProbes = raster.BorderProbes(borderReach)
 
 // tileGridFor returns the renderer's tile grid for a map of this size, building it on first use.
 func (mr *MapRenderer) tileGridFor(mapSize fileio.MapSize) *tileGrid {
@@ -186,13 +150,13 @@ func (mr *MapRenderer) drawTileOutlines(canvas *raster.PalettedCanvas, mapData *
 		outline := tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255})
 		index := canvas.IndexFor(outline.R, outline.G, outline.B)
 		for _, p := range grid.outline[grid.tileID(rc)] {
-			canvas.PaintPixel(int(p.x), int(p.y), index)
+			canvas.PaintPixel(int(p.X), int(p.Y), index)
 		}
 	}
 }
 
 // drawTileBorders draws every pixel within borderReach of a different owner in its own owner's border color.
-func (mr *MapRenderer) drawTileBorders(canvas *raster.PalettedCanvas, mapData *fileio.Civ5MapData, grid *tileGrid, tiles []fileio.TilePos) {
+func (mr *MapRenderer) drawTileBorders(canvas PixelPainter, mapData *fileio.Civ5MapData, grid *tileGrid, tiles []fileio.TilePos) {
 	if len(mapData.MapTileImprovements) == 0 {
 		return
 	}
@@ -208,8 +172,8 @@ func (mr *MapRenderer) drawTileBorders(canvas *raster.PalettedCanvas, mapData *f
 		border := tileBorderColor(mapData, rc)
 		index := canvas.IndexFor(border.R, border.G, border.B)
 		for _, p := range grid.rim[grid.tileID(rc)] {
-			if p.reach.intersects(differs) {
-				canvas.PaintPixel(int(p.x), int(p.y), index)
+			if p.Reach.Intersects(differs) {
+				canvas.PaintPixel(int(p.X), int(p.Y), index)
 			}
 		}
 	}
@@ -219,7 +183,7 @@ func (mr *MapRenderer) drawTileBorders(canvas *raster.PalettedCanvas, mapData *f
 func differingNeighbors(mapData *fileio.Civ5MapData, grid *tileGrid, rc fileio.TilePos, owner int) (differs neighborMask) {
 	for j, n := range fileio.GetNeighbors(rc) {
 		if n.InMap(grid.mapSize) && mapData.TileImprovement(n).Owner != owner {
-			differs.add(j)
+			differs.Add(j)
 		}
 	}
 	return differs

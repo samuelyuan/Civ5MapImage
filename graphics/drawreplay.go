@@ -16,8 +16,7 @@ const (
 // progressInterval is how many turns pass between progress lines.
 const progressInterval = 10
 
-// DrawReplay renders a map/replay pair that fileio.PrepareReplay has readied into a GIF at outputFilename.
-// maxTurns caps the turns rendered (0 = all). Frames are direct PalettedCanvas copies, with no quantizing.
+// DrawReplay renders a map/replay pair readied by fileio.PrepareReplay into a GIF at outputFilename; maxTurns 0 renders all turns.
 func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, outputFilename string, maxTurns int) error {
 	outGif := &gif.GIF{}
 

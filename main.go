@@ -103,7 +103,7 @@ func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 func renderMap(mapData *fileio.Civ5MapData, outputFilename string, draw func(*graphics.MapRenderer, graphics.Canvas, *fileio.Civ5MapData) image.Image) {
 	config := graphics.DefaultDrawingConfig()
 	renderer := graphics.NewMapRenderer(config)
-	canvas := graphics.NewDrawingContext(800, 600)
+	canvas := graphics.NewMapCanvas()
 	draw(renderer, canvas, mapData)
 	if err := renderer.SaveImage(canvas, outputFilename); err != nil {
 		log.Fatal("Failed to save image: ", err)

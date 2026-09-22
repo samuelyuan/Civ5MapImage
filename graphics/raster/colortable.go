@@ -2,12 +2,12 @@ package raster
 
 import "image/color"
 
-// colorTable maps RGB colors to indices in a palette. Sibling (staging) canvases share their parent's table, so a color that
-// isn't in the palette is counted once no matter which canvas drew it.
+// colorTable maps RGB colors to palette indices; sibling canvases share it.
 type colorTable struct {
 	palette color.Palette
 	indexOf map[uint32]uint8 // rgbKey -> palette index
 	inexact int              // distinct off-palette colors snapped to the nearest palette color
+	grow    bool             // add off-palette colors to the palette, up to 256, instead of snapping
 }
 
 func newColorTable(palette color.Palette) *colorTable {
@@ -21,10 +21,16 @@ func newColorTable(palette color.Palette) *colorTable {
 
 func rgbKey(r, g, b uint8) uint32 { return uint32(r)<<16 | uint32(g)<<8 | uint32(b) }
 
-// IndexFor returns the palette index of (r, g, b), or of the nearest color if it's not in the palette.
+// IndexFor returns the palette index of (r, g, b): added if the table grows and has room, else snapped to the nearest color.
 func (t *colorTable) IndexFor(r, g, b uint8) uint8 {
 	key := rgbKey(r, g, b)
 	if i, ok := t.indexOf[key]; ok {
+		return i
+	}
+	if t.grow && len(t.palette) < 256 {
+		t.palette = append(t.palette, color.RGBA{r, g, b, 255})
+		i := uint8(len(t.palette) - 1)
+		t.indexOf[key] = i
 		return i
 	}
 	i := uint8(t.palette.Index(color.RGBA{r, g, b, 255}))
@@ -33,6 +39,5 @@ func (t *colorTable) IndexFor(r, g, b uint8) uint8 {
 	return i
 }
 
-// Inexact returns how many distinct colors IndexFor had to snap to the nearest palette color. It is 0 when the palette
-// holds every color that was drawn.
+// Inexact returns how many distinct colors were snapped to the nearest one; 0 if the palette held every drawn color.
 func (t *colorTable) Inexact() int { return t.inexact }
