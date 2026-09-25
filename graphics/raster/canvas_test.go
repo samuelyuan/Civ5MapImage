@@ -23,7 +23,6 @@ func testPalette(n int) color.Palette {
 	return palette
 }
 
-// paintedPixels returns every pixel that isn't the background, with its palette index.
 func paintedPixels(c *PalettedCanvas) map[image.Point]uint8 {
 	painted := map[image.Point]uint8{}
 	b := c.img.Rect
@@ -153,31 +152,28 @@ func TestPalettedCanvasStrokeOfALineIsNotClosed(t *testing.T) {
 	}
 }
 
-func TestColorTableSnapsOffPaletteColorsAndCountsEachOnce(t *testing.T) {
+func TestColorTableSnapsOffPaletteColorsToTheNearestEntry(t *testing.T) {
 	c := unitCanvas(4, 4)
-	if c.inexact != 0 {
-		t.Fatalf("a fresh canvas has %d inexact colors", c.inexact)
+	size := len(c.Palette())
+	red := c.IndexFor(255, 0, 0)
+	for i := 0; i < 2; i++ { // the second lookup is remembered
+		if got := c.IndexFor(250, 10, 10); got != red {
+			t.Errorf("(250, 10, 10) snapped to index %d, want the red entry %d", got, red)
+		}
 	}
-	if got := c.IndexFor(250, 10, 10); got != c.IndexFor(255, 0, 0) {
-		t.Errorf("(250, 10, 10) snapped to index %d, want the red entry", got)
-	}
-	if c.inexact != 1 {
-		t.Errorf("inexact = %d after one off-palette color, want 1", c.inexact)
-	}
-	c.IndexFor(250, 10, 10)
-	c.IndexFor(0, 0, 255)
-	if c.inexact != 1 {
-		t.Errorf("inexact = %d after repeating it and using an exact color, want 1", c.inexact)
+	if len(c.Palette()) != size {
+		t.Errorf("palette grew from %d to %d colors, want a fixed palette to stay as it is", size, len(c.Palette()))
 	}
 }
 
-// Sibling canvases share the table, so a color one of them can't find in the palette shows up on the parent.
+// Sibling canvases share the table, so a color one of them adds to a growing palette shows up on the parent.
 func TestSiblingCanvasSharesTheColorTable(t *testing.T) {
-	c := unitCanvas(4, 4)
+	c := NewGrowingPalettedCanvas(4, 4)
+	size := len(c.Palette())
 	sibling := c.NewSibling(2, 2)
 	sibling.SetColor(10, 10, 240)
-	if c.inexact != 1 {
-		t.Errorf("parent inexact = %d after its sibling canvas drew an off-palette color, want 1", c.inexact)
+	if len(c.Palette()) != size+1 {
+		t.Errorf("parent palette has %d colors after its sibling drew a new one, want %d", len(c.Palette()), size+1)
 	}
 }
 
@@ -319,7 +315,7 @@ func TestPalettedCanvasStrokeIsConnected(t *testing.T) {
 	}
 }
 
-// Stroke paints exactly the pixels whose centers are within half the line width of a segment, however it finds them.
+// Stroke paints exactly the pixels whose centers lie inside the segment's rectangle, which is half the line width wide on each side and reaches half the line width past each end.
 func TestPalettedCanvasStrokeMatchesAScanOfEveryPixel(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
 	for i := 0; i < 200; i++ {
@@ -328,20 +324,58 @@ func TestPalettedCanvasStrokeMatchesAScanOfEveryPixel(t *testing.T) {
 		if i%10 == 0 {
 			b = a
 		}
-		width := []float64{1, 2, 3.5}[i%3]
+		half := []float64{0.5, 1, 1.75}[i%3]
+		ux, uy := 1.0, 0.0
+		if length := math.Hypot(b.X-a.X, b.Y-a.Y); length > 0 {
+			ux, uy = (b.X-a.X)/length, (b.Y-a.Y)/length
+		}
+		length := math.Hypot(b.X-a.X, b.Y-a.Y)
 
 		c := NewPalettedCanvas(40, 40, color.Palette{unitBlack, unitRed})
 		c.SetColor(255, 0, 0)
-		c.SetLineWidth(width)
+		c.SetLineWidth(2 * half)
 		c.DrawLine(a.X, a.Y, b.X, b.Y)
 		c.Stroke()
 
-		seg := newSegment(a, b)
 		for y := 0; y < 40; y++ {
 			for x := 0; x < 40; x++ {
-				want := seg.distSq(float64(x)+0.5, float64(y)+0.5) <= width*width/4
-				if got := c.IndexAt(x, y) != 0; got != want {
-					t.Fatalf("line %v-%v width %v: pixel (%d, %d) painted=%v, want %v", a, b, width, x, y, got, want)
+				dx, dy := float64(x)+0.5-a.X, float64(y)+0.5-a.Y
+				along, across := dx*ux+dy*uy, math.Abs(-dx*uy+dy*ux)
+				inside := along >= -half && along <= length+half && across <= half
+				clearlyInside := along > -half+1e-9 && along < length+half-1e-9 && across < half-1e-9
+				clearlyOutside := along < -half-1e-9 || along > length+half+1e-9 || across > half+1e-9
+				painted := c.IndexAt(x, y) != 0
+				if clearlyInside && !painted || clearlyOutside && painted {
+					t.Fatalf("line %v-%v half %v: pixel (%d, %d) inside=%v painted=%v", a, b, half, x, y, inside, painted)
+				}
+			}
+		}
+	}
+}
+
+// A 1px line whose ends sit on pixel-center rows is a tie the last float bit decides, so a staging canvas must build the same polygon as the full canvas.
+func TestPalettedCanvasStrokeMatchesAcrossAnOrigin(t *testing.T) {
+	palette := color.Palette{unitBlack, unitRed}
+	for _, line := range [][4]float64{
+		{259.55890982936734, 152, 259.5589098293673, 136},
+		{259.5589098293673, 136, 259.55890982936734, 152},
+		{100.3, 40, 180.9, 40},
+	} {
+		full := NewPalettedCanvas(400, 200, palette)
+		full.SetColor(255, 0, 0)
+		full.DrawLine(line[0], line[1], line[2], line[3])
+		full.Stroke()
+
+		staging := full.NewSibling(200, 60)
+		staging.SetOrigin(image.Pt(102, 126))
+		staging.SetColor(255, 0, 0)
+		staging.DrawLine(line[0], line[1], line[2], line[3])
+		staging.Stroke()
+
+		for py := 0; py < 60; py++ {
+			for px := 0; px < 200; px++ {
+				if got, want := staging.IndexAt(px, py), full.IndexAt(px+102, py+126); got != want {
+					t.Fatalf("line %v: staging pixel (%d, %d) = %d, want the full canvas's %d", line, px, py, got, want)
 				}
 			}
 		}
@@ -413,6 +447,29 @@ func TestPalettedCanvasDrawStringDrawsSolidGlyphs(t *testing.T) {
 	}
 }
 
+// Text starting left of a staging canvas's origin has a negative local position, which must round the same way as on the full canvas.
+func TestPalettedCanvasDrawStringMatchesAcrossAnOrigin(t *testing.T) {
+	palette := color.Palette{unitBlack, unitRed}
+	for _, x := range []float64{100.3, 100.49, 100.5, 100.51, 100.75} {
+		full := NewPalettedCanvas(200, 30, palette)
+		full.SetColor(255, 0, 0)
+		full.DrawString("Rome", x, 20)
+
+		staging := full.NewSibling(60, 30)
+		staging.SetOrigin(image.Pt(110, 0))
+		staging.SetColor(255, 0, 0)
+		staging.DrawString("Rome", x, 20)
+
+		for py := 0; py < 30; py++ {
+			for px := 0; px < 60; px++ {
+				if got, want := staging.IndexAt(px, py), full.IndexAt(px+110, py); got != want {
+					t.Fatalf("text at x=%v: staging pixel (%d, %d) = %d, want the full canvas's %d", x, px, py, got, want)
+				}
+			}
+		}
+	}
+}
+
 func TestPalettedCanvasMeasureStringIsSevenPixelsPerCharacterAndThirteenTall(t *testing.T) {
 	c := NewPalettedCanvas(1, 1, color.Palette{unitBlack})
 	for _, text := range []string{"", "I", "Samarkand 42"} {
@@ -446,7 +503,6 @@ func TestPalettedCanvasFillsExactlyThePixelCentersInsideAShape(t *testing.T) {
 	}
 }
 
-// pointInPolygon reports whether (px, py) is inside the polygon (even-odd rule).
 func pointInPolygon(px, py float64, pts []Point) bool {
 	inside := false
 	for i, a := range pts {
@@ -509,8 +565,5 @@ func TestGrowingCanvasPaletteHoldsExactlyTheColorsDrawn(t *testing.T) {
 	}
 	if got := img.At(1, 1); got != (color.RGBA{0, 0, 255, 255}) {
 		t.Errorf("pixel = %v, want blue", got)
-	}
-	if c.Inexact() != 0 {
-		t.Errorf("Inexact() = %d, want 0", c.Inexact())
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"slices"
 	"testing"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
@@ -35,10 +34,9 @@ func bordersOnlyMapData(size, civs int) *fileio.Civ5MapData {
 func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 	const size, civs = 18, 4
 	mapData := bordersOnlyMapData(size, civs)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-	grid := renderer.tileGridFor(fileio.MapSize{Height: size, Width: size})
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 
 	ownerOf := func(id int32) int { return mapData.MapTileImprovements[int(id)/size][int(id)%size].Owner }
 	indexOf := func(c color.RGBA) uint8 { return canvas.IndexFor(c.R, c.G, c.B) }
@@ -57,7 +55,7 @@ func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 			}
 			near := false
 			for _, p := range borderProbes {
-				if other := grid.at(x+p[0], y+p[1]); other >= 0 && ownerOf(other) != owner {
+				if other := grid.at(x+p.X, y+p.Y); other >= 0 && ownerOf(other) != owner {
 					near = true
 					break
 				}
@@ -71,9 +69,9 @@ func TestTileBordersMatchTheRuleWithNoGaps(t *testing.T) {
 					gaps++
 				}
 			default:
-				hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: row, Col: col}, newTileLayout(renderer.config.Radius, 100))
-				fill := indexOf(color.RGBA{hex.R, hex.G, hex.B, 255})
-				outline := indexOf(tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255}))
+				hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: row, Col: col}, newTileLayout(tileRadius, 1))
+				fill := indexOf(hex.Fill)
+				outline := indexOf(tileOutlineColor(hex.Fill))
 				if got == border && border != fill && border != outline {
 					strays++
 				}
@@ -108,13 +106,12 @@ func flatMapData(size int) *fileio.Civ5MapData {
 func TestTileOutlinesLeaveNoGapsBetweenTiles(t *testing.T) {
 	const size = 14
 	mapData := flatMapData(size)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-	grid := renderer.tileGridFor(fileio.MapSize{Height: size, Width: size})
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 
-	hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(renderer.config.Radius, 100))
-	outline := tileOutlineColor(color.RGBA{hex.R, hex.G, hex.B, 255})
+	hex, _ := PoliticalHexTile(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(tileRadius, 1))
+	outline := tileOutlineColor(hex.Fill)
 	outlineIndex := canvas.IndexFor(outline.R, outline.G, outline.B)
 
 	bounds := canvas.Image().Bounds()
@@ -148,7 +145,7 @@ func TestTileOutlineIsConnectedAcrossHexCorners(t *testing.T) {
 	const size = 14
 	mapData := flatMapData(size)
 	canvas := newBenchCanvas(mapData)
-	NewMapRenderer(DefaultDrawingConfig()).DrawPoliticalMapTileMajor(canvas, mapData)
+	drawPoliticalMapTileMajor(canvas, mapData, gridFor(mapData))
 
 	// Look at the middle of the map only, away from the edge tiles' missing neighbors.
 	bounds := canvas.Image().Bounds()
@@ -219,7 +216,7 @@ func TestPalettedCanvasHexTilingHasNoGapsOrOverlaps(t *testing.T) {
 	palette := testPalette(rows*cols + 1)
 	width, height := imageSize(fileio.MapSize{Height: rows, Width: cols}, radius)
 	canvas := raster.NewPalettedCanvas(int(width), int(height), palette)
-	layout := newTileLayout(radius, int(height))
+	layout := layoutForMap(fileio.MapSize{Height: rows, Width: cols}, radius)
 
 	type center struct{ x, y float64 }
 	centers := make([]center, 0, rows*cols)
@@ -275,63 +272,6 @@ func TestTileGridIDsAgreeWithTileIDOnANonSquareMap(t *testing.T) {
 			}
 			if got := grid.tilesIn(image.Rect(px, py, px+1, py+1)); len(got) != 1 || !got[pos] {
 				t.Fatalf("tilesIn at the center of %+v = %v, want just that tile", pos, got)
-			}
-		}
-	}
-}
-
-func TestTileGridForRebuildsOnlyWhenTheMapSizeChanges(t *testing.T) {
-	renderer := NewMapRenderer(DefaultDrawingConfig())
-	wide := fileio.MapSize{Height: 4, Width: 8}
-	first := renderer.tileGridFor(fileio.MapSize{Height: 4, Width: 6})
-	if again := renderer.tileGridFor(fileio.MapSize{Height: 4, Width: 6}); again != first {
-		t.Error("the same size rebuilt the grid, want the cached one")
-	}
-	if grid := renderer.tileGridFor(wide); grid == first || grid.mapSize != wide {
-		t.Errorf("a wider map of the same height gave grid size %+v (rebuilt: %v), want %+v rebuilt", grid.mapSize, grid != first, wide)
-	}
-	taller := fileio.MapSize{Height: 6, Width: 4}
-	renderer.tileGridFor(fileio.MapSize{Height: 4, Width: 4})
-	if grid := renderer.tileGridFor(taller); grid.mapSize != taller {
-		t.Errorf("a taller map of the same width gave grid size %+v, want %+v", grid.mapSize, taller)
-	}
-	tall := fileio.MapSize{Height: 8, Width: 4}
-	if grid := renderer.tileGridFor(tall); grid.mapSize != tall {
-		t.Errorf("the next taller size gave grid size %+v, want %+v", grid.mapSize, tall)
-	}
-}
-
-// Skipping each tile's interior finds exactly the outline and rim pixels a scan of every pixel of the tile does.
-func TestTileEdgePixelsMatchAScanOfEveryPixel(t *testing.T) {
-	sizes := []fileio.MapSize{{Height: 1, Width: 1}, {Height: 2, Width: 3}, {Height: 5, Width: 7}, {Height: 9, Width: 8}, {Height: 14, Width: 11}}
-	for _, radius := range []float64{8, 16} {
-		for _, size := range sizes {
-			g := buildTileGrid(size, radius)
-			for row := 0; row < size.Height; row++ {
-				for col := 0; col < size.Width; col++ {
-					pos := fileio.TilePos{Row: row, Col: col}
-					id, neighbors := g.tileID(pos), g.neighborIDs(pos)
-					var wantOutline []gridPixel
-					var wantRim []rimPixel
-					bounds := g.tileBounds(pos)
-					for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-						for x := bounds.Min.X; x < bounds.Max.X; x++ {
-							if g.at(x, y) != id {
-								continue
-							}
-							if raster.IsOutline(g.at, x, y, id) {
-								wantOutline = append(wantOutline, gridPixel{X: int32(x), Y: int32(y)})
-							}
-							if reach := raster.RimReach(g.at, borderProbes, x, y, id, neighbors[:]); reach != 0 {
-								wantRim = append(wantRim, rimPixel{X: int32(x), Y: int32(y), Reach: reach})
-							}
-						}
-					}
-					if !slices.Equal(g.outline[id], wantOutline) || !slices.Equal(g.rim[id], wantRim) {
-						t.Fatalf("radius %v, %dx%d map, tile %v: outline %d px (want %d), rim %d px (want %d)",
-							radius, size.Height, size.Width, pos, len(g.outline[id]), len(wantOutline), len(g.rim[id]), len(wantRim))
-					}
-				}
 			}
 		}
 	}

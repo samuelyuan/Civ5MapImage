@@ -26,9 +26,8 @@ func TestPalettedCanvasIncrementalRepaintMatchesFullRedrawExactly(t *testing.T) 
 		{{Turn: 5, TypeId: fileio.ReplayEventTilesClaimed, CivId: 3, Tiles: []fileio.Civ5ReplayEventTile{{X: 0, Y: 0}, {X: 15, Y: 15}, {X: 7, Y: 8}}}},
 	}
 	palette := replayPalette(mapData)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	incremental := raster.NewPalettedCanvas(800, 600, palette)
-	mapSize := mapData.Size()
 
 	nextCityId := 0
 	var tracker *tileTracker
@@ -38,13 +37,13 @@ func TestPalettedCanvasIncrementalRepaintMatchesFullRedrawExactly(t *testing.T) 
 		}
 		if turnIndex == 0 {
 			tracker = newTileTracker(mapData)
-			renderer.DrawPoliticalMapTileMajor(incremental, mapData)
+			drawPoliticalMapTileMajor(incremental, mapData, grid)
 		} else {
-			renderer.RedrawDirtyTiles(incremental, mapData, mapSize, tracker.takeChanges())
+			redrawDirtyTiles(incremental, mapData, grid, tracker.takeChanges())
 		}
 
 		full := raster.NewPalettedCanvas(800, 600, palette)
-		renderer.DrawPoliticalMapTileMajor(full, mapData)
+		drawPoliticalMapTileMajor(full, mapData, grid)
 		if incremental.Image().Bounds() != full.Image().Bounds() {
 			t.Fatalf("turn %d: bounds %v != %v", turnIndex, incremental.Image().Bounds(), full.Image().Bounds())
 		}
@@ -69,12 +68,10 @@ func TestPalettedCanvasIncrementalRepaintMatchesFullRedrawExactly(t *testing.T) 
 // TestRedrawDirtyTilesMatchesFullRedrawAfterMutation checks that repainting only the dirty tiles matches a full redraw exactly.
 func TestRedrawDirtyTilesMatchesFullRedrawAfterMutation(t *testing.T) {
 	mapData := buildBenchMapData(12, 12, 4, 7)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-
-	mapSize := mapData.Size()
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 
 	// Simulate a TilesClaimed event flipping ownership of a small cluster of tiles.
 	tracker := newTileTracker(mapData)
@@ -82,10 +79,10 @@ func TestRedrawDirtyTilesMatchesFullRedrawAfterMutation(t *testing.T) {
 		tile := mapData.MapTileImprovements[rc.Row][rc.Col]
 		tile.Owner = (tile.Owner + 1) % 4
 	}
-	renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges())
+	redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges())
 
 	fresh := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(fresh, mapData)
+	drawPoliticalMapTileMajor(fresh, mapData, grid)
 
 	count, first := canvasDiffs(canvas, fresh)
 	if count < 0 {
@@ -112,9 +109,9 @@ func TestRedrawDirtyTilesMatchesFullRedrawWithCrowdedLabels(t *testing.T) {
 		}
 	}
 
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 
 	for round := 0; round < 8; round++ {
 		tracker := newTileTracker(mapData)
@@ -123,10 +120,10 @@ func TestRedrawDirtyTilesMatchesFullRedrawWithCrowdedLabels(t *testing.T) {
 			tile := mapData.MapTileImprovements[rc.Row][rc.Col]
 			tile.Owner = (tile.Owner + 1 + rng.Intn(civs-1)) % civs
 		}
-		renderer.RedrawDirtyTiles(canvas, mapData, fileio.MapSize{Height: h, Width: w}, tracker.takeChanges())
+		redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges())
 
 		fresh := newBenchCanvas(mapData)
-		renderer.DrawPoliticalMapTileMajor(fresh, mapData)
+		drawPoliticalMapTileMajor(fresh, mapData, grid)
 		if count, first := canvasDiffs(canvas, fresh); count != 0 {
 			t.Fatalf("round %d: %d pixels differ from a full redraw, first at %v", round, count, first)
 		}
@@ -136,10 +133,10 @@ func TestRedrawDirtyTilesMatchesFullRedrawWithCrowdedLabels(t *testing.T) {
 // TestRedrawDirtyTilesDoesNotTouchUnrelatedPixels checks one dirty tile's repaint leaves far-away pixels untouched (a PasteRegion bounds bug).
 func TestRedrawDirtyTilesDoesNotTouchUnrelatedPixels(t *testing.T) {
 	mapData := buildBenchMapData(20, 20, 4, 7)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 	bounds := canvas.Image().Bounds()
 	before := canvas.Snapshot(bounds)
 
@@ -149,10 +146,10 @@ func TestRedrawDirtyTilesDoesNotTouchUnrelatedPixels(t *testing.T) {
 	tile := mapData.MapTileImprovements[10][10]
 	tile.Owner = (tile.Owner + 1) % 4
 
-	renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges())
+	redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges())
 
 	// Tile (1, 1) is 9+ tiles from (10, 10).
-	x, y := newTileLayout(DefaultDrawingConfig().Radius, bounds.Dy()).center(fileio.TilePos{Row: 1, Col: 1})
+	x, y := layoutForMap(mapSize, tileRadius).center(fileio.TilePos{Row: 1, Col: 1})
 	cx, cy := int(x), int(y)
 
 	checkRect := image.Rect(cx-8, cy-8, cx+8, cy+8).Intersect(bounds)
@@ -173,12 +170,12 @@ func TestRedrawDirtyTilesDoesNotTouchUnrelatedPixels(t *testing.T) {
 
 func BenchmarkFullTileMajorRedraw_Huge(b *testing.B) {
 	mapData := buildBenchMapData(80, 128, 8, 1)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+		drawPoliticalMapTileMajor(canvas, mapData, grid)
 	}
 }
 
@@ -186,7 +183,7 @@ func BenchmarkFullTileMajorRedraw_Huge(b *testing.B) {
 func BenchmarkNewSiblingAllocation_Huge(b *testing.B) {
 	mapHeight, mapWidth := 80, 128
 	base := newBenchCanvas(buildBenchMapData(mapHeight, mapWidth, 8, 1))
-	radius := DefaultDrawingConfig().Radius
+	radius := tileRadius
 	maxImageWidth, maxImageHeight := imageSize(fileio.MapSize{Height: mapHeight, Width: mapWidth}, radius)
 	w, h := int(maxImageWidth), int(maxImageHeight)
 
@@ -198,9 +195,9 @@ func BenchmarkNewSiblingAllocation_Huge(b *testing.B) {
 }
 
 func benchmarkRedrawDirtyTiles(b *testing.B, mapData *fileio.Civ5MapData, dirtyCount int) {
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData) // establish the base frame once
+	drawPoliticalMapTileMajor(canvas, mapData, grid) // establish the base frame once
 
 	mapSize := mapData.Size()
 
@@ -213,15 +210,15 @@ func benchmarkRedrawDirtyTiles(b *testing.B, mapData *fileio.Civ5MapData, dirtyC
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		renderer.RedrawDirtyTiles(canvas, mapData, mapSize, dirty)
+		redrawDirtyTiles(canvas, mapData, grid, dirty)
 	}
 }
 
 // benchmarkRedrawDirtyTilesClustered is benchmarkRedrawDirtyTiles with dirty tiles within clusterRadius of one center.
 func benchmarkRedrawDirtyTilesClustered(b *testing.B, mapData *fileio.Civ5MapData, dirtyCount, clusterRadius int) {
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 
 	mapSize := mapData.Size()
 
@@ -236,7 +233,7 @@ func benchmarkRedrawDirtyTilesClustered(b *testing.B, mapData *fileio.Civ5MapDat
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		renderer.RedrawDirtyTiles(canvas, mapData, mapSize, dirty)
+		redrawDirtyTiles(canvas, mapData, grid, dirty)
 	}
 }
 
@@ -284,15 +281,15 @@ func TestRedrawDirtyTilesMatchesFullRedrawWhenLongLabelsChange(t *testing.T) {
 			event := sc.event
 			event.Text = strings.Replace(event.Text, "%s", name, 1)
 
-			renderer := NewMapRenderer(DefaultDrawingConfig())
+			grid := gridFor(mapData)
 			canvas := newBenchCanvas(mapData)
-			renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+			drawPoliticalMapTileMajor(canvas, mapData, grid)
 			tracker := newTileTracker(mapData)
 			fileio.ApplyReplayEvent(mapData, event, 100)
-			renderer.RedrawDirtyTiles(canvas, mapData, fileio.MapSize{Height: size, Width: size}, tracker.takeChanges())
+			redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges())
 
 			full := newBenchCanvas(mapData)
-			renderer.DrawPoliticalMapTileMajor(full, mapData)
+			drawPoliticalMapTileMajor(full, mapData, grid)
 			if diffs, first := canvasDiffs(canvas, full); diffs != 0 {
 				t.Errorf("%s, %q (%d chars): %d pixels differ from a full redraw, first at %v", sc.name, name, len(name), diffs, first)
 			}
@@ -307,13 +304,13 @@ func TestRedrawDirtyTilesMatchesFullRedrawOverRandomCityEvents(t *testing.T) {
 	for seed := int64(1); seed <= 6; seed++ {
 		rng := rand.New(rand.NewSource(seed))
 		mapData := buildBenchMapData(size, size, 4, seed)
-		renderer := NewMapRenderer(DefaultDrawingConfig())
+		grid := gridFor(mapData)
 		canvas := newBenchCanvas(mapData)
 		for i := 0; i < 20; i++ { // start with a scatter of named cities, some adjacent so their labels overlap
 			record := mapData.MapTileImprovements[rng.Intn(size)][rng.Intn(size)]
 			record.CityName, record.CityId = names[rng.Intn(len(names))], 100+i
 		}
-		renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+		drawPoliticalMapTileMajor(canvas, mapData, grid)
 		tracker := newTileTracker(mapData)
 
 		nextCityId := 500
@@ -333,10 +330,10 @@ func TestRedrawDirtyTilesMatchesFullRedrawOverRandomCityEvents(t *testing.T) {
 				}
 				nextCityId = fileio.ApplyReplayEvent(mapData, event, nextCityId)
 			}
-			renderer.RedrawDirtyTiles(canvas, mapData, fileio.MapSize{Height: size, Width: size}, tracker.takeChanges())
+			redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges())
 
 			full := newBenchCanvas(mapData)
-			renderer.DrawPoliticalMapTileMajor(full, mapData)
+			drawPoliticalMapTileMajor(full, mapData, grid)
 			if diffs, first := canvasDiffs(canvas, full); diffs != 0 {
 				t.Fatalf("seed %d turn %d: %d pixels differ from a full redraw, first at %v", seed, turn, diffs, first)
 			}
@@ -344,31 +341,13 @@ func TestRedrawDirtyTilesMatchesFullRedrawOverRandomCityEvents(t *testing.T) {
 	}
 }
 
-// A renderer reused for a map of the same height but another width must draw it exactly as a fresh renderer would.
-func TestReusedRendererDrawsAMapOfAnotherWidthLikeAFreshOne(t *testing.T) {
-	first := buildBenchMapData(10, 12, 4, 1)
-	second := buildBenchMapData(10, 16, 4, 2)
-
-	reused := NewMapRenderer(DefaultDrawingConfig())
-	reused.DrawPoliticalMapTileMajor(newBenchCanvas(first), first)
-	got := newBenchCanvas(second)
-	reused.DrawPoliticalMapTileMajor(got, second)
-
-	want := newBenchCanvas(second)
-	NewMapRenderer(DefaultDrawingConfig()).DrawPoliticalMapTileMajor(want, second)
-	if diffs, firstDiff := canvasDiffs(got, want); diffs != 0 {
-		t.Errorf("the reused renderer differs from a fresh one in %d pixels, first at %v", diffs, firstDiff)
-	}
-}
-
 // TestPlanRedrawCoversChangedTileAndNeighborsWithinTilesToDraw checks the plan for one changed tile without drawing anything.
 func TestPlanRedrawCoversChangedTileAndNeighborsWithinTilesToDraw(t *testing.T) {
 	mapData := buildBenchMapData(12, 12, 4, 7)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
 	mapSize := mapData.Size()
-	grid := renderer.tileGridFor(mapSize)
 
 	pos := fileio.TilePos{Row: 5, Col: 5}
 	changed := tileChanges{pos: *mapData.TileImprovement(pos)}
@@ -487,13 +466,13 @@ func TestFrameRegionsAlwaysYieldsAFrame(t *testing.T) {
 		}
 	}
 	real := []image.Rectangle{image.Rect(0, 0, 10, 10), {}, image.Rect(100, 0, 110, 10)}
-	if got, want := gifFrameRects(real), raster.MergeNearbyRects(real, mergeGap); !slices.Equal(got, want) {
+	if got, want := gifFrameRects(real), raster.MergeOverlappingRects(real); !slices.Equal(got, want) {
 		t.Errorf("gifFrameRects(%v) = %v, want the clusters %v", real, got, want)
 	}
 }
 
 func TestTileRepaintRectsAreRowMajor(t *testing.T) {
-	l := newTileLayout(16, 100)
+	l := newTileLayout(16, 1)
 	bounds := image.Rect(0, 0, 2000, 2000)
 	rects := tileRepaintRects(tileSet{{Row: 2, Col: 3}: true, {Row: 0, Col: 1}: true, {Row: 2, Col: 0}: true}, bounds, l)
 
@@ -513,13 +492,12 @@ func TestTileRepaintRectsAreRowMajor(t *testing.T) {
 
 // The replay keeps its thin river, one pixel wide, not the map's two-pixel one: a river edge is a tile radius long, so it paints about that many pixels.
 func TestReplayRiversAreOnePixelWide(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
 	mapData := terrainWithMountains([][]bool{{false}})
 	mapData.MapTiles[0][0].RiverData = 1 // the east edge
 	mapData.MapTileImprovements = [][]*fileio.Civ5MapTileImprovement{{{CityId: -1, Owner: -1, RouteType: 255}}}
 	canvas := newBenchCanvas(mapData)
 
-	mr.paintTiles(canvas, mapData, fileio.MapSize{Height: 1, Width: 1}, []fileio.TilePos{{Row: 0, Col: 0}})
+	paintTiles(canvas, mapData, gridFor(mapData), []fileio.TilePos{{Row: 0, Col: 0}})
 
 	river := canvas.IndexFor(riverColor.R, riverColor.G, riverColor.B)
 	painted := 0
@@ -531,14 +509,14 @@ func TestReplayRiversAreOnePixelWide(t *testing.T) {
 			}
 		}
 	}
-	if radius := int(mr.config.Radius); painted < radius/2 || painted > radius*3/2 {
+	if radius := int(tileRadius); painted < radius/2 || painted > radius*3/2 {
 		t.Errorf("the river painted %d pixels, want about %d (a tile radius, one pixel wide)", painted, radius)
 	}
 }
 
 func TestRepaintRectCoversTheHexPlusPad(t *testing.T) {
 	const radius = 16.0
-	l := newTileLayout(radius, 600)
+	l := newTileLayout(radius, 10)
 	bounds := image.Rect(0, 0, 2000, 2000)
 	rect := l.repaintRect(fileio.TilePos{Row: 3, Col: 4}, bounds)
 	x, y := l.center(fileio.TilePos{Row: 3, Col: 4})
@@ -552,8 +530,8 @@ func TestRepaintRectCoversTheHexPlusPad(t *testing.T) {
 }
 
 func TestRepaintRectIsClippedToBounds(t *testing.T) {
-	l := newTileLayout(16, 32) // tile (0, 0) is centered at (24, 16)
-	if got, want := l.repaintRect(fileio.TilePos{Row: 0, Col: 0}, image.Rect(0, 0, 30, 30)), image.Rect(6, 0, 30, 30); got != want {
+	l := newTileLayout(16, 1) // tile (0, 0) is centered at (24, 24)
+	if got, want := l.repaintRect(fileio.TilePos{Row: 0, Col: 0}, image.Rect(0, 0, 30, 30)), image.Rect(6, 6, 30, 30); got != want {
 		t.Errorf("repaintRect clipped = %v, want %v", got, want)
 	}
 	if got := l.repaintRect(fileio.TilePos{Row: 20, Col: 20}, image.Rect(0, 0, 30, 30)); !got.Empty() {
@@ -566,7 +544,7 @@ func TestTileEntitiesMountain(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
 	}
-	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255})
+	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1), color.RGBA{255, 255, 255, 255})
 	if len(entities) != 1 || entities[0].Type != EntityMountain {
 		t.Fatalf("TileEntities() = %+v, want a single EntityMountain", entities)
 	}
@@ -578,7 +556,7 @@ func TestTileEntitiesCity(t *testing.T) {
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
 	}
 	cityColor := color.RGBA{10, 20, 30, 255}
-	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), cityColor)
+	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1), cityColor)
 	if len(entities) != 1 || entities[0].Type != EntityCity {
 		t.Fatalf("TileEntities() = %+v, want a single EntityCity", entities)
 	}
@@ -592,7 +570,7 @@ func TestTileEntitiesMountainAndCity(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 2}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: 0}}},
 	}
-	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255})
+	entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1), color.RGBA{255, 255, 255, 255})
 	if len(entities) != 2 || entities[0].Type != EntityMountain || entities[1].Type != EntityCity {
 		t.Fatalf("TileEntities() = %+v, want [EntityMountain, EntityCity] in that order", entities)
 	}
@@ -603,7 +581,7 @@ func TestTileEntitiesNone(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{{{CityId: -1}}},
 	}
-	if entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255}); entities != nil {
+	if entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1), color.RGBA{255, 255, 255, 255}); entities != nil {
 		t.Errorf("TileEntities() = %v, want nil", entities)
 	}
 }
@@ -613,64 +591,63 @@ func TestTileEntitiesNoImprovementDataIsSafe(t *testing.T) {
 		MapTiles:            [][]*fileio.Civ5MapTilePhysical{{{Elevation: 0}}},
 		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{},
 	}
-	if entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100), color.RGBA{255, 255, 255, 255}); entities != nil {
+	if entities := TileEntities(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1), color.RGBA{255, 255, 255, 255}); entities != nil {
 		t.Errorf("TileEntities() with no improvement data = %v, want nil", entities)
 	}
 }
 
-// A mountain's apex points up on screen and a city icon reaches further above its center than below it.
-func TestMarksPointUp(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
-	l := newTileLayout(16, 100)
+// A mountain is a small peak on a larger base, both pointing up on screen from the tile center.
+func TestDrawMountainPointsUp(t *testing.T) {
+	canvas := newCanvas(60, 60)
+	background := color.RGBA{0, 0, 0, 255}
 
-	canvas := NewMockCanvas(100, 100)
-	mr.DrawMountain(canvas, l, 10, 20)
-	got := canvas.GetOperations()
-	if got[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 0.00)" || got[3] != "DrawRegularPolygon(3, 10.00, 12.00, 8.00, 0.00)" {
-		t.Errorf("mountain = %v, want the base at the tile center and the peak 8 above it", got)
-	}
+	drawMountain(canvas, newTileLayout(16, 1), 10, 20) // the base is a triangle of radius 16 about (10, 20), the peak one of radius 8 about (10, 12)
 
-	canvas = NewMockCanvas(100, 100)
-	mr.DrawCityIcon(canvas, l, 10, 20, mountainBaseColor)
-	if got, want := canvas.GetOperations()[0], "DrawRectangle(6.80, 15.20, 8.00, 8.00)"; got != want {
-		t.Errorf("city icon = %q, want %q (top 0.3r above the center)", got, want)
-	}
-}
-
-func TestDrawMountain(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
-	canvas := NewMockCanvas(100, 100)
-
-	mr.DrawMountain(canvas, newTileLayout(mr.config.Radius, 100), 10, 20)
-
-	ops := canvas.GetOperations()
-	// Expect base triangle + color + fill, then peak triangle + color + fill = 6 ops
-	if len(ops) != 6 {
-		t.Fatalf("DrawMountain() recorded %d ops, want 6: %v", len(ops), ops)
-	}
-	if ops[0] != "DrawRegularPolygon(3, 10.00, 20.00, 16.00, 0.00)" {
-		t.Errorf("DrawMountain() base polygon op = %q", ops[0])
-	}
-	if ops[3] != "DrawRegularPolygon(3, 10.00, 12.00, 8.00, 0.00)" {
-		t.Errorf("DrawMountain() peak polygon op = %q", ops[3])
+	for _, tt := range []struct {
+		name string
+		x, y int
+		want color.RGBA
+	}{
+		{"above the apex", 10, 2, background},
+		{"near the apex, in the peak", 10, 6, mountainPeakColor},
+		{"in the peak", 10, 12, mountainPeakColor},
+		{"below the peak, in the base", 10, 20, mountainBaseColor},
+		{"near the bottom of the base", 10, 27, mountainBaseColor},
+		{"below the base", 10, 29, background},
+	} {
+		if got := colorAt(canvas, tt.x, tt.y); got != tt.want {
+			t.Errorf("%s: pixel (%d, %d) = %v, want %v", tt.name, tt.x, tt.y, got, tt.want)
+		}
 	}
 }
 
-func TestDrawCityIcon(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
-	canvas := NewMockCanvas(100, 100)
+// A city icon is a square reaching 0.3 of a radius above the tile center and 0.2 below it.
+func TestDrawCityIconReachesFurtherAboveTheCenterThanBelow(t *testing.T) {
+	canvas := newCanvas(60, 60)
+	city := color.RGBA{200, 100, 50, 255}
+	icon, background := markerColor(city), color.RGBA{0, 0, 0, 255}
 
-	mr.DrawCityIcon(canvas, newTileLayout(mr.config.Radius, 100), 10, 20, color.RGBA{0, 0, 0, 255})
+	drawCityIcon(canvas, newTileLayout(16, 1), 10, 20, city) // x from 6.8 to 14.8, y from 15.2 to 23.2
 
-	ops := canvas.GetOperations()
-	if len(ops) != 3 {
-		t.Fatalf("DrawCityIcon() recorded %d ops, want 3: %v", len(ops), ops)
-	}
-	if ops[len(ops)-1] != "Fill()" {
-		t.Errorf("DrawCityIcon() last op = %q, want Fill()", ops[len(ops)-1])
+	for _, tt := range []struct {
+		name string
+		x, y int
+		want color.RGBA
+	}{
+		{"just above the top", 10, 14, background},
+		{"top row", 10, 15, icon},
+		{"bottom row", 10, 22, icon},
+		{"just below the bottom", 10, 23, background},
+		{"left column", 7, 18, icon},
+		{"left of it", 6, 18, background},
+		{"right column", 14, 18, icon},
+		{"right of it", 15, 18, background},
+	} {
+		if got := colorAt(canvas, tt.x, tt.y); got != tt.want {
+			t.Errorf("%s: pixel (%d, %d) = %v, want %v", tt.name, tt.x, tt.y, got, tt.want)
+		}
 	}
 }
-
 func paletteContains(palette color.Palette, c color.RGBA) bool {
 	for _, p := range palette {
 		r, g, b, _ := p.RGBA()
@@ -686,13 +663,17 @@ func TestReplayPaletteCoversEveryDrawnColor(t *testing.T) {
 	mapData := buildBenchMapData(24, 24, 4, 1)
 	mapData.Civ5PlayerData[1].CivType = "CIVILIZATION_MINOR_TEST"
 
-	canvas := newBenchCanvas(mapData)
-	renderer := NewMapRenderer(DefaultDrawingConfig())
-	renderer.DrawPoliticalMapTileMajor(canvas, mapData)
-	renderer.DrawMountain(canvas, newTileLayout(renderer.config.Radius, 100), 0, 0)
+	canvas := raster.NewGrowingPalettedCanvas(1, 1) // its palette ends up holding every color drawn
+	grid := gridFor(mapData)
+	drawPoliticalMapTileMajor(canvas, mapData, grid)
+	drawMountain(canvas, newTileLayout(tileRadius, 1), 0, 0)
 
-	if canvas.Inexact() != 0 {
-		t.Errorf("the renderer drew %d colors that aren't in replayPalette", canvas.Inexact())
+	palette := replayPalette(mapData)
+	for _, drawn := range canvas.Palette() {
+		r, g, b, _ := drawn.RGBA()
+		if c := (color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), 255}); !paletteContains(palette, c) {
+			t.Errorf("the renderer drew %v, which is not in replayPalette", c)
+		}
 	}
 }
 

@@ -5,9 +5,8 @@ import "image/color"
 // colorTable maps RGB colors to palette indices; sibling canvases share it.
 type colorTable struct {
 	palette color.Palette
-	indexOf map[uint32]uint8 // rgbKey -> palette index
-	inexact int              // distinct off-palette colors snapped to the nearest palette color
-	grow    bool             // add off-palette colors to the palette, up to 256, instead of snapping
+	indexOf map[uint32]uint8
+	grow    bool // add off-palette colors to the palette, up to 256, instead of snapping
 }
 
 func newColorTable(palette color.Palette) *colorTable {
@@ -35,9 +34,5 @@ func (t *colorTable) IndexFor(r, g, b uint8) uint8 {
 	}
 	i := uint8(t.palette.Index(color.RGBA{r, g, b, 255}))
 	t.indexOf[key] = i
-	t.inexact++
 	return i
 }
-
-// Inexact returns how many distinct colors were snapped to the nearest one; 0 if the palette held every drawn color.
-func (t *colorTable) Inexact() int { return t.inexact }

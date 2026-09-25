@@ -16,15 +16,14 @@ func Downsample2x(src *image.Paletted) *image.RGBA {
 	colors := paletteToRGB(src.Palette)
 
 	var wg sync.WaitGroup
-	const band = 64 // rows per goroutine
-	for y0 := 0; y0 < h; y0 += band {
-		wg.Go(func() { averageBlocks(src, dst, colors, y0, min(y0+band, h)) })
+	const band = 64
+	for firstRow := 0; firstRow < h; firstRow += band {
+		wg.Go(func() { averageBlocks(src, dst, colors, firstRow, min(firstRow+band, h)) })
 	}
 	wg.Wait()
 	return dst
 }
 
-// paletteToRGB converts a palette to rgb for summing.
 func paletteToRGB(palette color.Palette) []rgb {
 	colors := make([]rgb, len(palette))
 	for i, col := range palette {
@@ -34,26 +33,30 @@ func paletteToRGB(palette color.Palette) []rgb {
 	return colors
 }
 
-// averageBlocks sets rows y0..y1 of dst to the average of each 2x2 block of src.
-func averageBlocks(src *image.Paletted, dst *image.RGBA, colors []rgb, y0, y1 int) {
-	w := dst.Rect.Dx()
-	for y := y0; y < y1; y++ {
-		out := dst.Pix[y*dst.Stride:]
-		top := src.Pix[2*y*src.Stride:]
-		bottom := src.Pix[(2*y+1)*src.Stride:]
-		for x := 0; x < w; x++ {
-			a, b, c, d := top[2*x], top[2*x+1], bottom[2*x], bottom[2*x+1]
-			px := out[x*4:][:4]
-			if a == b && b == c && c == d {
-				col := colors[a]
-				px[0], px[1], px[2], px[3] = uint8(col.r), uint8(col.g), uint8(col.b), 255
+// averageBlocks sets output rows firstRow..endRow of dst to the average of each 2x2 block of src.
+// Pix is a flat array, so row r starts at r*Stride; output row y covers source rows 2y and 2y+1.
+func averageBlocks(src *image.Paletted, dst *image.RGBA, colors []rgb, firstRow, endRow int) {
+	width := dst.Rect.Dx()
+	for y := firstRow; y < endRow; y++ {
+		dstRow := dst.Pix[y*dst.Stride:]
+		srcTopRow := src.Pix[2*y*src.Stride:]
+		srcBottomRow := src.Pix[(2*y+1)*src.Stride:]
+		for x := 0; x < width; x++ {
+			// The block's four palette indices: output column x covers source columns 2x and 2x+1.
+			topLeft, topRight := srcTopRow[2*x], srcTopRow[2*x+1]
+			bottomLeft, bottomRight := srcBottomRow[2*x], srcBottomRow[2*x+1]
+			outRGBA := dstRow[x*4:][:4]
+			if topLeft == topRight && topRight == bottomLeft && bottomLeft == bottomRight { // a flat block: no averaging needed
+				flat := colors[topLeft]
+				outRGBA[0], outRGBA[1], outRGBA[2], outRGBA[3] = uint8(flat.r), uint8(flat.g), uint8(flat.b), 255
 				continue
 			}
-			ca, cb, cc, cd := colors[a], colors[b], colors[c], colors[d]
-			px[0] = uint8((ca.r + cb.r + cc.r + cd.r + 2) >> 2)
-			px[1] = uint8((ca.g + cb.g + cc.g + cd.g + 2) >> 2)
-			px[2] = uint8((ca.b + cb.b + cc.b + cd.b + 2) >> 2)
-			px[3] = 255
+			tl, tr, bl, br := colors[topLeft], colors[topRight], colors[bottomLeft], colors[bottomRight]
+			// Sum of four, +2 to round, >>2 to divide by four.
+			outRGBA[0] = uint8((tl.r + tr.r + bl.r + br.r + 2) >> 2)
+			outRGBA[1] = uint8((tl.g + tr.g + bl.g + br.g + 2) >> 2)
+			outRGBA[2] = uint8((tl.b + tr.b + bl.b + br.b + 2) >> 2)
+			outRGBA[3] = 255
 		}
 	}
 }

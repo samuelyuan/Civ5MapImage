@@ -1,12 +1,11 @@
 package raster
 
 import (
-	"image"
 	"math"
 	"sort"
 )
 
-// Point is a position in pixels.
+// Point is a position or vector in pixels.
 type Point struct{ X, Y float64 }
 
 // subpath is a polyline; if closed, the last point joins back to the first.
@@ -15,7 +14,7 @@ type subpath struct {
 	closed bool
 }
 
-// segmentCount returns the number of line segments joining the points, including the closing one if closed.
+// segmentCount includes the closing segment if closed.
 func (sp subpath) segmentCount() int {
 	if sp.closed {
 		return len(sp.pts)
@@ -23,7 +22,6 @@ func (sp subpath) segmentCount() int {
 	return max(0, len(sp.pts)-1)
 }
 
-// yRange returns the smallest and largest y among the subpaths' points.
 func yRange(subpaths []subpath) (minY, maxY float64) {
 	minY, maxY = math.Inf(1), math.Inf(-1)
 	for _, sp := range subpaths {
@@ -34,23 +32,36 @@ func yRange(subpaths []subpath) (minY, maxY float64) {
 	return minY, maxY
 }
 
+// crossesY reports whether the segment a-b crosses height y, counting its lower end but not its upper so a vertex shared by two edges counts once, and never a horizontal segment.
+func crossesY(a, b Point, y float64) bool {
+	return a.Y != b.Y && y >= math.Min(a.Y, b.Y) && y < math.Max(a.Y, b.Y)
+}
+
+// lerp is the point t of the way from a to b; t outside 0..1 lies beyond them.
+func lerp(a, b Point, t float64) Point { return a.plus(b.minus(a).times(t)) }
+
+// xAt returns the x where the line through a and b is at height y; a and b must differ in y.
+func xAt(a, b Point, y float64) float64 { return lerp(a, b, (y-a.Y)/(b.Y-a.Y)).X }
+
 // appendCrossings appends, sorted, the x where each closed edge crosses scanline y (half-open in y).
 func appendCrossings(xs []float64, subpaths []subpath, y float64) []float64 {
 	for _, sp := range subpaths {
 		for i, a := range sp.pts {
-			b := sp.pts[(i+1)%len(sp.pts)]
-			if a.Y == b.Y || y < math.Min(a.Y, b.Y) || y >= math.Max(a.Y, b.Y) {
-				continue
+			if b := sp.pts[(i+1)%len(sp.pts)]; crossesY(a, b, y) {
+				xs = append(xs, xAt(a, b, y))
 			}
-			xs = append(xs, a.X+(y-a.Y)/(b.Y-a.Y)*(b.X-a.X))
 		}
 	}
 	sort.Float64s(xs)
 	return xs
 }
 
+// unitAt is the unit vector angle radians from +x toward +y.
+func unitAt(angle float64) Point { return Point{math.Cos(angle), math.Sin(angle)} }
+
 // RegularPolygon returns the vertices of a polygon centered on (x, y); at rotation 0 odd sides point up, even sides sit flat.
 func RegularPolygon(sides int, x, y, radius, rotation float64) []Point {
+	center := Point{x, y}
 	angle := 2 * math.Pi / float64(sides)
 	rotation -= math.Pi / 2
 	if sides%2 == 0 {
@@ -58,8 +69,7 @@ func RegularPolygon(sides int, x, y, radius, rotation float64) []Point {
 	}
 	pts := make([]Point, sides)
 	for i := range pts {
-		a := rotation + angle*float64(i)
-		pts[i] = Point{x + radius*math.Cos(a), y + radius*math.Sin(a)}
+		pts[i] = center.plus(unitAt(rotation + angle*float64(i)).times(radius))
 	}
 	return pts
 }
@@ -67,64 +77,27 @@ func RegularPolygon(sides int, x, y, radius, rotation float64) []Point {
 // pixelAtOrAfter returns the first pixel whose center is at or after v, so spans [a, b) sharing an edge neither overlap nor gap.
 func pixelAtOrAfter(v float64) int { return int(math.Ceil(v - 0.5)) }
 
-// segment is a line segment prepared for distance queries.
-type segment struct {
-	a, b     Point
-	dx, dy   float64 // b - a
-	lengthSq float64
+func (p Point) plus(q Point) Point    { return Point{p.X + q.X, p.Y + q.Y} }
+func (p Point) minus(q Point) Point   { return Point{p.X - q.X, p.Y - q.Y} }
+func (p Point) times(f float64) Point { return Point{p.X * f, p.Y * f} }
+
+// direction returns the unit vector pointing from a to b; a zero-length segment points along +x.
+func direction(a, b Point) Point {
+	d := b.minus(a)
+	length := math.Hypot(d.X, d.Y)
+	if length == 0 {
+		return Point{1, 0}
+	}
+	return Point{d.X / length, d.Y / length}
 }
 
-func newSegment(a, b Point) segment {
-	dx, dy := b.X-a.X, b.Y-a.Y
-	return segment{a: a, b: b, dx: dx, dy: dy, lengthSq: dx*dx + dy*dy}
-}
+// perpendicular returns v turned a quarter turn, to the left of v on a y-up plane and to the right on the y-down canvas.
+func perpendicular(v Point) Point { return Point{-v.Y, v.X} }
 
-// pixelBounds returns the pixels that could lie within half of the segment.
-func (s segment) pixelBounds(half float64) image.Rectangle {
-	return image.Rect(
-		int(math.Floor(math.Min(s.a.X, s.b.X)-half)), int(math.Floor(math.Min(s.a.Y, s.b.Y)-half)),
-		int(math.Ceil(math.Max(s.a.X, s.b.X)+half))+1, int(math.Ceil(math.Max(s.a.Y, s.b.Y)+half))+1)
-}
-
-// rowSpan returns x bounds on row y containing every point within half of the segment (possibly wider, never narrower), and false if none.
-func (s segment) rowSpan(y, half float64) (lo, hi float64, ok bool) {
-	lo, hi = math.Inf(1), math.Inf(-1)
-	for _, end := range [2]Point{s.a, s.b} { // the round caps
-		if dy := y - end.Y; math.Abs(dy) <= half {
-			dx := math.Sqrt(half*half - dy*dy)
-			lo, hi, ok = math.Min(lo, end.X-dx), math.Max(hi, end.X+dx), true
-		}
-	}
-	if s.lengthSq == 0 {
-		return lo, hi, ok
-	}
-
-	// The body: within half of the line (v) and between the ends (u). With dx, dy the direction, each bound is a range of x.
-	length := math.Sqrt(s.lengthSq)
-	ux, uy := s.dx/length, s.dy/length // along the segment
-	w := y - s.a.Y
-	bodyLo, bodyHi := math.Inf(-1), math.Inf(1)
-	limit := func(coefX, offset, from, to float64) bool { // from <= coefX*(x-a.x) + offset <= to
-		if math.Abs(coefX) < 1e-12 {
-			return from <= offset && offset <= to
-		}
-		x0, x1 := (from-offset)/coefX, (to-offset)/coefX
-		bodyLo, bodyHi = math.Max(bodyLo, s.a.X+math.Min(x0, x1)), math.Min(bodyHi, s.a.X+math.Max(x0, x1))
-		return true
-	}
-	if limit(-uy, w*ux, -half, half) && limit(ux, w*uy, 0, length) && bodyLo <= bodyHi {
-		lo, hi, ok = math.Min(lo, bodyLo), math.Max(hi, bodyHi), true
-	}
-	return lo, hi, ok
-}
-
-// distSq returns the squared distance from (px, py) to the segment.
-func (s segment) distSq(px, py float64) float64 {
-	px, py = px-s.a.X, py-s.a.Y
-	t := 0.0
-	if s.lengthSq > 0 {
-		t = math.Max(0, math.Min(1, (px*s.dx+py*s.dy)/s.lengthSq))
-	}
-	ex, ey := px-t*s.dx, py-t*s.dy
-	return ex*ex + ey*ey
+// thickLine returns the outline of the segment a-b as a line of width 2*half with square caps, so it reaches half past each end.
+func thickLine(a, b Point, half float64) subpath {
+	along := direction(a, b)
+	side := perpendicular(along).times(half)
+	start, end := a.minus(along.times(half)), b.plus(along.times(half))
+	return subpath{closed: true, pts: []Point{start.plus(side), end.plus(side), end.minus(side), start.minus(side)}}
 }

@@ -302,8 +302,8 @@ func TestApplyReplayEventTilesRazed(t *testing.T) {
 	if tile.CityName != "" {
 		t.Errorf("CityName = %q, want empty", tile.CityName)
 	}
-	if tile.RouteType != 2 {
-		t.Errorf("RouteType = %d, want 2 (road)", tile.RouteType)
+	if tile.RouteType != RouteRoad {
+		t.Errorf("RouteType = %d, want %d (road)", tile.RouteType, RouteRoad)
 	}
 	// Razing does not found a city, so the counter is unaffected.
 	if nextCityId != 5 {

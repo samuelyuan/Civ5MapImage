@@ -267,6 +267,12 @@ type Civ5TeamRelationships struct {
 	DefensivePactWith       [][]int
 }
 
+const (
+	RouteRoad     = 0
+	RouteRailroad = 1
+	RouteNone     = 255
+)
+
 type Civ5MapTileImprovement struct {
 	X           int
 	Y           int

@@ -173,7 +173,7 @@ func ApplyReplayEvent(mapData *Civ5MapData, event Civ5ReplayEvent, nextCityId in
 			record.CityId = -1
 			record.CityName = ""
 			// Razed tile becomes a road
-			record.RouteType = 2
+			record.RouteType = RouteRoad
 		}
 	}
 	return nextCityId

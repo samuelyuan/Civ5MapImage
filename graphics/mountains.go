@@ -28,6 +28,13 @@ const (
 	trioPeakScale = 0.7 // the size of the peak in the middle of three mutually adjacent mountain tiles
 )
 
+// How far in pixels a peak's outline reaches past its triangle.
+const (
+	peakOutlineTop  = 2.0
+	peakOutlineSide = 1.5
+	peakOutlineBase = 1.0
+)
+
 // mountainTileColor returns the fill of a mountain tile whose ground would otherwise be fill.
 func mountainTileColor(fill color.RGBA) color.RGBA {
 	return blendColor(fill, mountainGround, mountainGroundBlend)
@@ -59,18 +66,18 @@ func rangePeaks(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, l tileLayou
 
 		// the neighbors go around the tile, so each is adjacent to the one before and after it
 		neighbors := fileio.GetNeighbors(pos)
-		for i, a := range neighbors {
-			b, before := neighbors[(i+1)%6], neighbors[(i+5)%6]
+		for i, neighbor := range neighbors {
+			next, prev := neighbors[(i+1)%6], neighbors[(i+5)%6]
 			// a three is added from its first tile, so once
-			if isMountain(a) && isMountain(b) && tileBefore(pos, a) && tileBefore(pos, b) {
-				ax, ay := l.center(a)
-				bx, by := l.center(b)
-				fillers = append(fillers, peakAt((x+ax+bx)/3, (y+ay+by)/3, l.radius, trioPeakScale))
+			if isMountain(neighbor) && isMountain(next) && tileBefore(pos, neighbor) && tileBefore(pos, next) {
+				neighborX, neighborY := l.center(neighbor)
+				nextX, nextY := l.center(next)
+				fillers = append(fillers, peakAt((x+neighborX+nextX)/3, (y+neighborY+nextY)/3, l.radius, trioPeakScale))
 			}
 			// a pair is added from its first tile, unless a mountain next to both puts it in a three
-			if isMountain(a) && tileBefore(pos, a) && !isMountain(b) && !isMountain(before) {
-				ax, ay := l.center(a)
-				fillers = append(fillers, peakAt((x+ax)/2, (y+ay)/2, l.radius, gapPeakScale))
+			if isMountain(neighbor) && tileBefore(pos, neighbor) && !isMountain(next) && !isMountain(prev) {
+				neighborX, neighborY := l.center(neighbor)
+				fillers = append(fillers, peakAt((x+neighborX)/2, (y+neighborY)/2, l.radius, gapPeakScale))
 			}
 		}
 	}
@@ -80,9 +87,10 @@ func rangePeaks(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, l tileLayou
 }
 
 // drawPeak draws a snow-capped peak with a lit left face and a shaded right face, in an outline.
-func drawPeak(canvas Painter, p peak) {
+func drawPeak(canvas Canvas, p peak) {
 	top := p.base - p.height
-	fillTriangle(canvas, peakOutlineColor, p.x, top-2, p.x-p.half-1.5, p.base+1, p.x+p.half+1.5, p.base+1)
+	outlineTop, outlineBase, outlineHalf := top-peakOutlineTop, p.base+peakOutlineBase, p.half+peakOutlineSide
+	fillTriangle(canvas, peakOutlineColor, p.x, outlineTop, p.x-outlineHalf, outlineBase, p.x+outlineHalf, outlineBase)
 	fillTriangle(canvas, peakLitColor, p.x, top, p.x-p.half, p.base, p.x, p.base)
 	fillTriangle(canvas, peakShadeColor, p.x, top, p.x, p.base, p.x+p.half, p.base)
 

@@ -38,23 +38,19 @@ func NewMapCanvas() *SupersampledCanvas {
 }
 
 func (c *SupersampledCanvas) DrawRegularPolygon(sides int, x, y, radius, rotation float64) {
-	k := float64(mapSupersample)
-	c.big.DrawRegularPolygon(sides, x*k, y*k, radius*k, rotation)
+	c.big.DrawRegularPolygon(sides, x*mapSupersample, y*mapSupersample, radius*mapSupersample, rotation)
 }
 
 func (c *SupersampledCanvas) DrawRectangle(x, y, width, height float64) {
-	k := float64(mapSupersample)
-	c.big.DrawRectangle(x*k, y*k, width*k, height*k)
+	c.big.DrawRectangle(x*mapSupersample, y*mapSupersample, width*mapSupersample, height*mapSupersample)
 }
 
 func (c *SupersampledCanvas) DrawTriangle(x1, y1, x2, y2, x3, y3 float64) {
-	k := float64(mapSupersample)
-	c.big.DrawTriangle(x1*k, y1*k, x2*k, y2*k, x3*k, y3*k)
+	c.big.DrawTriangle(x1*mapSupersample, y1*mapSupersample, x2*mapSupersample, y2*mapSupersample, x3*mapSupersample, y3*mapSupersample)
 }
 
 func (c *SupersampledCanvas) DrawLine(x1, y1, x2, y2 float64) {
-	k := float64(mapSupersample)
-	c.big.DrawLine(x1*k, y1*k, x2*k, y2*k)
+	c.big.DrawLine(x1*mapSupersample, y1*mapSupersample, x2*mapSupersample, y2*mapSupersample)
 }
 
 func (c *SupersampledCanvas) SetColor(r, g, b uint8) {

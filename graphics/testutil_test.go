@@ -3,6 +3,7 @@ package graphics
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"math/rand"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
@@ -168,105 +169,66 @@ func prepareAndDrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5Re
 	return DrawReplay(mapData, replayData, outputFilename, maxTurns)
 }
 
-// MockCanvas is a Canvas that records operations instead of drawing, for tests.
-type MockCanvas struct {
-	operations    []string
-	width, height int
-	indexes       map[[3]uint8]uint8 // the index IndexFor gave each color
+// newCanvas returns a width x height canvas that draws exact palette colors and grows its palette as colors are used.
+func newCanvas(width, height int) *raster.PalettedCanvas {
+	c := raster.NewGrowingPalettedCanvas(1, 1)
+	c.Resize(width, height)
+	return c
 }
 
-func NewMockCanvas(width, height int) *MockCanvas {
-	return &MockCanvas{
-		operations: make([]string, 0),
-		width:      width,
-		height:     height,
+// newMapCanvas returns a canvas the size of a map of the given size, as the map renderers make one.
+func newMapCanvas(size fileio.MapSize) *raster.PalettedCanvas {
+	w, h := imageSize(size, tileRadius)
+	return newCanvas(int(w), int(h))
+}
+
+// colorAt returns the color of pixel (x, y).
+func colorAt(c Canvas, x, y int) color.RGBA {
+	r, g, b, _ := c.Image().At(x, y).RGBA()
+	return color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), 255}
+}
+
+// countColor returns how many pixels of rect are want.
+func countColor(c Canvas, rect image.Rectangle, want color.RGBA) int {
+	n := 0
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			if colorAt(c, x, y) == want {
+				n++
+			}
+		}
 	}
+	return n
 }
 
-func (m *MockCanvas) DrawRegularPolygon(sides int, x, y, radius, rotation float64) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("DrawRegularPolygon(%d, %.2f, %.2f, %.2f, %.2f)", sides, x, y, radius, rotation))
+// nearPoint reports whether a pixel within one of (x, y) is want.
+func nearPoint(c Canvas, x, y float64, want color.RGBA) bool {
+	return countColor(c, image.Rect(int(x)-1, int(y)-1, int(x)+2, int(y)+2), want) > 0
 }
 
-func (m *MockCanvas) DrawRectangle(x, y, width, height float64) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("DrawRectangle(%.2f, %.2f, %.2f, %.2f)", x, y, width, height))
-}
-
-func (m *MockCanvas) DrawTriangle(x1, y1, x2, y2, x3, y3 float64) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("DrawTriangle(%.2f, %.2f, %.2f, %.2f, %.2f, %.2f)", x1, y1, x2, y2, x3, y3))
-}
-
-func (m *MockCanvas) DrawLine(x1, y1, x2, y2 float64) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("DrawLine(%.2f, %.2f, %.2f, %.2f)", x1, y1, x2, y2))
-}
-
-func (m *MockCanvas) SetColor(r, g, b uint8) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("SetColor(%d, %d, %d)", r, g, b))
-}
-
-func (m *MockCanvas) SetLineWidth(width float64) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("SetLineWidth(%.2f)", width))
-}
-
-func (m *MockCanvas) Fill() {
-	m.operations = append(m.operations, "Fill()")
-}
-
-func (m *MockCanvas) Stroke() {
-	m.operations = append(m.operations, "Stroke()")
-}
-
-func (m *MockCanvas) Resize(width, height int) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("Resize(%d, %d)", width, height))
-	m.width = width
-	m.height = height
-}
-
-func (m *MockCanvas) DrawString(text string, x, y float64) {
-	m.operations = append(m.operations,
-		fmt.Sprintf("DrawString(\"%s\", %.2f, %.2f)", text, x, y))
-}
-
-// MeasureString approximates the default font (basicfont.Face7x13: 7px advance, 13px tall).
-func (m *MockCanvas) MeasureString(text string) (w, h float64) {
-	return float64(len(text)) * 7, 13
-}
-
-// IndexFor gives each distinct color the next index, counting from 0.
-func (m *MockCanvas) IndexFor(r, g, b uint8) uint8 {
-	if m.indexes == nil {
-		m.indexes = map[[3]uint8]uint8{}
+// drawnPixels returns how many pixels of c have been drawn on, that is differ from its background.
+func drawnPixels(c *raster.PalettedCanvas) int {
+	n := 0
+	for y := 0; y < c.Image().Bounds().Dy(); y++ {
+		for x := 0; x < c.Image().Bounds().Dx(); x++ {
+			if c.IndexAt(x, y) != c.Background() {
+				n++
+			}
+		}
 	}
-	key := [3]uint8{r, g, b}
-	if _, ok := m.indexes[key]; !ok {
-		m.indexes[key] = uint8(len(m.indexes))
-	}
-	m.operations = append(m.operations, fmt.Sprintf("IndexFor(%d, %d, %d) = %d", r, g, b, m.indexes[key]))
-	return m.indexes[key]
+	return n
 }
 
-func (m *MockCanvas) PaintPixel(x, y int, index uint8) {
-	m.operations = append(m.operations, fmt.Sprintf("PaintPixel(%d, %d, %d)", x, y, index))
+// tileCenter returns the center of the tile at (row, col) of a map of the given size.
+func tileCenter(size fileio.MapSize, row, col int) (x, y float64) {
+	return layoutForMap(size, tileRadius).center(fileio.TilePos{Row: row, Col: col})
 }
 
-func (m *MockCanvas) Image() image.Image {
-	// Return a simple 1x1 image for testing
-	return image.NewRGBA(image.Rect(0, 0, 1, 1))
+// edgeMidpoint returns the middle of a hex's edge (see getHexEdge) centered on (x, y).
+func edgeMidpoint(x, y float64, edge int) (mx, my float64) {
+	line := getHexEdge(edge, x, y, tileRadius)
+	return (line.X1 + line.X2) / 2, (line.Y1 + line.Y2) / 2
 }
 
-func (m *MockCanvas) SavePNG(filename string) error {
-	m.operations = append(m.operations,
-		fmt.Sprintf("SavePNG(\"%s\")", filename))
-	return nil
-}
-
-// GetOperations returns the recorded operations.
-func (m *MockCanvas) GetOperations() []string {
-	return m.operations
-}
+// gridFor returns the tile grid for the size of mapData.
+func gridFor(mapData *fileio.Civ5MapData) *tileGrid { return buildTileGrid(mapData.Size(), tileRadius) }

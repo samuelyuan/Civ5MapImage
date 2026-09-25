@@ -94,10 +94,9 @@ func TestDrawReplayOutputIsDeterministic(t *testing.T) {
 }
 
 // runReplayFrames is DrawReplay's per-turn loop minus GIF encoding: later turns repaint and snapshot only the dirty region.
-func runReplayFrames(renderer *MapRenderer, mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5ReplayEvent) {
+func runReplayFrames(grid *tileGrid, mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5ReplayEvent) {
 	canvas := newBenchCanvas(mapData)
 	nextCityId := 0
-	mapSize := mapData.Size()
 	var tracker *tileTracker
 	for turnIndex, events := range turnsEvents {
 		for _, event := range events {
@@ -105,9 +104,9 @@ func runReplayFrames(renderer *MapRenderer, mapData *fileio.Civ5MapData, turnsEv
 		}
 		if turnIndex == 0 {
 			tracker = newTileTracker(mapData)
-			renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+			drawPoliticalMapTileMajor(canvas, mapData, grid)
 			canvas.Snapshot(canvas.Image().Bounds())
-		} else if dirtyRects := renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges()); len(dirtyRects) > 0 {
+		} else if dirtyRects := redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges()); len(dirtyRects) > 0 {
 			canvas.Snapshot(unionRects(dirtyRects))
 		}
 	}
@@ -120,27 +119,27 @@ const (
 )
 
 func BenchmarkDrawReplayFrames_Medium(b *testing.B) {
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := buildTileGrid(fileio.MapSize{Height: 52, Width: 80}, tileRadius)
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		mapData := buildBenchMapData(52, 80, benchEndToEndCivs, 1)
 		turnsEvents := buildBenchTurnEvents(52, 80, benchEndToEndTurns, benchEndToEndDirtyTiles, benchEndToEndCivs, 99)
 		b.StartTimer()
 
-		runReplayFrames(renderer, mapData, turnsEvents)
+		runReplayFrames(grid, mapData, turnsEvents)
 	}
 }
 
 // BenchmarkDrawReplayFrames_Clustered_Medium is the Medium benchmark with clustered dirty tiles, the realistic turn shape.
 func BenchmarkDrawReplayFrames_Clustered_Medium(b *testing.B) {
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := buildTileGrid(fileio.MapSize{Height: 52, Width: 80}, tileRadius)
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		mapData := buildBenchMapData(52, 80, benchEndToEndCivs, 1)
 		turnsEvents := buildBenchTurnEventsClustered(52, 80, benchEndToEndTurns, benchEndToEndDirtyTiles, benchEndToEndCivs, 5, 99)
 		b.StartTimer()
 
-		runReplayFrames(renderer, mapData, turnsEvents)
+		runReplayFrames(grid, mapData, turnsEvents)
 	}
 }
 
@@ -200,11 +199,10 @@ func BenchmarkDrawReplayEndToEnd_Scattered_Medium(b *testing.B) {
 
 // writeGifFullFrames encodes turnsEvents with a full-canvas frame every turn (the pre-delta-frame format), as a size baseline.
 func writeGifFullFrames(mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5ReplayEvent, outputPath string) error {
-	renderer := NewMapRenderer(DefaultDrawingConfig())
+	grid := gridFor(mapData)
 	canvas := newBenchCanvas(mapData)
 	outGif := &gif.GIF{}
 	nextCityId := 0
-	mapSize := mapData.Size()
 	var tracker *tileTracker
 	for turnIndex, events := range turnsEvents {
 		for _, event := range events {
@@ -212,9 +210,9 @@ func writeGifFullFrames(mapData *fileio.Civ5MapData, turnsEvents [][]fileio.Civ5
 		}
 		if turnIndex == 0 {
 			tracker = newTileTracker(mapData)
-			renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+			drawPoliticalMapTileMajor(canvas, mapData, grid)
 		} else {
-			renderer.RedrawDirtyTiles(canvas, mapData, mapSize, tracker.takeChanges())
+			redrawDirtyTiles(canvas, mapData, grid, tracker.takeChanges())
 		}
 		outGif.Image = append(outGif.Image, canvas.Snapshot(canvas.Image().Bounds()))
 		outGif.Delay = append(outGif.Delay, GIF_DELAY)
@@ -275,7 +273,7 @@ func TestDrawReplayGifFramesReconstructFullRedrawEveryFrame(t *testing.T) {
 
 	// Reference: a fresh full redraw every turn.
 	mapDataRef, turnsEventsRef := buildScenario()
-	rendererRef := NewMapRenderer(DefaultDrawingConfig())
+	gridRef := gridFor(mapDataRef)
 	paletteRef := replayPalette(mapDataRef)
 	var referenceFrames []*raster.PalettedCanvas
 	nextCityIdRef := 0
@@ -284,7 +282,7 @@ func TestDrawReplayGifFramesReconstructFullRedrawEveryFrame(t *testing.T) {
 			nextCityIdRef = fileio.ApplyReplayEvent(mapDataRef, event, nextCityIdRef)
 		}
 		frame := raster.NewPalettedCanvas(800, 600, paletteRef)
-		rendererRef.DrawPoliticalMapTileMajor(frame, mapDataRef)
+		drawPoliticalMapTileMajor(frame, mapDataRef, gridRef)
 		referenceFrames = append(referenceFrames, frame)
 	}
 

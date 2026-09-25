@@ -2,7 +2,7 @@ package raster
 
 import (
 	"math"
-	"math/rand"
+	"slices"
 	"testing"
 )
 
@@ -30,50 +30,91 @@ func TestPixelAtOrAfter(t *testing.T) {
 	}
 }
 
-func TestSegmentDistSq(t *testing.T) {
-	s := newSegment(Point{0, 0}, Point{10, 0})
-	for _, tt := range []struct {
-		px, py, want float64
-	}{{5, 3, 9}, {-4, 3, 25}, {13, 4, 25}, {0, 0, 0}, {10, 0, 0}} {
-		if got := s.distSq(tt.px, tt.py); math.Abs(got-tt.want) > 1e-9 {
-			t.Errorf("distSq(%v, %v) = %v, want %v", tt.px, tt.py, got, tt.want)
+func TestDirectionIsAUnitVectorFromAToB(t *testing.T) {
+	for _, tt := range []struct{ a, b, want Point }{
+		{Point{2, 3}, Point{8, 3}, Point{1, 0}},
+		{Point{2, 3}, Point{2, -1}, Point{0, -1}},
+		{Point{0, 0}, Point{3, 4}, Point{0.6, 0.8}},
+		{Point{5, 5}, Point{5, 5}, Point{1, 0}}, // no length: along +x
+	} {
+		if got := direction(tt.a, tt.b); math.Abs(got.X-tt.want.X) > 1e-12 || math.Abs(got.Y-tt.want.Y) > 1e-12 {
+			t.Errorf("direction(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
 		}
-	}
-	dot := newSegment(Point{2, 2}, Point{2, 2})
-	if got := dot.distSq(5, 6); math.Abs(got-25) > 1e-9 {
-		t.Errorf("single-point segment distSq = %v, want 25", got)
 	}
 }
 
-// rowSpan may be too wide but never too narrow: every pixel center distSq accepts on a row lies inside it, for segments of every direction.
-func TestRowSpanCoversEveryPixelCenterWithinReach(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
-	segments := []segment{
-		newSegment(Point{10, 10}, Point{10, 10}),     // a point
-		newSegment(Point{2, 7.5}, Point{30, 7.5}),    // horizontal
-		newSegment(Point{12.3, 1}, Point{12.3, 30}),  // vertical
-		newSegment(Point{5, 5}, Point{25, 25}),       // diagonal
-		newSegment(Point{25, 5}, Point{5, 25}),       // the other diagonal
-		newSegment(Point{9.5, 4.5}, Point{9.5, 4.5}), // a point on a pixel center
+func TestPerpendicularTurnsAQuarterTurn(t *testing.T) {
+	for _, tt := range []struct{ v, want Point }{{Point{1, 0}, Point{0, 1}}, {Point{0, 1}, Point{-1, 0}}, {Point{3, -2}, Point{2, 3}}} {
+		if got := perpendicular(tt.v); got != tt.want {
+			t.Errorf("perpendicular(%v) = %v, want %v", tt.v, got, tt.want)
+		}
 	}
-	for i := 0; i < 500; i++ {
-		segments = append(segments, newSegment(Point{rng.Float64() * 40, rng.Float64() * 40}, Point{rng.Float64() * 40, rng.Float64() * 40}))
+}
+
+// The line is the rectangle around a-b, half a width to each side and half a width past each end.
+func TestThickLineIsARectangleAroundTheSegment(t *testing.T) {
+	horizontal := thickLine(Point{2, 3}, Point{8, 3}, 1)
+	if want := []Point{{1, 4}, {9, 4}, {9, 2}, {1, 2}}; !slices.Equal(horizontal.pts, want) || !horizontal.closed {
+		t.Errorf("horizontal thickLine = %v (closed %v), want %v closed", horizontal.pts, horizontal.closed, want)
 	}
-	for _, seg := range segments {
-		for _, half := range []float64{0.5, 1, 1.5, 3} {
-			for py := -5; py < 50; py++ {
-				y := float64(py) + 0.5
-				lo, hi, ok := seg.rowSpan(y, half)
-				for px := -5; px < 50; px++ {
-					x := float64(px) + 0.5
-					if seg.distSq(x, y) > half*half {
-						continue
-					}
-					if !ok || x < lo || x > hi {
-						t.Fatalf("segment %v half %v: pixel center (%v, %v) is within reach but rowSpan = [%v, %v] ok=%v", seg, half, x, y, lo, hi, ok)
-					}
-				}
+	dot := thickLine(Point{5, 5}, Point{5, 5}, 2) // no length: a square
+	if want := []Point{{3, 7}, {7, 7}, {7, 3}, {3, 3}}; !slices.Equal(dot.pts, want) {
+		t.Errorf("zero-length thickLine = %v, want %v", dot.pts, want)
+	}
+	for _, p := range thickLine(Point{0, 0}, Point{3, 4}, 0.5).pts { // 3-4-5: every corner is half a width from the line and half past an end
+		along, across := (p.X*3+p.Y*4)/5, (p.X*-4+p.Y*3)/5
+		if math.Abs(math.Abs(across)-0.5) > 1e-12 || (math.Abs(along+0.5) > 1e-12 && math.Abs(along-5.5) > 1e-12) {
+			t.Errorf("corner %v is at (along %v, across %v), want across +/-0.5 and along -0.5 or 5.5", p, along, across)
+		}
+	}
+}
+
+func TestUnitAtPointsFromPlusXTowardPlusY(t *testing.T) {
+	for _, tt := range []struct {
+		angle float64
+		want  Point
+	}{{0, Point{1, 0}}, {math.Pi / 2, Point{0, 1}}, {math.Pi, Point{-1, 0}}, {-math.Pi / 2, Point{0, -1}}} {
+		if got := unitAt(tt.angle); math.Abs(got.X-tt.want.X) > 1e-12 || math.Abs(got.Y-tt.want.Y) > 1e-12 {
+			t.Errorf("unitAt(%v) = %v, want %v", tt.angle, got, tt.want)
+		}
+	}
+}
+
+// A segment crosses the heights from its lower end up to but not including its upper end, so two edges meeting at a vertex count it once.
+func TestCrossesYIsHalfOpenAndIgnoresHorizontalSegments(t *testing.T) {
+	up, down := [2]Point{{0, 2}, {5, 6}}, [2]Point{{5, 6}, {0, 2}}
+	for _, seg := range [][2]Point{up, down} {
+		for _, tt := range []struct {
+			y    float64
+			want bool
+		}{{1.9, false}, {2, true}, {4, true}, {5.9, true}, {6, false}} {
+			if got := crossesY(seg[0], seg[1], tt.y); got != tt.want {
+				t.Errorf("crossesY(%v, %v, %v) = %v, want %v", seg[0], seg[1], tt.y, got, tt.want)
 			}
+		}
+	}
+	if crossesY(Point{0, 3}, Point{9, 3}, 3) {
+		t.Error("a horizontal segment crosses no height")
+	}
+}
+
+func TestLerpIsTheFractionOfTheWayFromAToB(t *testing.T) {
+	a, b := Point{2, 1}, Point{10, 5}
+	for _, tt := range []struct {
+		t    float64
+		want Point
+	}{{0, a}, {1, b}, {0.5, Point{6, 3}}, {0.25, Point{4, 2}}, {-0.5, Point{-2, -1}}, {1.5, Point{14, 7}}} {
+		if got := lerp(a, b, tt.t); math.Abs(got.X-tt.want.X) > 1e-12 || math.Abs(got.Y-tt.want.Y) > 1e-12 {
+			t.Errorf("lerp(%v, %v, %v) = %v, want %v", a, b, tt.t, got, tt.want)
+		}
+	}
+}
+
+func TestXAtIsWhereTheLineReachesTheHeight(t *testing.T) {
+	a, b := Point{2, 1}, Point{10, 5}
+	for _, tt := range []struct{ y, want float64 }{{1, 2}, {3, 6}, {5, 10}, {0, 0}, {7, 14}} {
+		if got := xAt(a, b, tt.y); math.Abs(got-tt.want) > 1e-12 {
+			t.Errorf("xAt(%v, %v, %v) = %v, want %v", a, b, tt.y, got, tt.want)
 		}
 	}
 }

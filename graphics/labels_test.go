@@ -1,12 +1,14 @@
 package graphics
 
 import (
-	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"math/rand"
 	"strings"
 	"testing"
+
+	"golang.org/x/image/font/basicfont"
 
 	"github.com/samuelyuan/Civ5MapImage/fileio"
 )
@@ -29,10 +31,10 @@ func TestPhysicalCityNameLabel(t *testing.T) {
 	const radius = 16.0
 	mapData := newLabelGeometryTestMap("Rome", -1, "", "")
 
-	label := PhysicalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(radius, 100))
+	label := PhysicalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(radius, 1))
 
-	// Tile (0, 0) is centered at (24, 84) on a canvas 100 tall; the name is centered above it: 6 px per character, 4 characters.
-	wantX, wantY := 24.0-12.0, 84.0-8.0
+	// Tile (0, 0) of a one-row map is centered at (24, 24); the name is centered above it: 7 px per character, 4 characters.
+	wantX, wantY := 24.0-14.0, 24.0-8.0
 	if label.Text != "Rome" || label.X != wantX || label.Y != wantY {
 		t.Errorf("PhysicalCityNameLabel() = %+v, want {Text:Rome X:%v Y:%v}", label, wantX, wantY)
 	}
@@ -43,7 +45,7 @@ func TestPhysicalCityNameLabel(t *testing.T) {
 
 func TestPhysicalCityNameLabelTrimsNullByte(t *testing.T) {
 	mapData := newLabelGeometryTestMap("Rome\x00garbage", -1, "", "")
-	label := PhysicalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100))
+	label := PhysicalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1))
 	if label.Text != "Rome" {
 		t.Errorf("PhysicalCityNameLabel().Text = %q, want %q", label.Text, "Rome")
 	}
@@ -53,7 +55,7 @@ func TestPoliticalCityNameLabelKnownColor(t *testing.T) {
 	const radius = 16.0
 	mapData := newLabelGeometryTestMap("Rome", 0, "PLAYERCOLOR_BLACK", "CIVILIZATION_ROME")
 
-	label := PoliticalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(radius, 100))
+	label := PoliticalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(radius, 1))
 
 	renderColor := civColorMap["PLAYERCOLOR_BLACK"]
 	wantColor := blendColor(renderColor.InnerColor, color.RGBA{255, 255, 255, 255}, 0.2)
@@ -65,9 +67,17 @@ func TestPoliticalCityNameLabelKnownColor(t *testing.T) {
 
 func TestPoliticalCityNameLabelUnknownColorFallsBackToWhite(t *testing.T) {
 	mapData := newLabelGeometryTestMap("Rome", -1, "", "")
-	label := PoliticalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 100))
+	label := PoliticalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, newTileLayout(16.0, 1))
 	if label.R != 255 || label.G != 255 || label.B != 255 {
 		t.Errorf("PoliticalCityNameLabel() color = (%d,%d,%d), want white fallback", label.R, label.G, label.B)
+	}
+}
+
+// The label metrics are the ones of the font the canvases draw with.
+func TestLabelMetricsMatchTheFont(t *testing.T) {
+	face := basicfont.Face7x13
+	if labelCharWidth != face.Advance || labelAscent != face.Ascent || labelDescent != face.Descent {
+		t.Errorf("label metrics = (%d, %d, %d), want the font's (%d, %d, %d)", labelCharWidth, labelAscent, labelDescent, face.Advance, face.Ascent, face.Descent)
 	}
 }
 
@@ -78,9 +88,9 @@ func TestLabelIsCenteredOnItsTile(t *testing.T) {
 	for row := 0; row < rows; row++ {
 		pos := fileio.TilePos{Row: row, Col: 3}
 		x, y := l.center(pos)
-		labelX, labelY := cityLabelPosition(l, pos, "Rome")
-		if labelX != x-12 || labelY != y-radius/2 {
-			t.Errorf("row %d: label at (%v, %v), want (%v, %v)", row, labelX, labelY, x-12, y-radius/2)
+		labelX, labelY := cityLabelPosition(l, pos, "Rome") // y-8: the marker's reach of 6 plus the font's descent of 2
+		if labelX != x-14 || labelY != y-8 {
+			t.Errorf("row %d: label at (%v, %v), want (%v, %v)", row, labelX, labelY, x-14, y-8)
 		}
 	}
 }
@@ -147,21 +157,17 @@ func TestPlaceLabelsTreatsTextThatTouchesAsOverlapping(t *testing.T) {
 }
 
 // Every place a label may go, in the order they are tried, for a marker at (100, 100), a radius of 16 and a 56 px label.
-func TestLabelOptionsAreTheEightPlacesAroundTheMarker(t *testing.T) {
+func TestLabelOptionsAreTheFourPlacesAroundTheMarker(t *testing.T) {
 	site := siteAt("Kingston", 100, 100)
 
 	got := labelOptions(site, testRadius)
 
-	beside := 100 + testRadius/3
+	const beside = 105 // level with the marker's center: the text's middle, 4.5 px above its baseline, rounded up
 	want := [][2]float64{
 		{72, 92},      // the default place: centered above the marker
 		{72, 117},     // below it
 		{108, beside}, // beside it on the right
 		{36, beside},  // beside it on the left
-		{94, 92},      // above, starting at the marker
-		{50, 92},      // above, ending at the marker
-		{94, 117},     // below, starting at the marker
-		{50, 117},     // below, ending at the marker
 	}
 	if len(got) != len(want) {
 		t.Fatalf("labelOptions() returned %d places, want %d", len(got), len(want))
@@ -266,35 +272,28 @@ func TestPlacedCityLabelsSkipsTilesWithoutACityOrAName(t *testing.T) {
 	}
 }
 
-// Drawn through DrawPoliticalCityNames, two neighboring cities with long names don't end up on top of each other.
-func TestDrawPoliticalCityNamesSeparatesOverlappingLabels(t *testing.T) {
-	mr := NewMapRenderer(DefaultDrawingConfig())
-	canvas := NewMockCanvas(400, 200)
-	mapData := &fileio.Civ5MapData{
-		MapTileImprovements: [][]*fileio.Civ5MapTileImprovement{
-			{{CityName: "Constantinople", Owner: -1, CityId: -1}, {CityName: "Thessalonica", Owner: -1, CityId: -1}},
-		},
-	}
+// Drawn through drawCityNames, two neighboring cities with long names don't end up on top of each other: each label draws exactly the pixels it draws alone.
+func TestCityNamesDrawnTogetherDoNotCoverEachOther(t *testing.T) {
+	mapData := newBorderTestMapData(0, 1, "PLAYERCOLOR_RED", "PLAYERCOLOR_BLUE")
+	mapData.MapTileImprovements[0][0].CityName = "Constantinople"
+	mapData.MapTileImprovements[0][1].CityName = "Thessalonica"
 	size := fileio.MapSize{Height: 1, Width: 2}
-	l := layoutForMap(size, mr.config.Radius)
-	first := PoliticalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 0}, l)
-	second := PoliticalCityNameLabel(mapData, fileio.TilePos{Row: 0, Col: 1}, l)
-	if !labelBox(first).Overlaps(labelBox(second)) {
+	l := layoutForMap(size, tileRadius)
+	labelOf := func(pos fileio.TilePos) ColoredText { return PoliticalCityNameLabel(mapData, pos, l) }
+	if !labelBox(labelOf(fileio.TilePos{Row: 0, Col: 0})).Overlaps(labelBox(labelOf(fileio.TilePos{Row: 0, Col: 1}))) {
 		t.Fatal("test setup: the default labels should overlap")
 	}
 
-	mr.DrawPoliticalCityNames(canvas, mapData, size, l)
+	together := newCanvas(400, 100)
+	drawCityNames(together, mapData, size, l, labelOf)
 
-	var drawn []string // each label's own DrawString is the last of its five (four halo copies, then the label)
-	for _, op := range canvas.GetOperations() {
-		if strings.HasPrefix(op, "DrawString") {
-			drawn = append(drawn, op)
+	whole := image.Rect(0, 0, 400, 100)
+	for _, label := range placedCityLabels(mapData, size, l, labelOf) {
+		alone := newCanvas(400, 100)
+		drawHaloedLabel(alone, label)
+		text := color.RGBA{label.R, label.G, label.B, 255}
+		if n, all := countColor(alone, whole, text), countColor(together, whole, text); n == 0 || n != all {
+			t.Errorf("%s: %d text pixels alone, %d when drawn with the other label, want the same and not none", label.Text, n, all)
 		}
-	}
-	if len(drawn) != 10 {
-		t.Fatalf("recorded %d DrawString ops, want 10 (two labels of five): %v", len(drawn), drawn)
-	}
-	if want := fmt.Sprintf(`DrawString("Thessalonica", %.2f, %.2f)`, second.X, second.Y); drawn[9] == want {
-		t.Errorf("the second label was drawn at its default place, on top of the first: %s", drawn[9])
 	}
 }

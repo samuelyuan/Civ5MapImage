@@ -29,11 +29,9 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 
 	maxCityId := 0
 
-	config := DefaultDrawingConfig()
-	renderer := NewMapRenderer(config)
-	canvas := raster.NewPalettedCanvas(800, 600, replayPalette(mapData)) // resized by the renderer
+	canvas := raster.NewPalettedCanvas(800, 600, replayPalette(mapData)) // resized by drawPoliticalMapTileMajor
 
-	mapSize := mapData.Size()
+	grid := buildTileGrid(mapData.Size(), tileRadius) // the map size never changes during a replay
 
 	var tracker *tileTracker
 	for turnIndex, turn := range turnNumbers {
@@ -47,11 +45,11 @@ func DrawReplay(mapData *fileio.Civ5MapData, replayData *fileio.Civ5ReplayData, 
 
 		if turnIndex == 0 {
 			tracker = newTileTracker(mapData)
-			renderer.DrawPoliticalMapTileMajor(canvas, mapData)
+			drawPoliticalMapTileMajor(canvas, mapData, grid)
 			addFrame(outGif, canvas.Snapshot(canvas.Image().Bounds()), GIF_DELAY)
 			continue
 		}
-		appendGifFrames(outGif, renderer, canvas, mapData, mapSize, tracker.takeChanges())
+		appendGifFrames(outGif, canvas, mapData, grid, tracker.takeChanges())
 	}
 
 	outputFile, err := os.OpenFile(outputFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)

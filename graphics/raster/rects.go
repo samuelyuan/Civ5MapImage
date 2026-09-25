@@ -6,10 +6,10 @@ import (
 	"slices"
 )
 
-// MergeNearbyRects merges rects within gap of each other into disjoint bounding boxes, dropping empty ones.
+// MergeOverlappingRects merges rects that overlap into their bounding boxes until none overlap, dropping empty ones.
 // The result is sorted by top-left corner regardless of input order.
-func MergeNearbyRects(rects []image.Rectangle, gap int) []image.Rectangle {
-	var merged []image.Rectangle // never within gap of each other
+func MergeOverlappingRects(rects []image.Rectangle) []image.Rectangle {
+	var merged []image.Rectangle // none overlap
 	pending := slices.Clone(rects)
 	for len(pending) > 0 {
 		r := pending[len(pending)-1]
@@ -17,9 +17,8 @@ func MergeNearbyRects(rects []image.Rectangle, gap int) []image.Rectangle {
 		if r.Empty() {
 			continue
 		}
-		near := func(m image.Rectangle) bool { return r.Inset(-gap).Overlaps(m) }
-		if i := slices.IndexFunc(merged, near); i >= 0 {
-			pending = append(pending, r.Union(merged[i])) // the bigger box may now reach other merged rects
+		if i := slices.IndexFunc(merged, r.Overlaps); i >= 0 {
+			pending = append(pending, r.Union(merged[i])) // the bigger box may now overlap other merged rects
 			merged = slices.Delete(merged, i, i+1)
 			continue
 		}
@@ -31,7 +30,6 @@ func MergeNearbyRects(rects []image.Rectangle, gap int) []image.Rectangle {
 	return merged
 }
 
-// BoundsOf returns the smallest rect containing all of rects.
 func BoundsOf(rects []image.Rectangle) (bounds image.Rectangle) {
 	for _, rect := range rects {
 		bounds = bounds.Union(rect)

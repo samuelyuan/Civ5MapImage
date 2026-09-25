@@ -57,9 +57,6 @@ func TestSupersampledFillsAreExactAndOpaque(t *testing.T) {
 	if got := pixelAt(c, 0, 0); got != (color.RGBA{0, 0, 0, 255}) {
 		t.Errorf("background = %v, want opaque black", got)
 	}
-	if c.big.Inexact() != 0 {
-		t.Errorf("%d colors were snapped to the palette, want 0", c.big.Inexact())
-	}
 }
 
 // A shape edge halfway through a pixel blends to half color.
@@ -205,9 +202,6 @@ func TestSupersampledPaintPixelSetsOneFinalPixel(t *testing.T) {
 		if got := pixelAt(c, p[0], p[1]); got != black {
 			t.Errorf("pixel (%d, %d) = %v, want untouched", p[0], p[1], got)
 		}
-	}
-	if c.big.Inexact() != 0 {
-		t.Errorf("%d colors were snapped to the palette, want 0", c.big.Inexact())
 	}
 
 	c.PaintPixel(0, 0, c.IndexFor(200, 100, 50)) // after the image was read

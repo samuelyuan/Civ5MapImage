@@ -10,8 +10,8 @@ import (
 
 // HexTile is a hex tile's screen position and fill color.
 type HexTile struct {
-	X, Y    float64
-	R, G, B uint8
+	X, Y float64
+	Fill color.RGBA
 }
 
 // civShades are the colors a civ's tiles are drawn with; city states swap the pair.
@@ -41,34 +41,32 @@ func tileIsMinor(mapData *fileio.Civ5MapData, pos fileio.TilePos) bool {
 // PhysicalHexTile returns the position and terrain fill color of the tile at pos, for the physical map.
 func PhysicalHexTile(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout) HexTile {
 	x, y := l.center(pos)
-	c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
-	return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}
+	return HexTile{X: x, Y: y, Fill: GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))}
 }
 
 // PoliticalHexTile returns the tile's political position and fill, plus its city icon color (white if unowned).
 func PoliticalHexTile(mapData *fileio.Civ5MapData, pos fileio.TilePos, l tileLayout) (HexTile, color.RGBA) {
-	x, y := l.center(pos)
 	cityColor := color.RGBA{255, 255, 255, 255}
 
 	if fileio.IsWaterTile(mapData, pos) {
-		c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
-		return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}, cityColor
+		return PhysicalHexTile(mapData, pos, l), cityColor
 	}
 
-	tileColor := fileio.GetPoliticalMapTileColor(mapData, pos)
-	renderColor, ok := civColorMap[tileColor]
-	if !ok {
-		if tileColor != "" {
-			// No color, but tile is owned by a civ or city state.
-			return HexTile{X: x, Y: y}, cityColor
-		}
+	colorKey := fileio.GetPoliticalMapTileColor(mapData, pos)
+	civColor, known := civColorMap[colorKey]
+	switch {
+	case known:
+		x, y := l.center(pos)
+		shades := shadesFor(civColor, tileIsMinor(mapData, pos))
+		return HexTile{X: x, Y: y, Fill: shades.fill}, shades.border
+	case colorKey != "":
+		// No color, but tile is owned by a civ or city state.
+		x, y := l.center(pos)
+		return HexTile{X: x, Y: y, Fill: color.RGBA{0, 0, 0, 255}}, cityColor
+	default:
 		// Territory not owned by anyone.
-		c := GetPhysicalMapTileColor(fileio.GetTerrainString(mapData, pos))
-		return HexTile{X: x, Y: y, R: c.R, G: c.G, B: c.B}, cityColor
+		return PhysicalHexTile(mapData, pos, l), cityColor
 	}
-
-	shades := shadesFor(renderColor, tileIsMinor(mapData, pos))
-	return HexTile{X: x, Y: y, R: shades.fill.R, G: shades.fill.G, B: shades.fill.B}, shades.border
 }
 
 // tileBorderColor returns the civ border color of the tile at pos, white if unrecognized.
@@ -92,27 +90,53 @@ type ColoredLine struct {
 // casingExtra is how much wider than its line a route's casing is: one pixel of casing on each side.
 const casingExtra = 2
 
+// Indexes of the hex edges a tile draws for itself; the other three are its neighbors' edges. See hexVertex for the numbering.
+const (
+	hexEdgeSW = 3
+	hexEdgeSE = 4
+	hexEdgeE  = 5
+)
+
+// ownedHexEdges are the SW, SE and E edges, so each shared edge is drawn once.
+var ownedHexEdges = [...]int{hexEdgeSW, hexEdgeSE, hexEdgeE}
+
+// RiverData bits for the edges a tile owns.
+const (
+	riverBitSW = 1 << 2
+	riverBitSE = 1 << 1
+	riverBitE  = 1 << 0
+)
+
 // RiverEdgesForTile decodes a RiverData bitmask into the SW, SE and E edges; the others belong to neighbors.
 func RiverEdgesForTile(riverData int, centerX, centerY float64, l tileLayout) []Line {
 	var edges []Line
-	if (riverData>>2)&1 != 0 { // Southwest (edge 3)
-		edges = append(edges, getHexEdge(3, centerX, centerY, l.radius))
-	}
-	if (riverData>>1)&1 != 0 { // Southeast (edge 4)
-		edges = append(edges, getHexEdge(4, centerX, centerY, l.radius))
-	}
-	if riverData&1 != 0 { // East (edge 5)
-		edges = append(edges, getHexEdge(5, centerX, centerY, l.radius))
+	for _, river := range [...]struct{ bit, edge int }{{riverBitSW, hexEdgeSW}, {riverBitSE, hexEdgeSE}, {riverBitE, hexEdgeE}} {
+		if riverData&river.bit != 0 {
+			edges = append(edges, getHexEdge(river.edge, centerX, centerY, l.radius))
+		}
 	}
 	return edges
+}
+
+// routeStyle returns the line width, line color and casing color a route of this type is drawn in.
+func routeStyle(routeType int) (width float64, line, casing color.RGBA) {
+	switch routeType {
+	case fileio.RouteRailroad:
+		return 2.0, railroadColor, railroadCasingColor
+	case fileio.RouteRoad:
+		return 1.0, roadColor, roadCasingColor
+	default:
+		return 1.0, unknownRouteColor, roadCasingColor
+	}
 }
 
 // RoadSegmentsForTile returns lines from the tile to each neighbor with a route or city, nil if it has no route (255).
 func RoadSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, pos fileio.TilePos, l tileLayout) []ColoredLine {
 	routeType := mapData.TileImprovement(pos).RouteType
-	if routeType == 255 {
+	if routeType == fileio.RouteNone {
 		return nil
 	}
+	lineWidth, lineColor, casingColor := routeStyle(routeType)
 
 	x1, y1 := l.center(pos)
 
@@ -123,22 +147,11 @@ func RoadSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, po
 		}
 
 		neighborTile := mapData.TileImprovement(neighbor)
-		if neighborTile.RouteType == 255 && neighborTile.CityName == "" {
+		if neighborTile.RouteType == fileio.RouteNone && neighborTile.CityName == "" {
 			continue
 		}
 
 		x2, y2 := l.center(neighbor)
-
-		var lineWidth float64
-		var line, casing color.RGBA
-		switch routeType {
-		case 1: // Railroad
-			lineWidth, line, casing = 2.0, railroadColor, railroadCasingColor
-		case 0: // Road
-			lineWidth, line, casing = 1.0, roadColor, roadCasingColor
-		default: // Unknown
-			lineWidth, line, casing = 1.0, unknownRouteColor, roadCasingColor
-		}
 
 		// Draw only up to the midpoint, which is the shared tile border.
 		borderX := (x1 + x2) / 2.0
@@ -147,13 +160,13 @@ func RoadSegmentsForTile(mapData *fileio.Civ5MapData, mapSize fileio.MapSize, po
 		segments = append(segments, ColoredLine{
 			Line:        Line{X1: x1, Y1: y1, X2: borderX, Y2: borderY},
 			LineWidth:   lineWidth,
-			R:           line.R,
-			G:           line.G,
-			B:           line.B,
+			R:           lineColor.R,
+			G:           lineColor.G,
+			B:           lineColor.B,
 			CasingWidth: lineWidth + casingExtra,
-			CasingR:     casing.R,
-			CasingG:     casing.G,
-			CasingB:     casing.B,
+			CasingR:     casingColor.R,
+			CasingG:     casingColor.G,
+			CasingB:     casingColor.B,
 		})
 	}
 	return segments
@@ -177,42 +190,36 @@ func getHexEdge(edgeIndex int, centerX, centerY, radius float64) Line {
 	return Line{X1: x1, Y1: y1, X2: x2, Y2: y2}
 }
 
-// tileLayout places tiles in y-down pixels; center flips GetImagePosition's y-up (rows count from the bottom) against canvasHeight.
+// tileLayout places the tiles of a map rows rows tall in y-down pixels; row 0 is the bottom row, so it is drawn lowest.
 type tileLayout struct {
-	radius       float64
-	canvasHeight int
+	radius float64
+	rows   int
 }
 
-// newTileLayout is the layout of a canvas canvasHeight pixels tall.
-func newTileLayout(radius float64, canvasHeight int) tileLayout {
-	return tileLayout{radius: radius, canvasHeight: canvasHeight}
+func newTileLayout(radius float64, rows int) tileLayout {
+	return tileLayout{radius: radius, rows: rows}
 }
 
-// layoutForMap is the layout of the canvas a map of the given size is drawn on.
+// layoutForMap is the layout of a map of the given size.
 func layoutForMap(mapSize fileio.MapSize, radius float64) tileLayout {
-	_, height := imageSize(mapSize, radius)
-	return newTileLayout(radius, int(height))
+	return newTileLayout(radius, mapSize.Height)
 }
+
+func (l tileLayout) halfWidth() float64 { return l.radius * math.Cos(math.Pi/6) }       // half a pointy-top hex's width
+func (l tileLayout) rowHeight() float64 { return l.radius * (1 + math.Sin(math.Pi/6)) } // vertical distance between rows, whose hexes interlock
 
 // center returns the center of the tile at pos.
 func (l tileLayout) center(pos fileio.TilePos) (x, y float64) {
-	x, y = GetImagePosition(pos, l.radius)
-	return x, float64(l.canvasHeight) - y
-}
-
-// GetImagePosition returns the center of the tile at pos, in the map's y-up layout.
-func GetImagePosition(pos fileio.TilePos, radius float64) (float64, float64) {
-	angle := math.Pi / 6
-
-	x := (radius * 1.5) + float64(pos.Col)*(2*radius*math.Cos(angle))
-	y := radius + float64(pos.Row)*radius*(1+math.Sin(angle))
+	x = l.radius*1.5 + float64(pos.Col)*2*l.halfWidth()
 	if pos.Row%2 == 1 {
-		x += radius * math.Cos(angle)
+		x += l.halfWidth() // odd rows are shifted right by half a tile
 	}
-	return x, y
+	return x, l.rowHeight() * float64(l.rows-pos.Row)
 }
 
-// imageSize returns the image size a map needs: the position of the tile just past its far corner.
+// imageSize returns the image size a map needs: wide enough for the tile one past the far corner, tall enough for the bottom row's lowest vertex.
 func imageSize(mapSize fileio.MapSize, radius float64) (width, height float64) {
-	return GetImagePosition(fileio.TilePos{Row: mapSize.Height, Col: mapSize.Width}, radius)
+	l := layoutForMap(mapSize, radius)
+	width, _ = l.center(fileio.TilePos{Row: mapSize.Height, Col: mapSize.Width})
+	return width, l.radius + float64(mapSize.Height)*l.rowHeight()
 }

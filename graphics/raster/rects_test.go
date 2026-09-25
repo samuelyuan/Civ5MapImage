@@ -7,9 +7,7 @@ import (
 	"testing"
 )
 
-const testGap = 8
-
-func TestMergeNearbyRects(t *testing.T) {
+func TestMergeOverlappingRects(t *testing.T) {
 	tests := []struct {
 		name string
 		in   []image.Rectangle
@@ -23,42 +21,36 @@ func TestMergeNearbyRects(t *testing.T) {
 		{"overlapping merge",
 			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(5, 5, 20, 20)},
 			[]image.Rectangle{image.Rect(0, 0, 20, 20)}},
-		{"touching merge",
+		{"touching stay separate",
 			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10, 0, 20, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 20, 10)}},
-		{"just inside the gap merge",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+testGap-1, 0, 30, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 30, 10)}},
-		{"exactly the gap apart stay separate",
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+testGap, 0, 30, 10)},
-			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10+testGap, 0, 30, 10)}},
+			[]image.Rectangle{image.Rect(0, 0, 10, 10), image.Rect(10, 0, 20, 10)}},
 		{"empty rects are dropped",
 			[]image.Rectangle{image.Rect(0, 0, 10, 10), {}, image.Rect(50, 50, 50, 60)},
 			[]image.Rectangle{image.Rect(0, 0, 10, 10)}},
 	}
 	for _, tt := range tests {
-		if got := MergeNearbyRects(tt.in, testGap); !slices.Equal(got, tt.want) {
-			t.Errorf("%s: MergeNearbyRects(%v) = %v, want %v", tt.name, tt.in, got, tt.want)
+		if got := MergeOverlappingRects(tt.in); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: MergeOverlappingRects(%v) = %v, want %v", tt.name, tt.in, got, tt.want)
 		}
 	}
 }
 
 // Merging two rects grows their box, and the bigger box can reach a third rect that neither was near alone; the input order must not matter.
-func TestMergeNearbyRectsMergesChainsInAnyOrder(t *testing.T) {
+func TestMergeOverlappingRectsMergesChainsInAnyOrder(t *testing.T) {
 	tall := image.Rect(0, 0, 10, 50)
-	wide := image.Rect(15, 0, 60, 10)    // near tall, so they merge into (0, 0, 60, 50)
-	inside := image.Rect(45, 30, 55, 40) // far from both alone, but inside their merged box
+	wide := image.Rect(5, 0, 60, 10)     // overlaps tall, so they merge into (0, 0, 60, 50)
+	inside := image.Rect(45, 30, 55, 40) // clear of both alone, but inside their merged box
 	want := []image.Rectangle{image.Rect(0, 0, 60, 50)}
 	orders := [][]image.Rectangle{{tall, wide, inside}, {inside, tall, wide}, {wide, inside, tall}, {inside, wide, tall}}
 	for _, in := range orders {
-		if got := MergeNearbyRects(in, testGap); !slices.Equal(got, want) {
-			t.Errorf("MergeNearbyRects(%v) = %v, want %v", in, got, want)
+		if got := MergeOverlappingRects(in); !slices.Equal(got, want) {
+			t.Errorf("MergeOverlappingRects(%v) = %v, want %v", in, got, want)
 		}
 	}
 }
 
-// For any input, every rect is covered by some cluster, no two clusters are within the gap of each other, and the input order doesn't matter.
-func TestMergeNearbyRectsCoversInputWithSeparatedClusters(t *testing.T) {
+// For any input, every rect is covered by some cluster, no two clusters overlap, and the input order doesn't matter.
+func TestMergeOverlappingRectsCoversInputWithSeparatedClusters(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	for trial := 0; trial < 200; trial++ {
 		var in []image.Rectangle
@@ -66,10 +58,10 @@ func TestMergeNearbyRectsCoversInputWithSeparatedClusters(t *testing.T) {
 			x, y := rng.Intn(400), rng.Intn(400)
 			in = append(in, image.Rect(x, y, x+1+rng.Intn(40), y+1+rng.Intn(40)))
 		}
-		clusters := MergeNearbyRects(in, testGap)
+		clusters := MergeOverlappingRects(in)
 		reversed := slices.Clone(in)
 		slices.Reverse(reversed)
-		if again := MergeNearbyRects(reversed, testGap); !slices.Equal(clusters, again) {
+		if again := MergeOverlappingRects(reversed); !slices.Equal(clusters, again) {
 			t.Fatalf("trial %d: reversing the input gave %v, want %v", trial, again, clusters)
 		}
 		for _, r := range in {
@@ -79,8 +71,8 @@ func TestMergeNearbyRectsCoversInputWithSeparatedClusters(t *testing.T) {
 		}
 		for i, a := range clusters {
 			for _, b := range clusters[i+1:] {
-				if a.Inset(-testGap).Overlaps(b) {
-					t.Fatalf("trial %d: clusters %v and %v are within the gap", trial, a, b)
+				if a.Overlaps(b) {
+					t.Fatalf("trial %d: clusters %v and %v overlap", trial, a, b)
 				}
 			}
 		}

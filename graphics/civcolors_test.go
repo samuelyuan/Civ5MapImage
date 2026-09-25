@@ -76,8 +76,14 @@ func TestOverrideColorMap(t *testing.T) {
 	if got.InnerColor != wantInner {
 		t.Errorf("OverrideColorMap() InnerColor = %v, want %v", got.InnerColor, wantInner)
 	}
-	if got.TextColor != wantInner {
-		t.Errorf("OverrideColorMap() TextColor = %v, want %v (mirrors inner)", got.TextColor, wantInner)
+}
+
+// A civ color naming a colorMap key that doesn't exist silently becomes transparent black.
+func TestEveryCivColorIsOpaque(t *testing.T) {
+	for key, c := range civColorMap {
+		if c.OuterColor.A != 255 || c.InnerColor.A != 255 {
+			t.Errorf("civColorMap[%q] = %+v, want opaque outer and inner colors", key, c)
+		}
 	}
 }
 

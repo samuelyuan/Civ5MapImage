@@ -98,14 +98,11 @@ func loadMapDataFromFile(filename string) *fileio.Civ5MapData {
 	return nil
 }
 
-// renderMap runs a physical/political render+save, differing only in which MapRenderer method
-// produces the image (passed as a method expression, e.g. (*graphics.MapRenderer).DrawPhysicalMap).
-func renderMap(mapData *fileio.Civ5MapData, outputFilename string, draw func(*graphics.MapRenderer, graphics.Canvas, *fileio.Civ5MapData) image.Image) {
-	config := graphics.DefaultDrawingConfig()
-	renderer := graphics.NewMapRenderer(config)
+// renderMap draws a physical or political map with draw (graphics.DrawPhysicalMap or graphics.DrawPoliticalMap) and saves it.
+func renderMap(mapData *fileio.Civ5MapData, outputFilename string, draw func(graphics.Canvas, *fileio.Civ5MapData) image.Image) {
 	canvas := graphics.NewMapCanvas()
-	draw(renderer, canvas, mapData)
-	if err := renderer.SaveImage(canvas, outputFilename); err != nil {
+	draw(canvas, mapData)
+	if err := canvas.SavePNG(outputFilename); err != nil {
 		log.Fatal("Failed to save image: ", err)
 	}
 }
@@ -163,9 +160,9 @@ func main() {
 	case string(ModeExportJSON):
 		fileio.ExportFileToJson(args.inputFilename, args.outputFilename)
 	case string(ModePhysical):
-		renderMap(loadMapDataFromFile(args.inputFilename), args.outputFilename, (*graphics.MapRenderer).DrawPhysicalMap)
+		renderMap(loadMapDataFromFile(args.inputFilename), args.outputFilename, graphics.DrawPhysicalMap)
 	case string(ModePolitical):
-		renderMap(loadMapDataFromFile(args.inputFilename), args.outputFilename, (*graphics.MapRenderer).DrawPoliticalMap)
+		renderMap(loadMapDataFromFile(args.inputFilename), args.outputFilename, graphics.DrawPoliticalMap)
 	case string(ModeReplay):
 		runReplayMode(args)
 	default:
